@@ -13,8 +13,8 @@ class DeleteStudy extends FallbackFeature
 		if (!isset($_POST['studyId']))
 			throw new PageFlowException('Missing data');
 		$studyId = $_POST['studyId'];
-		$saver = Configs::getDataStore()->getFallbackStudyStore($this->encodedUrl);
-		$saver->delete($studyId);
+		$store = Configs::getDataStore()->getFallbackStudyStore($this->encodedUrl);
+		$store->delete($studyId);
 
 		return [$studyId];
 	}
