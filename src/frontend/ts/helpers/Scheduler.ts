@@ -115,7 +115,7 @@ export class Scheduler {
 	private createAlarm(joined: number, questionnaire: Questionnaire, schedule: Schedule, signalTime: SignalTime, actionTrigger: ActionTrigger, timestamp: number, indexNum: number = 1) {
 		const alarm = new Alarm(questionnaire, schedule, signalTime, actionTrigger, timestamp, indexNum)
 		if (!questionnaire.isActive(joined, timestamp, this.useLegacyScheduling)) {
-			if (questionnaire.willBeActiveIn(joined, timestamp) > 0) {
+			if (questionnaire.willBeActiveIn(joined, timestamp, this.useLegacyScheduling) > 0) {
 				this.rescheduleFromAlarm(joined, alarm)
 				return
 			}
@@ -231,7 +231,7 @@ export class Scheduler {
 					baseTimestamp += ONE_DAY_MS
 				}
 			} else {
-				while (Scheduler.getDatesDiff(baseTimestamp, minDate) < manualDelayDays) {
+				while (baseTimestamp < minDate && Scheduler.getDatesDiff(baseTimestamp, minDate) > 0) {
 					baseTimestamp += ONE_DAY_MS
 				}
 			}
@@ -297,7 +297,7 @@ export class Scheduler {
 
 
 	private considerDayOptions(joined: number, timestamp: number, questionnaire: Questionnaire, schedule: Schedule): number {
-		const activeInDays = Math.ceil(questionnaire.willBeActiveIn(joined, timestamp) / ONE_DAY_MS)
+		const activeInDays = Math.ceil(questionnaire.willBeActiveIn(joined, timestamp, this.useLegacyScheduling) / ONE_DAY_MS)
 		const newTimestamp = this.considerDayOptionsLogic(timestamp + activeInDays * ONE_DAY_MS, schedule)
 
 		return (questionnaire.isActive(joined, newTimestamp)) ? newTimestamp : -1
