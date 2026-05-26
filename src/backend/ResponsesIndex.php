@@ -26,6 +26,8 @@ class ResponsesIndex {
                 $this->addName("$name~usageCountToday");
                 $this->addName("$name~usageTimeYesterday");
                 $this->addName("$name~usageTimeToday");
+                $this->addName("$name~usageProtocolYesterday");
+                $this->addName("$name~usageProtocolToday");
                 break;
             case 'battery_level':
                 $this->addName($name);

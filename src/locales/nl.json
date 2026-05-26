@@ -703,5 +703,11 @@
 	"recording_duration": "Opnameduur",
 	"additional_days_active": "Extra dagen actief",
 	"additional_days_active_info": "Het aantal extra dagen dat de studie actief moet blijven nadat er geen vragenlijsten meer actief zijn.",
-	"input_noise_level": "Geluidsniveau"
+	"input_noise_level": "Geluidsniveau",
+	"schedule_info_start_same_day": "Dit schema start op dezelfe dag waarop de deelname aan de studie is gestart.",
+	"schedule_info_start_day_x": "Als de dag waarop de deelname is gestart als dag 0 wordt geteld, zal dit schema starten op dag %d.",
+	"use_legacy_scheduling": "Gebruik de oude vorm van de planningsfunctie",
+	"schedule_start_day_one": "Wacht tot de eerste volledige dag van de studie (de dag nadat deelname aan de studie is gestart)",
+	"schedule_info_start_day_one": "Dit schema zal beginnen op de dag nadat deelname aan de studie is gestart.",
+	"use_legacy_scheduling_info": "Gebruik een oudere planningslogica om dagafwijkingen te bepalen. Deze logica werkt niet met volledige dagen, maar met perioden van 24 uur sinds de start van het onderzoek (afhankelijk van het tijdstip)."
 }

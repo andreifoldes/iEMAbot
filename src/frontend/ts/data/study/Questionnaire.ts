@@ -10,6 +10,7 @@ import { Scheduler } from "../../helpers/Scheduler";
 import { b0 } from "@fullcalendar/core/internal-common";
 import { Action } from "./Action";
 import { SignalTime } from "./SignalTime";
+import { getMidnightMillis } from "../../constants/methods";
 
 const ONE_DAY_MS = 86400000
 
@@ -70,9 +71,14 @@ export class Questionnaire extends DataStructure {
 	/**
 	 * Needs to stay in sync with sharedCode.Questionnaire in kotlin
 	 */
-	public isActive(joinedTimestamp: number, now: number) {
-		const durationCheck = (this.durationPeriodDays.get() == 0 || now <= joinedTimestamp + this.durationPeriodDays.get() * ONE_DAY_MS)
+	public isActive(joinedTimestamp: number, now: number, useLegacyScheduling: boolean = false) {
+		const durationCheck = useLegacyScheduling ? (
+			(this.durationPeriodDays.get() == 0 || now <= joinedTimestamp + this.durationPeriodDays.get() * ONE_DAY_MS)
 			&& (this.durationStartingAfterDays.get() == 0 || now >= joinedTimestamp + this.durationStartingAfterDays.get() * ONE_DAY_MS)
+		) : (
+			(this.durationPeriodDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) <= this.durationPeriodDays.get())
+			&& (this.durationStartingAfterDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) >= this.durationStartingAfterDays.get())
+		)
 
 		return durationCheck
 			// && (this.limitToGroup.get() == 0 || this.limitToGroup.get() == group)
@@ -85,10 +91,13 @@ export class Questionnaire extends DataStructure {
 	 * Used for {@link Scheduler}
 	 * Needs to stay in sync with sharedCode.Questionnaire in kotlin
 	 */
-	public willBeActiveIn(joinedTimestamp: number, now: number): number {
+	public willBeActiveIn(joinedTimestamp: number, now: number, useLegacyScheduling: boolean = false): number {
 		const durationValue = this.durationStart.get() - now
-		const startingAfterDaysValue = joinedTimestamp + this.durationStartingAfterDays.get() * (1000 * 60 * 60 * 24) - now
-
+		const startingAfterDaysValue = useLegacyScheduling ?
+			(joinedTimestamp + this.durationStartingAfterDays.get() * ONE_DAY_MS - now) :
+			((this.durationStartingAfterDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) >= this.durationStartingAfterDays.get()) ? 0 :
+				getMidnightMillis(joinedTimestamp) + this.durationStartingAfterDays.get() * ONE_DAY_MS - now
+			)
 
 		let value: number
 		if (durationValue <= 0)

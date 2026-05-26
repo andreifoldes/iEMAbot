@@ -82,7 +82,7 @@ export class Content extends SectionContent {
 			!!this.knownPlugins.length && <h1 class="center">{Lang.get("or")}</h1>,
 			... this.knownPlugins.map(entry => DashElement("stretched", {
 				content: <div>
-					<div>
+					<div class="vertical">
 						<div class="horizontal">
 							<a class="fillFlexSpace" href={entry.website} target="_blank">{entry.name}</a>
 							<div>

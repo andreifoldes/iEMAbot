@@ -45,15 +45,38 @@ export class TranslatablePrimitive<T extends PrimitiveType> extends BaseObservab
 		this.sharedMemory.default = value
 	}
 	
+	private sanitizeUndefined(value: PrimitiveType | undefined): PrimitiveType {
+		if(value !== undefined) {
+			return value
+		}
+		else {
+			//we cannot access T during runtime, so we have to get the type manually:
+			
+			const record = this.getDefaultRecord()
+			for(const langCode in record) { // all values in the record should be of the same type, but we loop just to make sure
+				switch(typeof record[langCode]) {
+					case "string":
+						return ""
+					case "number":
+						return 0
+					case "boolean":
+						return false
+				}
+			}
+			return value as unknown as PrimitiveType // this will return undefined
+		}
+	}
+	
 	public createJson(options?: TranslatableJsonCreatorOptions): JsonTypes {
-		if(options?.dontIncludeAllLanguages)
-			return this.get()
+		if(options?.dontIncludeAllLanguages) {
+			return this.sanitizeUndefined(this.get())
+		}
 		else {
 			const record = this.getDataRecord()
 			let lastValue: T | null = null
 			let hasDifferentValues = false
 			for(const langCode in record) {
-				const value = record[langCode]
+				const value = this.sanitizeUndefined(record[langCode]) as T
 				if(lastValue != null && value != lastValue) {
 					hasDifferentValues = true
 					break;

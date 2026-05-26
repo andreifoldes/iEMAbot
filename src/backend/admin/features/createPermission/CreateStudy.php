@@ -22,6 +22,7 @@ class CreateStudy extends HasCreatePermission {
 			$accountStore->addStudyPermission($_SESSION['account'], $this->studyId, 'read');
 			$accountStore->addStudyPermission($_SESSION['account'], $this->studyId, 'msg');
 			$accountStore->addStudyPermission($_SESSION['account'], $this->studyId, 'publish');
+			$accountStore->addStudyPermission($_SESSION['account'], $this->studyId, 'reward');
 		}
 		$saver = new SaveStudy();
 		return $saver->exec();
