@@ -46,6 +46,7 @@
 	"change": "Ändern",
 	"change_username": "Username ändern",
 	"change_password": "Passwort ändern",
+	"chart_min_yValue": "Niedrigster dargestellter Wert auf Y-Achse",
 	"chart_max_yValue": "Höchster dargestellter Wert auf Y-Achse",
 	"chart_max_yValue_explainZero": "Wenn 0 angegeben ist, gibt es kein Limit",
 	"check": "Überprüfe",

@@ -46,6 +46,7 @@
 	"change": "Change",
 	"change_username": "Change username",
 	"change_password": "Change password",
+	"chart_min_yValue": "Minimum value on y-axis",
 	"chart_max_yValue": "Highest value on y-axis",
 	"chart_max_yValue_explainZero": "Provide 0 to disable the limit",
 	"check": "Check",
