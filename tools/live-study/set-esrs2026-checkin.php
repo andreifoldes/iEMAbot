@@ -8,18 +8,21 @@ declare(strict_types=1);
  * (telegram-ema-bot: src/surveys/esrs2026_{fun,affect,pvt}.yaml + sleepiness.yaml).
  *
  * One questionnaire, four pages, no action triggers (the participant opens it whenever they like):
- *   1. Conference vibes      conf_enjoyment (likert 1-5), conf_fuel (list_single)
- *   2. Mood right now        I-PANAS-SF items alert/nervous/inspired/upset/active/afraid (likert 1-5)
- *   3. Sleepiness            kss, Karolinska Sleepiness Scale (list_single, 9 options)
- *   4. Reaction-time game    PVT-BA via the m2c2 webapp input, results shown at the end
+ *   1. conf_enjoyment (likert 1-5), conf_fuel (list_single)
+ *   2. I-PANAS-SF items alert/nervous/inspired/upset/active/afraid (likert 1-5)
+ *   3. kss, Karolinska Sleepiness Scale (list_single, 9 options)
+ *   4. PVT-BA via the m2c2 webapp input, results shown at the end
  *
  * Question ids, wording and option labels are copied verbatim from the bot so the two exports line up.
- * Not mirrored: the bot's end-of-check-in snapshot message and its delete-after-use anonymity; the
- * ESMira server stores responses. The consent wording below says so; review it before applying.
+ * Like the bot, the pages carry no headings of their own; only the check-in's one-line description
+ * opens the first page. The welcome and consent wording follows the bot's, except for the sentences
+ * about deleting answers: the ESMira server stores responses, so those say so instead. Review before applying.
+ * The end-of-check-in snapshot is the PWA's webSnapshot option (see set-esrs2026-flags.php).
  *
- * Refuses to run unless study 2026 is still the empty placeholder (no questionnaires), so it can
- * never overwrite a real study. Never hand-edit .config.json: this mirrors SaveStudy::exec so the
- * ResponsesIndex is rebuilt via saveStudy() (see memory note editing-live-study-config).
+ * Refuses to run unless study 2026 is still the empty placeholder, or holds only the check-in this
+ * script created (questionnaire 202601, which it then replaces), so it can never overwrite a real study.
+ * Never hand-edit .config.json: this mirrors SaveStudy::exec so the ResponsesIndex is rebuilt via
+ * saveStudy() (see memory note editing-live-study-config).
  *
  * Run inside the container as the web user (dry run by default; pass `apply` to write):
  *   docker cp tools/live-study/set-esrs2026-checkin.php esmira-esmira-1:/tmp/
@@ -37,13 +40,13 @@ const QUESTIONNAIRE_ID = 202601;
 const PVT_URL = 'https://iemabot.surrey.ac.uk/webapp/m2c2/assessments/pvt-ba/index.html?show_results=true';
 
 const TITLE = 'ESRS 2026 mini check-in';
-const DESCRIPTION = 'A playful 5-minute check-in that goes with our ESRS 2026 poster: how you are enjoying'
-    . ' the conference, a few quick mood questions, how sleepy you feel, and a short reaction-time game.'
-    . ' Open it whenever you like and as often as you like.';
-const CONSENT = 'This is a short demo that goes with our ESRS 2026 poster. It takes about 5 minutes: how you'
-    . ' are enjoying the conference, a few quick mood questions, how sleepy you feel, and a short'
-    . ' reaction-time game. Your answers and game results are stored on the research server without'
-    . ' your name. You can stop at any time.';
+const DESCRIPTION = '<p>Welcome to the ESRS 2026 mini check-in, a playful demo that goes with our poster.</p>'
+    . '<p>It takes about 5 minutes: how you are enjoying the conference, a few quick mood questions,'
+    . ' how sleepy you feel, and a short reaction-time game. You get a little snapshot of yourself at the end.</p>';
+const CONSENT = "It is a demo and we do not ask for your name. Your answers and game results are stored"
+    . " on the research server without it, and you can stop at any time.\n\n"
+    . 'Do you consent to take part in this anonymous demo?';
+const INTRO = 'A 5-minute snapshot of how you are doing right now.';
 
 const LIKERT_LEFT = 'not at all';
 const LIKERT_RIGHT = 'extremely';
@@ -76,13 +79,6 @@ function listSingle(string $name, string $text, array $choices): object
     ];
 }
 
-function infoText(string $name, string $text): object
-{
-    return (object)[
-        'responseType' => 'text', 'name' => $name, 'text' => $text, 'listChoices' => [], 'subInputs' => [],
-    ];
-}
-
 function buildQuestionnaire(): object
 {
     $mood = [];
@@ -99,21 +95,17 @@ function buildQuestionnaire(): object
         'sumScores' => [],
         'virtualInputs' => [],
         'pages' => [
-            (object)['header' => 'Conference vibes', 'inputs' => [
-                infoText('confIntro', 'First, the important science: how is the conference treating you?'),
+            (object)['header' => INTRO, 'inputs' => [
                 likert('conf_enjoyment', 'How are you enjoying the conference so far?', 'Surviving', 'Loving it'),
                 listSingle('conf_fuel', 'What is keeping you going right now?', [
                     'Coffee', 'Great talks', 'Hallway chats', 'Posters (hello!)', 'Pure willpower',
                 ]),
             ]],
-            (object)['header' => 'Mood right now', 'inputs' => array_merge([
-                infoText('moodIntro', 'Now zoom in on this very moment. How much do you feel each of these right now?'
-                    . ' (Items from the I-PANAS-SF: Thompson, 2007.)'),
-            ], $mood)],
-            (object)['header' => 'Karolinska Sleepiness Scale', 'inputs' => [
+            (object)['header' => '', 'inputs' => $mood],
+            (object)['header' => '', 'inputs' => [
                 listSingle('kss', 'How sleepy do you feel right now?', KSS_OPTIONS),
             ]],
-            (object)['header' => 'Reaction-time game', 'inputs' => [(object)[
+            (object)['header' => '', 'inputs' => [(object)[
                 'responseType' => 'webapp', 'name' => 'pvt', 'text' => 'Reaction-time game',
                 'url' => PVT_URL,
                 'webappDescription' => 'Last one: a quick reaction-time game. Tap below to start it,'
@@ -132,8 +124,10 @@ if (!isset($study->id)) {
     fwrite(STDERR, "Study " . STUDY_ID . " not found\n");
     exit(1);
 }
-if (count($study->questionnaires ?? []) > 0) {
-    fwrite(STDERR, "Study " . STUDY_ID . " already has questionnaires — refusing to overwrite\n");
+$existing = $study->questionnaires ?? [];
+$ownOnly = count($existing) === 1 && ($existing[0]->internalId ?? null) === QUESTIONNAIRE_ID;
+if (count($existing) > 0 && !$ownOnly) {
+    fwrite(STDERR, "Study " . STUDY_ID . " holds questionnaires other than this check-in — refusing to overwrite\n");
     exit(1);
 }
 
