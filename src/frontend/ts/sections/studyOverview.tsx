@@ -368,7 +368,7 @@ export class Content extends SectionContent {
 		const valueStyle = `font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;font-weight:700;letter-spacing:.06em;color:${C.onSurface};user-select:all;word-break:break-all;text-align:right;`
 		return <div style={`width:100%;box-sizing:border-box;background:${C.surfaceContainer};border-radius:12px;padding:14px 16px;`}>
 			<div style={`font-size:13px;line-height:1.5;color:${C.onSurfaceVariant};margin-bottom:8px;`}>
-				{rows.length > 1 ? "Write these down — you'll type them into the app after installing it:" : "Write this down — you'll type it into the app after installing it:"}
+				{rows.length > 1 ? "Write these down — you might need them:" : "Write this down — you might need it:"}
 			</div>
 			{rows.map(r =>
 				<div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:3px 0;">

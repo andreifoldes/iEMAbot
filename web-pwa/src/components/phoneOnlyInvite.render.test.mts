@@ -80,14 +80,14 @@ describe('PhoneOnlyInvite', () => {
 
   it('asks the participant to write down the invite code and participant ID (iOS keeps neither across the install)', async () => {
     const t = text(await invite());
-    assert.match(t, /Write these down — you'll type them into the app after installing it/);
+    assert.match(t, /Write these down — you might need them:/);
     assert.match(t, /Invite code\s*demo/);
     assert.match(t, /Participant ID\s*1155/);
   });
 
   it('writes down just the code for a plain invite link, and nothing when there is nothing', async () => {
     const plain = text(await invite({ participantId: '' }));
-    assert.match(plain, /Write this down — you'll type it into the app after installing it/);
+    assert.match(plain, /Write this down — you might need it:/);
     assert.doesNotMatch(plain, /Participant ID/);
     assert.doesNotMatch(text(await invite({ code: '', participantId: '' })), /Write th/);
   });
@@ -152,14 +152,14 @@ describe('InviteCodeNote', () => {
 
   it('lists the invite code on its own for a plain link', async () => {
     const t = text(await note({ code: 'SSRC-42' }));
-    assert.match(t, /Write this down — you'll type it into the app after installing it/);
+    assert.match(t, /Write this down — you might need it:/);
     assert.match(t, /Invite code\s*SSRC-42/);
     assert.doesNotMatch(t, /Participant ID/);
   });
 
   it('adds the participant ID that a personalised link carried', async () => {
     const t = text(await note({ code: 'SSRC-42', participantId: 'P007' }));
-    assert.match(t, /Write these down — you'll type them into the app after installing it/);
+    assert.match(t, /Write these down — you might need them:/);
     assert.match(t, /Invite code\s*SSRC-42/);
     assert.match(t, /Participant ID\s*P007/);
   });

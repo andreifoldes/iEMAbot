@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 
 /**
- * "Write this down" card for what the participant must type into the installed app: the
+ * "Write this down" card for what the participant may need to type into the installed app: the
  * invite code and, for a personalised link, the participant ID. Installing on iOS gives the
  * app its own empty storage, so what the link carried doesn't survive the install. Renders
  * nothing when there is nothing to show.
@@ -18,8 +18,8 @@ export function InviteCodeNote({ code, participantId }: { code: string; particip
         <KeyRound size={14} className="shrink-0 mt-0.5" aria-hidden="true" />
         <span>
           {rows.length > 1
-            ? "Write these down — you'll type them into the app after installing it:"
-            : "Write this down — you'll type it into the app after installing it:"}
+            ? "Write these down — you might need them:"
+            : "Write this down — you might need it:"}
         </span>
       </p>
       <dl className="mt-2 space-y-1.5">
