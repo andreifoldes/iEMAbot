@@ -32,6 +32,8 @@ form, FAQ, contact email, reward instructions).
 | --- | --- | --- |
 | `webPushEnabled` | Turn on Web Push reminders | [Push panel](./web-push.md) |
 | `webPhoneOnly` | Run the web app on smartphones only; other devices get an invite page with a QR code | Study settings, next to study availability |
+| `webSkipName` | Skip the "what name would you like to go by?" step; participants are identified only by their study id | Study settings, below the smartphone-only setting |
+| `webSnapshot` | Show a playful read-out of the participant's own answers after each submission (only `esrs2026` exists, see `web-pwa/src/lib/snapshot.ts`) | **None**, source-edit only |
 | `wearablesEnabled`, `wearablesProviders` | Offer wearable linking, restricted to chosen providers | [Wearables panel](./wearables.md) |
 | `wearablesDataTypes` | Narrow the synced data types | **None**, source-edit only |
 | `enableTutorialMode`, `tutorialOffer`, `tutorialIntro` | Practice runs in the PWA | Study settings |

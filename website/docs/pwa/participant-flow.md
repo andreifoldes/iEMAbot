@@ -111,6 +111,18 @@ The study description (HTML) and consent text are shown, then *I consent* / *I d
 name is cosmetic; the participant ID is assigned automatically. **The consent time is the enrolment anchor**
 (`esmira_joined_*`, event `joined`), from which `durationStartingAfterDays` and similar fields count.
 
+A researcher can tick **Do not ask participants for a name (web)** in the study settings (the `webSkipName`
+field). The name step is then skipped everywhere it would appear (first visit, after consent, after transferring
+a participant ID), and the Details panel shows no username.
+
+## End-of-questionnaire snapshot
+
+A study with `webSnapshot` set to `esrs2026` (source-edit only) adds a short, playful read-out of the answers
+just given after each submission: a mood line from the I-PANAS-SF items (`alert`, `inspired`, `active` against
+`nervous`, `upset`, `afraid`) and a sleepiness line from the `kss` item, then a thank-you. It is computed in the
+browser by `lib/snapshot.ts`; nothing extra is stored or sent. The ESRS 2026 mini check-in uses it, mirroring
+the Telegram bot's snapshot.
+
 ## Notifications step
 
 Shown only when the study has `webPushEnabled`. The participant chooses *Enable notifications* or

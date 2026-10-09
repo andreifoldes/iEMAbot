@@ -47,6 +47,7 @@ import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pw
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
+import { snapshotFor } from './lib/snapshot';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
 import { saveRecording } from './lib/audioUploads';
@@ -582,11 +583,11 @@ export default function App() {
         if (study.informedConsentForm && !consented) {
           pushBot(study.informedConsentForm);
           setPhase('consent');
-        } else if (!savedName) {
+        } else if (!savedName && !study.webSkipName) {
           pushBot('Before we begin — what name would you like to go by? (Just for display; your study id is assigned automatically.)');
           setPhase('name');
         } else {
-          pushBot(`Welcome back, ${savedName}!`);
+          if (savedName) pushBot(`Welcome back, ${savedName}!`);
           enterStudyGated(study);
         }
       })
@@ -645,7 +646,7 @@ export default function App() {
       void submitJoined({ study, serverVersion, accessKey, userId: uid, joinedAt });
     }
     const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
-    if (!savedName) {
+    if (!savedName && !study.webSkipName) {
       pushBot('Thank you. What name would you like to go by?');
       setPhase('name');
     } else {
@@ -1366,6 +1367,9 @@ export default function App() {
     pushBot(ok
       ? '✅ Thank you — your responses have been recorded.'
       : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
+    // Studies that opt in (webSnapshot) get a playful read-out of the answers just given.
+    const snapshot = snapshotFor(study, engine.getResponseMap());
+    if (snapshot) pushBot(snapshot);
     engineRef.current = null;
     activeQRef.current = null;
     // Only offer another questionnaire if one is actually completable right now —
@@ -1726,11 +1730,11 @@ export default function App() {
                   if (study.informedConsentForm && !consented) {
                     pushBot(study.informedConsentForm);
                     setPhase('consent');
-                  } else if (!savedName) {
+                  } else if (!savedName && !study.webSkipName) {
                     pushBot('Before we begin — what name would you like to go by?');
                     setPhase('name');
                   } else {
-                    pushBot(`Welcome back, ${savedName}!`);
+                    if (savedName) pushBot(`Welcome back, ${savedName}!`);
                     enterStudyGated(study);
                   }
                 }

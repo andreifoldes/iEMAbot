@@ -745,6 +745,8 @@
 	"enable_web_push_info": "After consenting, web participants are asked to allow notifications. The server then sends questionnaire reminders (using each questionnaire's schedule and notification message) even when the app is closed. Requires a VAPID key configured on the server.",
 	"web_phone_only": "Only allow participation on a smartphone (web)",
 	"web_phone_only_info": "On computers and tablets the web app does not start the study. It shows an invite page with a QR code to continue on a phone instead. This is a convenience check in the participant's browser, not a security measure. Needs Web ticked under study availability.",
+	"web_skip_name": "Do not ask participants for a name (web)",
+	"web_skip_name_info": "The web app skips the \"what name would you like to go by?\" step. Participants are identified only by their generated study id. Needs Web ticked under study availability.",
 	"web_push_status": "Check push status",
 	"web_push_subscriptions": "Subscribed devices",
 	"web_push_no_vapid": "no VAPID key on server",

@@ -229,6 +229,12 @@ export interface EsmiraStudy {
   /** When true, the researcher restricted the web app to smartphones. Other devices see
    *  an invite page with a QR code instead of the study (see lib/phoneGate.ts). */
   webPhoneOnly?: boolean;
+  /** When true, the app skips the "what name would you like to go by?" step, so the
+   *  participant stays identified only by their generated study id. */
+  webSkipName?: boolean;
+  /** Names an end-of-questionnaire read-out of the participant's own answers (see
+   *  lib/snapshot.ts). Source-edit only; empty/unknown = none. */
+  webSnapshot?: string;
   /** When true, the researcher has enabled wearable data sharing. The PWA offers
    *  the intersection of `wearablesProviders` and the server's `wearableProviders`
    *  (those with OAuth credentials configured) as connectable devices. */

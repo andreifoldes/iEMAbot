@@ -41,6 +41,12 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// tablets get an invite page with a QR code to continue on a phone instead
 	// (see web-pwa/src/lib/phoneGate.ts). A convenience check in the browser, not a security measure.
 	public webPhoneOnly = this.primitive<boolean>("webPhoneOnly", false)
+	// When enabled, the participant PWA does not ask for a display name; the participant
+	// is identified only by the generated study id.
+	public webSkipName = this.primitive<boolean>("webSkipName", false)
+	// Names an end-of-questionnaire read-out of the participant's own answers in the PWA
+	// (see web-pwa/src/lib/snapshot.ts). No editor control: set in the study source.
+	public webSnapshot = this.primitive<string>("webSnapshot", "")
 	// When enabled, the participant PWA can connect a wearable (Fitbit/Withings/Oura)
 	// via OAuth and the server polls it for data (see backend/wearables/, api/wearables_*).
 	// wearablesProviders limits which providers are offered; wearablesDataTypes (empty =
