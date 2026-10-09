@@ -25,7 +25,7 @@ import {
   submitCognitiveTrials, serverRootUrl, sendParticipantMessage, loadUploadProtocol,
   flushSubmitQueue, pendingSubmitCount, loadErrorLog, clearErrorLog, installErrorLogger,
   subscribeToPush, fetchNextNotification, logEvent, reportClientInfo, sendWelcomePush, reportPushEvent,
-  submitJoined,
+  submitJoined, setLocalOnly,
   startWearableConnect, fetchWearableStatus, disconnectWearable,
   claimPidLock, releasePidLock, getOrCreateDeviceToken,
 } from './lib/esmiraApi';
@@ -47,7 +47,8 @@ import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pw
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
-import { snapshotFor } from './lib/snapshot';
+import { pvtSummary, snapshotMessages } from './lib/snapshot';
+import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
 import { saveRecording } from './lib/audioUploads';
@@ -346,6 +347,8 @@ export default function App() {
   const keystrokeIdsRef = useRef<number[]>([]);
   const keystrokeTextsRef = useRef<Record<string, string>>({});
   const keystrokeModesRef = useRef<Record<string, string>>({});
+  // Reaction-time line for the end-of-check-in answers list (webSnapshot), by cognitive question id.
+  const pvtLinesRef = useRef<Record<string, string | null>>({});
   // "Other, please specify" free-text modal: set when the participant picks the
   // catch-all option of a list_single that has ESMira's `other` flag enabled.
   const [specify, setSpecify] = useState<PendingSpecify | null>(null);
@@ -514,6 +517,8 @@ export default function App() {
       .then(async ({ study, serverVersion, vapidPublicKey, wearableProviders }) => {
         // Remember the code only once it actually loaded a study.
         localStorage.setItem(LAST_KEY_STORE, effectiveKey);
+        // Before anything else can send: a local-only study (webLocalOnly) uploads nothing.
+        setLocalOnly(study.webLocalOnly === true);
         setStudy(study);
         setServerVersion(serverVersion);
         setVapidKey(vapidPublicKey ?? null);
@@ -758,6 +763,7 @@ export default function App() {
     try {
       await flushSubmitQueue();
       const { study: fresh, serverVersion: sv, vapidPublicKey, wearableProviders: wp } = await fetchStudy(effectiveKey, studyIdParam);
+      setLocalOnly(fresh.webLocalOnly === true);
       setStudy(fresh);
       setServerVersion(sv);
       setVapidKey(vapidPublicKey ?? null);
@@ -1116,16 +1122,41 @@ export default function App() {
     }
     practiceRef.current = practice;
     const session = adaptQuestionnaire(study.id, q, Date.now());
+    // A check-in parked with "Remind me later" picks up where it stopped (lib/pausedCheckin.ts).
+    const parked = practice ? null : loadPaused(study.id, userId);
+    const resume = parked && parked.questionnaireId === internalId ? parked : null;
+    if (resume) {
+      session.answered = resume.responses;
+      session.current_question_index = resume.currentIndex;
+    }
     const engine = new OfflineSurveyEngine(session);
+    if (resume) engine.restoreSpecifyTexts(resume.specifyTexts);
     engineRef.current = engine;
     activeQRef.current = { id: q.internalId, name: q.title, changeMode: q.changeResponseMode ?? 'previous' };
     setActiveQTitle(q.title);
     surveyStartRef.current = Date.now();
-    audioIdsRef.current = [];
-    keystrokeIdsRef.current = [];
-    keystrokeTextsRef.current = {};
-    keystrokeModesRef.current = {};
+    audioIdsRef.current = resume ? [...resume.audioIds] : [];
+    keystrokeIdsRef.current = resume ? [...resume.keystrokeIds] : [];
+    keystrokeTextsRef.current = resume ? { ...resume.keystrokeTexts } : {};
+    keystrokeModesRef.current = resume ? { ...resume.keystrokeModes } : {};
+    pvtLinesRef.current = {};
     pushUser(q.title);
+    if (resume) {
+      clearPaused(study.id, userId);
+      // Show what was answered before the pause, then carry on from the saved position.
+      for (const done of session.questions) {
+        const value = resume.responses[done.id];
+        if (value === undefined) continue;
+        if (done.type === 'cognitive') {
+          pushBot(done.title || 'Cognitive task');
+          pushUser('✓ Completed');
+        } else {
+          pushBot(settledQuestionHtml(done), !!done.is_html);
+          pushUser(formatAnswer(done, value));
+        }
+      }
+      pushBot('Welcome back — carrying on where you left off.');
+    }
     if (practice) pushSection('Practice run — nothing you enter is saved');
     setPhase('survey');
     const transition = engine.getSectionTransition();
@@ -1269,6 +1300,49 @@ export default function App() {
     afterAdvance(next);
   };
 
+  // Leave the running questionnaire without submitting it and show the list again.
+  const leaveSurvey = () => {
+    engineRef.current = null;
+    activeQRef.current = null;
+    setCurrentQuestion(null);
+    setSpecify(null);
+    setProgress(0);
+    setPhase('list');
+  };
+
+  // Task-card "Remind me later" (webTaskActions): park the answers so far on this device. No push
+  // is scheduled, so the message promises a saved place, not a reminder.
+  const handleRemindLater = () => {
+    const engine = engineRef.current;
+    const active = activeQRef.current;
+    if (!engine || !study || !active) return;
+    pushUser('Remind me later');
+    const saved = savePaused(study.id, userId, {
+      questionnaireId: active.id,
+      currentIndex: engine.getState().currentIndex,
+      responses: { ...engine.getResponseMap() },
+      specifyTexts: { ...engine.getSpecifyTexts() },
+      audioIds: [...audioIdsRef.current],
+      keystrokeIds: [...keystrokeIdsRef.current],
+      keystrokeTexts: { ...keystrokeTextsRef.current },
+      keystrokeModes: { ...keystrokeModesRef.current },
+      pausedAt: Date.now(),
+    });
+    pushBot(saved
+      ? "Okay — I've saved your answers so far on this phone. Open the check-in below when you're ready to carry on."
+      : "Sorry, I couldn't save your answers on this phone, so this check-in was closed. You can start it again from the list.");
+    leaveSurvey();
+  };
+
+  // Task-card "Skip check-in" (webTaskActions): drop the whole questionnaire, nothing is submitted.
+  const handleSkipCheckin = () => {
+    if (!study) return;
+    pushUser('Skip check-in');
+    clearPaused(study.id, userId);
+    pushBot('Okay, I skipped this check-in. None of your answers were submitted.');
+    leaveSurvey();
+  };
+
   // Skip a voice memo. If it has a keystroke-text fallback, reveal that fallback so the
   // participant is asked the same prompt to answer by typing; otherwise it's a plain skip.
   const handleAudioSkip = () => {
@@ -1364,12 +1438,21 @@ export default function App() {
       setNowTick((t) => t + 1);
     }
     setSubmitting(false);
-    pushBot(ok
-      ? '✅ Thank you — your responses have been recorded.'
-      : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
-    // Studies that opt in (webSnapshot) get a playful read-out of the answers just given.
-    const snapshot = snapshotFor(study, engine.getResponseMap());
-    if (snapshot) pushBot(snapshot);
+    // Studies that opt in (webSnapshot) get a snapshot, the participant's own answers and a thank-you.
+    const messages = snapshotMessages(
+      study, engine.session.questions, engine.getResponseMap(),
+      Object.values(pvtLinesRef.current).find((line): line is string => !!line) ?? null,
+    );
+    if (study.webLocalOnly) {
+      // Nothing was sent, so never claim the responses were recorded.
+      if (!messages) pushBot('✅ Thank you — you are all done. Nothing was sent to the server.');
+    } else {
+      pushBot(ok
+        ? '✅ Thank you — your responses have been recorded.'
+        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
+    }
+    messages?.forEach((message) => pushBot(message));
+    clearPaused(study.id, userId);
     engineRef.current = null;
     activeQRef.current = null;
     // Only offer another questionnaire if one is actually completable right now —
@@ -1402,6 +1485,7 @@ export default function App() {
     }
     // Store a compact summary (incl. the session id, to join the trial rows) in
     // the cognitive item's own column.
+    pvtLinesRef.current[qid] = pvtSummary((payload.data as { trials?: unknown } | undefined)?.trials);
     const next = engine.respond(qid, JSON.stringify({ session, ...s }));
     setWebview(null);
     afterAdvance(next);
@@ -1888,6 +1972,7 @@ export default function App() {
           const items = available.length
             ? available
             : withAv.filter((x) => x.av?.opensAt).sort((a, b) => a.av!.opensAt! - b.av!.opensAt!);
+          const parked = userId ? loadPaused(study.id, userId) : null;
           return (
           <div className="self-start w-[85%] flex flex-col gap-2">
             {items.map(({ q, av }) => {
@@ -1895,7 +1980,12 @@ export default function App() {
               return open ? (
                 <button key={q.internalId} onClick={() => startQuestionnaire(q.internalId)}
                   className="w-full flex items-center justify-between px-4 py-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 hover:bg-surface-container-high rounded-xl transition-colors text-left shadow-sm message-shadow">
-                  <span className={cn('font-semibold', textSizeClass)}>{q.title}</span>
+                  <span className="min-w-0">
+                    <span className={cn('block font-semibold', textSizeClass)}>{q.title}</span>
+                    {parked?.questionnaireId === q.internalId && (
+                      <span className="block text-xs text-on-surface-variant mt-0.5">Paused — tap to carry on</span>
+                    )}
+                  </span>
                   <ChevronRight size={18} className="text-outline-variant" aria-hidden="true" />
                 </button>
               ) : (
@@ -1960,6 +2050,9 @@ export default function App() {
             onOpenRecorder={() => setRecorder(currentQuestion)}
             onSkipAudio={handleAudioSkip}
             onOpenKeystroke={() => setKeystroker(currentQuestion)}
+            taskActions={study?.webTaskActions && !practiceRef.current
+              ? { onRemindLater: handleRemindLater, onSkipCheckin: handleSkipCheckin }
+              : undefined}
           />
         )}
 

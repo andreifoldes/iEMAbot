@@ -117,11 +117,39 @@ a participant ID), and the Details panel shows no username.
 
 ## End-of-questionnaire snapshot
 
-A study with `webSnapshot` set to `esrs2026` (source-edit only) adds a short, playful read-out of the answers
-just given after each submission: a mood line from the I-PANAS-SF items (`alert`, `inspired`, `active` against
-`nervous`, `upset`, `afraid`) and a sleepiness line from the `kss` item, then a thank-you. It is computed in the
-browser by `lib/snapshot.ts`; nothing extra is stored or sent. The ESRS 2026 mini check-in uses it, mirroring
-the Telegram bot's snapshot.
+A study with `webSnapshot` set to `esrs2026` (source-edit only) adds three messages after a check-in, mirroring
+the Telegram bot's esrs2026 study:
+
+1. **Snapshot**: a mood line from the I-PANAS-SF items (`alert`, `inspired`, `active` against `nervous`, `upset`,
+   `afraid`) and a sleepiness line from the `kss` item.
+2. **Your answers**: the participant's own answers in question order, with short labels for a few items, `/5` on
+   scales and, for the reaction-time game, a line such as *17 taps, average 555 ms, 7 lapses* (false starts are
+   not taps). Like the bot, only questions that have an answer appear, so one hidden by its `show_if`
+   (`relevance`) or skipped is left out.
+3. **Thank-you**.
+
+It is computed in the browser by `lib/snapshot.ts`.
+
+## Local-only studies
+
+A study with `webLocalOnly` (source-edit only) sends nothing to the server. One switch in `lib/esmiraApi.ts`
+(`setLocalOnly`, set as soon as the study loads) turns every writing call into a no-op: questionnaire and joined
+datasets, other events, client telemetry, push subscription and test, wearables and the participant-ID lock. The
+study itself is still fetched, and the *contact the research team* message is still sent if the participant
+writes one. After a check-in the app says nothing was sent instead of "your responses have been recorded". The
+ESRS 2026 mini check-in uses it, and its end screen says so. Server access logs of the study request remain.
+
+## Task actions and pausing
+
+With `webTaskActions` (source-edit only), a cognitive task card shows four buttons in two rows, as under a task in
+the Telegram bot: **Start task**, **Skip task** (drops only the task), **Remind me later** and **Skip check-in**
+(drops the whole questionnaire; nothing is submitted).
+
+**Remind me later** parks the check-in **on this device** (`lib/pausedCheckin.ts`, key `esmira_paused_<study>_<id>`):
+answers so far, the position, and any recording or typing identifiers. No push is scheduled, so the app says the
+answers are saved and does not promise a reminder. The questionnaire list then shows *Paused — tap to carry on*;
+resuming replays the earlier answers into the chat and continues where it stopped. Finishing, skipping or resuming
+clears the saved copy. One paused check-in is kept per study and participant.
 
 ## Notifications step
 

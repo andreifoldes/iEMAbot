@@ -211,6 +211,11 @@ export class OfflineSurveyEngine {
     return this.specifyTexts;
   }
 
+  /** Put back the "other" texts of a paused questionnaire (see lib/pausedCheckin.ts). */
+  restoreSpecifyTexts(texts: Readonly<Record<string, string>>): void {
+    this.specifyTexts = { ...texts };
+  }
+
   /**
    * Confirm the "other" choice with its free-text detail. The chosen option is
    * already recorded in `state.responses`; the text is stored separately (empty

@@ -15,9 +15,10 @@ declare(strict_types=1);
  *
  * Question ids, wording and option labels are copied verbatim from the bot so the two exports line up.
  * Like the bot, the pages carry no headings of their own; only the check-in's one-line description
- * opens the first page. The welcome and consent wording follows the bot's, except for the sentences
- * about deleting answers: the ESMira server stores responses, so those say so instead. Review before applying.
- * The end-of-check-in snapshot is the PWA's webSnapshot option (see set-esrs2026-flags.php).
+ * opens the first page. The welcome and consent wording follows the bot's. "Nothing you answer is
+ * saved" is true only with the PWA's webLocalOnly option on (see set-esrs2026-flags.php), which makes
+ * the app send nothing to the server; apply the flags and ship a PWA that has it before this wording
+ * goes live. The bot's 2-hour deletion window does not apply and is left out.
  *
  * Refuses to run unless study 2026 is still the empty placeholder, or holds only the check-in this
  * script created (questionnaire 202601, which it then replaces), so it can never overwrite a real study.
@@ -43,8 +44,8 @@ const TITLE = 'ESRS 2026 mini check-in';
 const DESCRIPTION = '<p>Welcome to the ESRS 2026 mini check-in, a playful demo that goes with our poster.</p>'
     . '<p>It takes about 5 minutes: how you are enjoying the conference, a few quick mood questions,'
     . ' how sleepy you feel, and a short reaction-time game. You get a little snapshot of yourself at the end.</p>';
-const CONSENT = "It is a demo and we do not ask for your name. Your answers and game results are stored"
-    . " on the research server without it, and you can stop at any time.\n\n"
+const CONSENT = "It is a fully anonymous demo. Nothing you answer is saved: your answers and game results stay on"
+    . " your phone and are not sent anywhere, so there is nothing to delete afterwards.\n\n"
     . 'Do you consent to take part in this anonymous demo?';
 const INTRO = 'A 5-minute snapshot of how you are doing right now.';
 

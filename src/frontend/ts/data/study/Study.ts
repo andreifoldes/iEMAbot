@@ -47,6 +47,12 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// Names an end-of-questionnaire read-out of the participant's own answers in the PWA
 	// (see web-pwa/src/lib/snapshot.ts). No editor control: set in the study source.
 	public webSnapshot = this.primitive<string>("webSnapshot", "")
+	// When enabled, the participant PWA sends nothing to the server (no answers, join or other
+	// events, telemetry). No editor control: set in the study source. See web-pwa/src/lib/esmiraApi.ts.
+	public webLocalOnly = this.primitive<boolean>("webLocalOnly", false)
+	// When enabled, a cognitive task card in the PWA offers Start task / Skip task / Remind me later /
+	// Skip check-in. No editor control: set in the study source.
+	public webTaskActions = this.primitive<boolean>("webTaskActions", false)
 	// When enabled, the participant PWA can connect a wearable (Fitbit/Withings/Oura)
 	// via OAuth and the server polls it for data (see backend/wearables/, api/wearables_*).
 	// wearablesProviders limits which providers are offered; wearablesDataTypes (empty =

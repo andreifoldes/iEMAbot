@@ -21,6 +21,22 @@ import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
  */
 const API_ROOT = (import.meta.env.VITE_API_ROOT as string | undefined) || '/esmira/';
 
+/**
+ * Local-only studies (study field `webLocalOnly`, e.g. the ESRS 2026 poster demo): nothing the
+ * participant does is sent to the server. Every call below that writes (datasets, events, joins,
+ * telemetry, push, wearables, PID lock) returns early while this is on, so answers and game
+ * results stay on the device. Reading the study itself is unaffected. Set once the study has
+ * loaded (see App.tsx). `sendParticipantMessage` is exempt: it only runs when the participant
+ * chooses to write to the research team.
+ */
+let localOnly = false;
+export function setLocalOnly(on: boolean): void {
+  localOnly = on;
+}
+export function isLocalOnly(): boolean {
+  return localOnly;
+}
+
 /** Full URL of the ESMira server root the PWA talks to (for display in About). */
 export function serverRootUrl(): string {
   try {
@@ -69,6 +85,7 @@ export async function subscribeToPush(args: {
   userId: string;
   subscription: PushSubscriptionJSON;
 }): Promise<boolean> {
+  if (localOnly) return false;
   const resp = await fetch(`${API_ROOT}api/push_subscribe.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -99,6 +116,7 @@ export async function sendWelcomePush(args: {
   serverVersion: number;
   userId: string;
 }): Promise<number> {
+  if (localOnly) return 0;
   try {
     const resp = await fetch(`${API_ROOT}api/push_test.php`, {
       method: 'POST',
@@ -123,6 +141,7 @@ export async function sendWelcomePush(args: {
  * coarse device class. Latest report per participant wins server-side. Aggregate-only.
  */
 export async function reportClientInfo(studyId: number, userId: string): Promise<void> {
+  if (localOnly) return;
   try {
     const mm = typeof matchMedia !== 'undefined' ? matchMedia : null;
     const installed =
@@ -155,6 +174,7 @@ export async function reportPushEvent(args: {
   userId: string;
   event: 'welcome_confirmed' | 'welcome_missed';
 }): Promise<void> {
+  if (localOnly) return;
   try {
     await fetch(`${API_ROOT}api/push_event.php`, {
       method: 'POST',
@@ -206,6 +226,7 @@ export async function logEvent(args: {
   accessKey: string;
   eventType: string;
 }): Promise<void> {
+  if (localOnly) return;
   const now = Date.now();
   const payload = {
     userId: args.userId,
@@ -249,6 +270,7 @@ export async function startWearableConnect(args: {
   userId: string;
   provider: string;
 }): Promise<string> {
+  if (localOnly) throw new Error('This study does not send any data');
   const resp = await fetch(`${API_ROOT}api/wearables_connect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -290,6 +312,7 @@ export async function disconnectWearable(args: {
   userId: string;
   provider: string;
 }): Promise<boolean> {
+  if (localOnly) return false;
   const resp = await fetch(`${API_ROOT}api/wearables_disconnect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -550,6 +573,7 @@ function saveQueue(q: QueuedSubmit[]): void {
 }
 
 async function postDataset(payload: DatasetPayload): Promise<void> {
+  if (localOnly) return;
   const resp = await fetch(`${API_ROOT}api/datasets.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -566,6 +590,7 @@ async function postDataset(payload: DatasetPayload): Promise<void> {
  * accepted it now, false if it was queued for later.
  */
 export async function submitQuestionnaire(args: SubmitArgs): Promise<boolean> {
+  if (localOnly) return true;
   const payload = buildPayload(args);
   const audioIds = args.audioIdentifiers ?? [];
   const keystrokeIds = args.keystrokeIdentifiers ?? [];
@@ -639,6 +664,7 @@ function buildJoinPayload(args: JoinArgs): DatasetPayload {
  * Call once, guarded by the `esmira_joined_*` key. Returns true if accepted now.
  */
 export async function submitJoined(args: JoinArgs): Promise<boolean> {
+  if (localOnly) return true;
   const payload = buildJoinPayload(args);
   const id = newProtocolId();
   try {
@@ -701,7 +727,7 @@ export interface CognitiveTrialsArgs {
  * same offline queue on failure.
  */
 export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<boolean> {
-  if (!args.rows.length) return true;
+  if (!args.rows.length || localOnly) return true;
   const now = Date.now();
   const model = navigator.userAgent;
   const common = {
@@ -868,6 +894,7 @@ export async function claimPidLock(
   deviceToken: string,
   force = false,
 ): Promise<PidLockStatus> {
+  if (localOnly) return 'claimed';
   try {
     const resp = await fetch(PID_LOCK_API, {
       method: 'POST',
@@ -890,6 +917,7 @@ export async function releasePidLock(
   pid: string,
   deviceToken: string,
 ): Promise<void> {
+  if (localOnly) return;
   try {
     await fetch(PID_LOCK_API, {
       method: 'DELETE',

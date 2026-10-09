@@ -67,6 +67,13 @@ interface Props {
   onSkipAudio: () => void;
   /** Open the keystroke-logging writing modal for a `keystroke_text` question. */
   onOpenKeystroke: () => void;
+  /** Study option `webTaskActions`: a task card also offers Remind me later and Skip check-in. */
+  taskActions?: TaskActions;
+}
+
+export interface TaskActions {
+  onRemindLater: () => void;
+  onSkipCheckin: () => void;
 }
 
 export function SurveyInputs({
@@ -80,6 +87,7 @@ export function SurveyInputs({
   onOpenRecorder,
   onSkipAudio,
   onOpenKeystroke,
+  taskActions,
 }: Props) {
   return (
     <div data-live-question className="pb-4 pt-2 self-start max-w-[85%] w-[85%]">
@@ -110,6 +118,7 @@ export function SurveyInputs({
             textSizeClass={textSizeClass}
             onOpenWebview={onOpenWebview}
             onContinue={onContinueInfo}
+            taskActions={taskActions}
           />
         ) : (
         <div className="bg-white dark:bg-surface-container-lowest border-l-4 border-primary p-5 rounded-xl rounded-tl-none shadow-lg w-full">
@@ -189,11 +198,13 @@ function CognitiveCard({
   textSizeClass,
   onOpenWebview,
   onContinue,
+  taskActions,
 }: {
   question: PreloadedQuestion;
   textSizeClass: string;
   onOpenWebview: (url: string, title: string) => void;
   onContinue: () => void;
+  taskActions?: TaskActions;
 }) {
   const title = question.title || 'Assessment';
   const label = question.launch_label || `Start the ${title}`;
@@ -213,19 +224,52 @@ function CognitiveCard({
         {!question.required && (
           <p className="text-xs text-on-surface-variant italic">(Optional)</p>
         )}
-        <button
-          onClick={() => onOpenWebview(question.launch_url!, title)}
-          className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
-        >
-          <Play size={18} aria-hidden="true" />
-          {label}
-        </button>
-        <button
-          onClick={onContinue}
-          className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
-        >
-          Skip
-        </button>
+        {taskActions ? (
+          // Four actions in two rows, as under a task in the Telegram bot.
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onOpenWebview(question.launch_url!, title)}
+              className="bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
+            >
+              <Play size={18} aria-hidden="true" />
+              Start task
+            </button>
+            <button
+              onClick={onContinue}
+              className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
+            >
+              Skip task
+            </button>
+            <button
+              onClick={taskActions.onRemindLater}
+              className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
+            >
+              Remind me later
+            </button>
+            <button
+              onClick={taskActions.onSkipCheckin}
+              className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
+            >
+              Skip check-in
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => onOpenWebview(question.launch_url!, title)}
+              className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
+            >
+              <Play size={18} aria-hidden="true" />
+              {label}
+            </button>
+            <button
+              onClick={onContinue}
+              className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
+            >
+              Skip
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

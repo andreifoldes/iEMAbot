@@ -235,6 +235,12 @@ export interface EsmiraStudy {
   /** Names an end-of-questionnaire read-out of the participant's own answers (see
    *  lib/snapshot.ts). Source-edit only; empty/unknown = none. */
   webSnapshot?: string;
+  /** When true, the app sends nothing to the server: no answers, join or other events,
+   *  telemetry, push or PID lock (see `setLocalOnly` in lib/esmiraApi.ts). Source-edit only. */
+  webLocalOnly?: boolean;
+  /** When true, a cognitive task card offers Start task / Skip task / Remind me later / Skip
+   *  check-in (see lib/pausedCheckin.ts) instead of just Start and Skip. Source-edit only. */
+  webTaskActions?: boolean;
   /** When true, the researcher has enabled wearable data sharing. The PWA offers
    *  the intersection of `wearablesProviders` and the server's `wearableProviders`
    *  (those with OAuth credentials configured) as connectable devices. */
