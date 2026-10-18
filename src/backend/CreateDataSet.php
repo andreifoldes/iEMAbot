@@ -6,6 +6,8 @@ namespace backend;
 use backend\dataClasses\StudyStatisticsEntry;
 use backend\exceptions\CriticalException;
 use backend\exceptions\DataSetException;
+use backend\notifications\ParticipantVariableStore;
+use backend\notifications\SensorTriggerScheduler;
 use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\UserDataStore;
 use stdClass;
@@ -73,6 +75,14 @@ class CreateDataSet {
 	 * @var [[StudyStatisticsEntry]]
 	 */
 	private $statisticMetadataIndex = [];
+	/**
+	 * @var array<int, string[]> studyId => item names a sensor-trigger fallback reads
+	 */
+	private $variableNamesIndex = [];
+	/**
+	 * @var array<int, array{studyId:int, values:array<string, string>, time:int}> datasetId => answers to record once the store reports the dataset as saved
+	 */
+	private $pendingVariables = [];
 	
 	protected $outputIndex = [];
 	/**
@@ -288,9 +298,43 @@ class CreateDataSet {
 			}
 		}
 		
+		$variableNames = $this->getVariableNames($studyId);
+		if(!empty($variableNames)) {
+			$values = array_intersect_key($questionnaireData, array_flip($variableNames));
+			if(!empty($values))
+				$this->pendingVariables[$datasetId] = ['studyId' => $studyId, 'values' => $values, 'time' => min((int) ($dataSet->responseTime ?? 0), Main::getMilliseconds())]; // client clock: never in the future
+		}
+		
 		++$this->questionnaireEvents;
 		
 		$this->cache->addToQuestionnaireCache($studyId, $questionnaireId, $datasetId, $questionnaireData);
+	}
+	
+	/** @return string[] */
+	private function getVariableNames(int $studyId): array {
+		if(isset($this->variableNamesIndex[$studyId]))
+			return $this->variableNamesIndex[$studyId];
+		try {
+			$study = json_decode(Configs::getDataStore()->getStudyStore()->getStudyConfigAsJson($studyId), true);
+			$names = is_array($study) ? SensorTriggerScheduler::variableNames($study) : [];
+		}
+		catch(\Throwable $e) { // a scheduling helper must never block saving responses
+			$names = [];
+		}
+		return $this->variableNamesIndex[$studyId] = $names;
+	}
+	
+	private function recordVariables(int $datasetId) {
+		if(!isset($this->pendingVariables[$datasetId]))
+			return;
+		['studyId' => $studyId, 'values' => $values, 'time' => $time] = $this->pendingVariables[$datasetId];
+		unset($this->pendingVariables[$datasetId]);
+		try {
+			ParticipantVariableStore::record($studyId, $this->userId, $values, $time);
+		}
+		catch(\Throwable $e) {
+			Main::report("Could not record participant variables for study $studyId:\n" .$e->getMessage());
+		}
 	}
 	
 	/**
@@ -494,6 +538,7 @@ class CreateDataSet {
 			$this->cache,
 			function(int $datasetId) {
 				$this->lineOutputSuccess($datasetId);
+				$this->recordVariables($datasetId);
 			},
 			function(int $datasetId, string $msg) {
 				$this->lineOutputError($datasetId, $msg);

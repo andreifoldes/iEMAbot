@@ -16,6 +16,11 @@ namespace backend\notifications;
  *  - has a time-contingent fallback: at `fallbackTimeOfDay`, if no qualifying event arrived
  *    earlier that local day (including participants who never linked a device), the prompt is
  *    sent anyway. A fallback counts against the daily cap, so a late sync cannot prompt twice.
+ *    With `fallbackMode` = `variable`, the fallback time is a participant's own answer to the
+ *    item `fallbackVariable` (e.g. habitual wake-up time, see ParticipantVariableStore) plus
+ *    `fallbackOffsetMin`; `fallbackTimeOfDay` is then the second fallback for participants who
+ *    have not answered it yet (unless `fallbackDefaultEnabled` is off). A variable fallback that was
+ *    due before the participant gave that answer is skipped, not sent late.
  *
  * Idempotence does not rely on a time cursor: every candidate has a key recorded in `$ledger`,
  * so an event that is appended just after the previous run read the log is still picked up, and
@@ -31,6 +36,7 @@ class SensorTriggerScheduler {
 	const DEFAULT_WINDOW_START = 18000000; // 05:00
 	const DEFAULT_WINDOW_END = 43200000;   // 12:00
 	const DEFAULT_FALLBACK_TOD = 43200000; // 12:00
+	const FALLBACK_MODE_VARIABLE = 'variable';
 
 	/** How far back callers should load events: covers fallback evaluation and delayed prompts. */
 	const EVENT_LOOKBACK_MS = 3 * self::ONE_DAY;
@@ -50,12 +56,71 @@ class SensorTriggerScheduler {
 	}
 
 	/**
+	 * Item names whose answers some fallback is anchored to, i.e. what ParticipantVariableStore has to keep.
+	 * @return string[]
+	 */
+	public static function variableNames(array $study): array {
+		$names = [];
+		foreach(self::collect($study) as $t) {
+			$name = self::fallbackVariable($t['et']);
+			if($name !== null)
+				$names[$name] = true;
+		}
+		return array_keys($names);
+	}
+
+	/**
+	 * Local time of day (ms) the fallback fires at, or null for no fallback on this day.
+	 * @param array<string, string|array{v:string, t:int}> $variables the participant's values from ParticipantVariableStore
+	 */
+	public static function fallbackTimeOfDay(array $et, array $variables): ?int {
+		$resolved = self::resolveFallback($et, $variables);
+		return $resolved === null ? null : $resolved[0];
+	}
+
+	/**
+	 * A time answer as ms since midnight: "HH:MM" / "HH:MM:SS", what time items save. Anything
+	 * else is null: empty, "7am", out of range, and plain numbers, which are the minutes a
+	 * duration picker ("how long ...") saves, not a clock time.
+	 */
+	public static function parseTimeOfDay($value): ?int {
+		$s = trim((string) ($value ?? ''));
+		if(!preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', $s, $m))
+			return null;
+		[$h, $min, $sec] = [(int) $m[1], (int) $m[2], (int) ($m[3] ?? 0)];
+		return ($h < 24 && $min < 60 && $sec < 60) ? (($h * 60 + $min) * 60 + $sec) * 1000 : null;
+	}
+
+	/**
+	 * @return array{0:int, 1:int}|null [time of day, notBeforeMs]: a time derived from a variable is
+	 *   only valid for fallbacks due after the participant gave that answer (notBeforeMs), otherwise
+	 *   answering, or changing the answer to an earlier time, would immediately send a backdated prompt.
+	 */
+	private static function resolveFallback(array $et, array $variables): ?array {
+		if(empty($et['fallbackEnabled']))
+			return null;
+		$fixed = (int) ($et['fallbackTimeOfDay'] ?? self::DEFAULT_FALLBACK_TOD);
+		$fixed = $fixed >= 0 ? [$fixed, 0] : null; // < 0: time input was cleared
+		$name = self::fallbackVariable($et);
+		if($name === null)
+			return $fixed;
+		$entry = $variables[$name] ?? null;
+		$tod = self::parseTimeOfDay(is_array($entry) ? ($entry['v'] ?? null) : $entry);
+		if($tod !== null) {
+			$tod = (($tod + (int) ($et['fallbackOffsetMin'] ?? 0) * 60000) % self::ONE_DAY + self::ONE_DAY) % self::ONE_DAY;
+			return [$tod, is_array($entry) ? (int) ($entry['t'] ?? 0) : 0];
+		}
+		return ($et['fallbackDefaultEnabled'] ?? true) ? $fixed : null;
+	}
+
+	/**
 	 * @param array $events  [{t:int, provider:string, kind:string}] from WearablesEventStore, any order
 	 * @param array $ledger  per-participant state, mutated: ['seen' => key=>fireMs, 'fired' => dayKey=>count]
+	 * @param array<string, string|array{v:string, t:int}> $variables  ParticipantVariableStore::read() (variable fallbacks)
 	 * @return array<int, array> occurrences in the shape PushSender::buildCoalescedPayload consumes
 	 */
 	public static function computeOccurrences(
-		array $study, array $events, int $anchorMs, int $tzOffsetMin, int $nowMs, int $lastDataSetTime, array &$ledger
+		array $study, array $events, int $anchorMs, int $tzOffsetMin, int $nowMs, int $lastDataSetTime, array &$ledger, array $variables = []
 	): array {
 		$out = [];
 		$offsetMs = $tzOffsetMin * 60000;
@@ -96,8 +161,11 @@ class SensorTriggerScheduler {
 				$qualifyingByDay[$day][] = $time;
 				$cands[] = [$fireMs, "$baseKey:s:$time", $day];
 			}
-			$fallbackTod = (int) ($et['fallbackTimeOfDay'] ?? self::DEFAULT_FALLBACK_TOD);
-			if(!empty($et['fallbackEnabled']) && $fallbackTod >= 0) { // < 0: time input was cleared
+			// The day key (not the time) identifies a fallback, so a changed variable cannot fire it twice.
+			$fallback = self::resolveFallback($et, $variables);
+			$fallbackNotBefore = $fallback === null ? 0 : $fallback[1];
+			if($fallback !== null) {
+				$fallbackTod = $fallback[0];
 				$lastDay = intdiv($nowMs - $offsetMs, self::ONE_DAY);
 				for($day = $lastDay - 2; $day <= $lastDay; $day++) {
 					$fireMs = $day * self::ONE_DAY + $fallbackTod + $offsetMs;
@@ -117,7 +185,8 @@ class SensorTriggerScheduler {
 				if($status === null && $fireMs <= $nowMs) {
 					$dayKey = "$baseKey:$day";
 					$isFallback = strpos($key, ':f:') !== false;
-					$isStale = $nowMs - $fireMs > self::MAX_AGE_MS || ($isFallback && $fireMs < $ledger['init']);
+					$isStale = $nowMs - $fireMs > self::MAX_AGE_MS
+						|| ($isFallback && ($fireMs < $ledger['init'] || $fireMs < $fallbackNotBefore));
 					$isCapped = ($ledger['fired'][$dayKey] ?? 0) >= $maxPerDay;
 					if($isStale || $isCapped) {
 						$ledger['seen'][$key] = ['t' => $fireMs, 'sent' => false];
@@ -161,6 +230,13 @@ class SensorTriggerScheduler {
 			}
 		}
 		return $found;
+	}
+
+	private static function fallbackVariable(array $et): ?string {
+		if(empty($et['fallbackEnabled']) || ($et['fallbackMode'] ?? '') !== self::FALLBACK_MODE_VARIABLE)
+			return null;
+		$name = trim((string) ($et['fallbackVariable'] ?? ''));
+		return $name === '' ? null : $name;
 	}
 
 	private static function eventMatches(array $et, string $provider, string $kind): bool {

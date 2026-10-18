@@ -16,6 +16,10 @@ export const WEARABLE_PROVIDER_GOOGLE_HEALTH = "googlehealth"
  */
 export const SHOW_GOOGLE_HEALTH = false
 
+/** Where the fallback time comes from; keep in sync with SensorTriggerScheduler::FALLBACK_MODE_VARIABLE. */
+export const FALLBACK_MODE_FIXED = "fixed"
+export const FALLBACK_MODE_VARIABLE = "variable"
+
 /**
  * Normalised sensor events, mapped by the server onto each provider's webhook category
  * (Withings `appli` code / Fitbit subscription collection / Google Health data types).
@@ -54,5 +58,13 @@ export class EventTrigger extends DataStructure {
 	// --- Fallback: time-contingent prompt if the sensor stays silent ---
 	/** Send the prompt at `fallbackTimeOfDay` if no matching sensor event fired that day. */
 	public fallbackEnabled						= this.primitive<boolean>(		"fallbackEnabled",					false)
+	/** FALLBACK_MODE_FIXED: at `fallbackTimeOfDay`; FALLBACK_MODE_VARIABLE: at the participant's answer to `fallbackVariable` + offset. */
+	public fallbackMode							= this.primitive<string>(		"fallbackMode",					FALLBACK_MODE_FIXED)
+	/** Item name (e.g. habitual_wake_time) whose latest "HH:MM" answer anchors the fallback. */
+	public fallbackVariable						= this.primitive<string>(		"fallbackVariable",				"")
+	public fallbackOffsetMin					= this.primitive<number>(		"fallbackOffsetMin",				0)
+	/** Variable mode only: use `fallbackTimeOfDay` while the participant has not answered the item. */
+	public fallbackDefaultEnabled				= this.primitive<boolean>(		"fallbackDefaultEnabled",			true)
+	/** Fixed mode: the fallback time; variable mode: the second fallback while the variable is unset. */
 	public fallbackTimeOfDay					= this.primitive<number>(		"fallbackTimeOfDay",				43200000)  // 12:00
 }

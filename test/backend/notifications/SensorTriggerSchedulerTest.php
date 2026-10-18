@@ -27,8 +27,16 @@ class SensorTriggerSchedulerTest extends TestCase {
 		return ['t' => $t, 'provider' => $provider, 'kind' => $kind];
 	}
 
-	private function compute(array $study, array $events, int $now, array &$ledger, int $lastData = -1): array {
-		return SensorTriggerScheduler::computeOccurrences($study, $events, self::D0 - 5 * self::DAY, 0, $now, $lastData, $ledger);
+	private function compute(array $study, array $events, int $now, array &$ledger, int $lastData = -1, array $variables = []): array {
+		return SensorTriggerScheduler::computeOccurrences($study, $events, self::D0 - 5 * self::DAY, 0, $now, $lastData, $ledger, $variables);
+	}
+
+	/** Fallback anchored to the participant's habitual wake time + 30 min, 11:00 if unknown. */
+	private function variableFallback(array $extra = []): array {
+		return $this->study(array_merge([
+			'fallbackEnabled' => true, 'fallbackMode' => 'variable', 'fallbackVariable' => 'habitual_wake_time',
+			'fallbackOffsetMin' => 30, 'fallbackTimeOfDay' => 11 * self::H,
+		], $extra));
 	}
 
 	function test_matching_event_fires_prompt() {
@@ -234,5 +242,125 @@ class SensorTriggerSchedulerTest extends TestCase {
 		$study['questionnaires'] = [['internalId' => 99, 'actionTriggers' => []], $study['questionnaires'][0]];
 		$later = $this->event(self::D0 + 7 * self::H + 600000);
 		$this->assertCount(0, $this->compute($study, [$event, $later], self::D0 + 7 * self::H + 610000, $ledger));
+	}
+
+	function test_variable_fallback_fires_at_variable_plus_offset() {
+		$study = $this->variableFallback();
+		$vars = ['habitual_wake_time' => '07:15'];
+		$ledger = [];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 7 * self::H, $ledger, -1, $vars));
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 7 * self::H + 44 * 60000, $ledger, -1, $vars));
+		$out = $this->compute($study, [], self::D0 + 7 * self::H + 46 * 60000, $ledger, -1, $vars);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + 7 * self::H + 45 * 60000, $out[0]['timestamp']);
+		// not at the fixed 11:00 as well
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 11 * self::H + 60000, $ledger, -1, $vars));
+	}
+
+	function test_variable_fallback_uses_fixed_time_when_variable_is_unset() {
+		$study = $this->variableFallback();
+		$ledger = [];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 7 * self::H, $ledger));
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 8 * self::H, $ledger, -1, ['other' => '07:15']));
+		$out = $this->compute($study, [], self::D0 + 11 * self::H + 60000, $ledger, -1, ['habitual_wake_time' => 'not a time']);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + 11 * self::H, $out[0]['timestamp']);
+	}
+
+	function test_variable_fallback_without_default_sends_nothing_when_unset() {
+		$study = $this->variableFallback(['fallbackDefaultEnabled' => false]);
+		$ledger = [];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 7 * self::H, $ledger));
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 11 * self::H + 60000, $ledger));
+		// as soon as the participant answers, the fallback follows their time
+		$out = $this->compute($study, [], self::D0 + self::DAY + 8 * self::H + 60000, $ledger, -1, ['habitual_wake_time' => '07:30']);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + self::DAY + 8 * self::H, $out[0]['timestamp']);
+	}
+
+	function test_variable_fallback_is_skipped_when_sensor_fired_first() {
+		$study = $this->variableFallback();
+		$vars = ['habitual_wake_time' => '07:00'];
+		$ledger = [];
+		$event = $this->event(self::D0 + 7 * self::H + 10 * 60000);
+		$this->assertCount(1, $this->compute($study, [$event], self::D0 + 7 * self::H + 11 * 60000, $ledger, -1, $vars));
+		$this->assertCount(0, $this->compute($study, [$event], self::D0 + 7 * self::H + 31 * 60000, $ledger, -1, $vars));
+	}
+
+	function test_changed_variable_does_not_fire_a_second_fallback_that_day() {
+		$study = $this->variableFallback();
+		$ledger = [];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 6 * self::H, $ledger, -1, ['habitual_wake_time' => '06:00']));
+		$this->assertCount(1, $this->compute($study, [], self::D0 + 6 * self::H + 31 * 60000, $ledger, -1, ['habitual_wake_time' => '06:00']));
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 9 * self::H, $ledger, -1, ['habitual_wake_time' => '08:00']));
+	}
+
+	function test_variable_fallback_follows_local_time() {
+		// UTC+2 participant (tzOffset -120): wake 07:00 local + 30 min => 05:30 UTC
+		$study = $this->variableFallback();
+		$ledger = [];
+		$vars = ['habitual_wake_time' => '07:00'];
+		SensorTriggerScheduler::computeOccurrences($study, [], self::D0 - 5 * self::DAY, -120, self::D0 + 4 * self::H, -1, $ledger, $vars);
+		$out = SensorTriggerScheduler::computeOccurrences($study, [], self::D0 - 5 * self::DAY, -120, self::D0 + 5 * self::H + 31 * 60000, -1, $ledger, $vars);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + 5 * self::H + 30 * 60000, $out[0]['timestamp']);
+	}
+
+	function test_fallbackTimeOfDay_resolution() {
+		$et = ['fallbackEnabled' => true, 'fallbackMode' => 'variable', 'fallbackVariable' => 'wake', 'fallbackOffsetMin' => -90, 'fallbackTimeOfDay' => 11 * self::H];
+		$this->assertSame(5 * self::H + 30 * 60000, SensorTriggerScheduler::fallbackTimeOfDay($et, ['wake' => '07:00']));
+		$this->assertSame(23 * self::H, SensorTriggerScheduler::fallbackTimeOfDay($et, ['wake' => '00:30']), 'negative offset wraps over midnight');
+		$this->assertSame(11 * self::H, SensorTriggerScheduler::fallbackTimeOfDay($et, []));
+		$this->assertSame(11 * self::H, SensorTriggerScheduler::fallbackTimeOfDay(array_merge($et, ['fallbackMode' => 'fixed']), ['wake' => '07:00']));
+		$this->assertSame(11 * self::H, SensorTriggerScheduler::fallbackTimeOfDay(array_merge($et, ['fallbackVariable' => ' ']), ['wake' => '07:00']));
+		$this->assertNull(SensorTriggerScheduler::fallbackTimeOfDay(array_merge($et, ['fallbackEnabled' => false]), ['wake' => '07:00']));
+		$this->assertNull(SensorTriggerScheduler::fallbackTimeOfDay(array_merge($et, ['fallbackTimeOfDay' => -1]), []));
+	}
+
+	function test_parseTimeOfDay() {
+		$this->assertSame(7 * self::H + 5 * 60000, SensorTriggerScheduler::parseTimeOfDay('07:05'));
+		$this->assertSame(7 * self::H + 5 * 60000, SensorTriggerScheduler::parseTimeOfDay(' 7:05 '));
+		$this->assertSame(23 * self::H + 59 * 60000 + 30000, SensorTriggerScheduler::parseTimeOfDay('23:59:30'));
+		foreach([null, '', '24:00', '07:60', '7am', '450', '1440', '-5', '07:5'] as $bad)
+			$this->assertNull(SensorTriggerScheduler::parseTimeOfDay($bad), var_export($bad, true));
+	}
+
+	function test_variableNames_lists_only_variable_fallbacks() {
+		$this->assertSame(['habitual_wake_time'], SensorTriggerScheduler::variableNames($this->variableFallback()));
+		$this->assertSame([], SensorTriggerScheduler::variableNames($this->variableFallback(['fallbackMode' => 'fixed'])));
+		$this->assertSame([], SensorTriggerScheduler::variableNames($this->study(['fallbackEnabled' => true])));
+		$this->assertSame([], SensorTriggerScheduler::variableNames($this->variableFallback(['fallbackEnabled' => false])));
+	}
+
+	function test_variable_answered_after_its_time_does_not_send_a_backdated_fallback() {
+		// subscribed early; at 08:00 the participant answers wake 07:00 (+30 => 07:30, already past)
+		$study = $this->variableFallback();
+		$ledger = [];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 5 * self::H, $ledger));
+		$vars = ['habitual_wake_time' => ['v' => '07:00', 't' => self::D0 + 8 * self::H]];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 8 * self::H + 60000, $ledger, -1, $vars));
+		// the next day it fires normally
+		$out = $this->compute($study, [], self::D0 + self::DAY + 7 * self::H + 31 * 60000, $ledger, -1, $vars);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + self::DAY + 7 * self::H + 30 * 60000, $out[0]['timestamp']);
+	}
+
+	function test_changing_the_answer_to_an_earlier_time_does_not_fire_immediately() {
+		$study = $this->variableFallback();
+		$ledger = [];
+		$old = ['habitual_wake_time' => ['v' => '08:00', 't' => self::D0 - self::DAY]];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 6 * self::H, $ledger, -1, $old));
+		$new = ['habitual_wake_time' => ['v' => '06:00', 't' => self::D0 + 7 * self::H]];
+		$this->assertCount(0, $this->compute($study, [], self::D0 + 7 * self::H + 60000, $ledger, -1, $new));
+	}
+
+	function test_variable_entries_from_the_store_are_accepted() {
+		$study = $this->variableFallback();
+		$ledger = [];
+		$vars = ['habitual_wake_time' => ['v' => '07:15', 't' => self::D0 - self::DAY]];
+		$this->compute($study, [], self::D0 + 7 * self::H, $ledger, -1, $vars);
+		$out = $this->compute($study, [], self::D0 + 7 * self::H + 46 * 60000, $ledger, -1, $vars);
+		$this->assertCount(1, $out);
+		$this->assertSame(self::D0 + 7 * self::H + 45 * 60000, $out[0]['timestamp']);
 	}
 }

@@ -316,6 +316,8 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 		if(is_dir(Paths::folderKeystrokes($studyId))) // added after some studies were created; may not exist yet
 			FileSystemBasics::emptyFolder(Paths::folderKeystrokes($studyId));
 		FileSystemBasics::emptyFolder(PathsFS::folderPendingUploads($studyId));
+		if(is_dir(PathsFS::folderParticipantVariables($studyId))) // copies of answers (sensor-trigger fallbacks); created on demand
+			FileSystemBasics::emptyFolder(PathsFS::folderParticipantVariables($studyId));
 		// Again after the files are gone: an upload that raced the reset must not leave rows behind.
 		CollectedDataDb::deleteStudyData($studyId, false);
 

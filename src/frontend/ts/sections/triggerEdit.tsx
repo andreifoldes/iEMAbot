@@ -7,7 +7,7 @@ import { ObservableLangChooser } from "../components/ObservableLangChooser";
 import { BindObservable, BooleanTransformer, ConstrainedNumberTransformer, TimeTransformer, Transformer } from "../components/BindObservable";
 import { ActionTrigger } from "../data/study/ActionTrigger";
 import { Schedule } from "../data/study/Schedule";
-import { CUE_WEARABLE, EventTrigger, SHOW_GOOGLE_HEALTH, WEARABLE_EVENTS, WEARABLE_PROVIDERS, WEARABLE_PROVIDER_ANY, WEARABLE_PROVIDER_GOOGLE_HEALTH } from "../data/study/EventTrigger";
+import { CUE_WEARABLE, EventTrigger, FALLBACK_MODE_FIXED, FALLBACK_MODE_VARIABLE, SHOW_GOOGLE_HEALTH, WEARABLE_EVENTS, WEARABLE_PROVIDERS, WEARABLE_PROVIDER_ANY, WEARABLE_PROVIDER_GOOGLE_HEALTH } from "../data/study/EventTrigger";
 import { TitleRow } from "../components/TitleRow";
 import { PrimitiveType } from "../observable/types/PrimitiveType";
 import { ACTION_INVITATION } from "../constants/actions";
@@ -262,6 +262,88 @@ export class Content extends SectionContent {
 	}
 
 	/**
+	 * Names of the study's clock-time items, the candidates for a participant-variable fallback.
+	 * Time items asking "how long ..." are left out: the PWA renders them as a duration picker
+	 * (web-pwa/src/lib/esmiraAdapter.ts), whose answers are minutes, not a time of day.
+	 */
+	private getTimeItemNames(study: Study): string[] {
+		const names = new Set<string>()
+		study.questionnaires.get().forEach((questionnaire) =>
+			questionnaire.pages.get().forEach((page) =>
+				page.inputs.get().forEach((input) => {
+					const isDuration = /\bhow long\b/.test(input.text.get().replace(/<[^>]+>/g, "").toLowerCase())
+					if (input.responseType.get() == "time" && !isDuration && input.name.get() != "")
+						names.add(input.name.get())
+				})))
+		return Array.from(names).sort()
+	}
+
+	/**
+	 * Fallback time: fixed, or the participant's own answer to a time item (e.g. habitual wake-up
+	 * time) plus an offset, with the fixed time as the second fallback while that is unanswered.
+	 */
+	private getFallbackView(study: Study, event: EventTrigger): Vnode<any, any> {
+		const isVariable = event.fallbackMode.get() == FALLBACK_MODE_VARIABLE
+		const variable = event.fallbackVariable.get().trim()
+		const timeItems = this.getTimeItemNames(study)
+
+		return <div class="vertical" style="gap:8px">
+			<div class="horizontal hAlignStart vAlignCenter" style="flex-wrap:wrap;gap:16px">
+				<label>
+					<small>{Lang.get("sensor_fallback_mode")}</small>
+					<select style="min-width:15em" {...BindObservable(event.fallbackMode)}>
+						<option value={FALLBACK_MODE_FIXED}>{Lang.get("sensor_fallback_mode_fixed")}</option>
+						<option value={FALLBACK_MODE_VARIABLE}>{Lang.get("sensor_fallback_mode_variable")}</option>
+					</select>
+				</label>
+				{!isVariable &&
+					<label>
+						<small>{Lang.get("sensor_fallback_time")}</small>
+						<input type="time" {...BindObservable(event.fallbackTimeOfDay, TimeTransformer)} />
+					</label>
+				}
+				{isVariable &&
+					<label>
+						<small>{Lang.get("sensor_fallback_variable")}</small>
+						<input type="text" list="fallbackVariableItems" placeholder="habitual_wake_time" {...BindObservable(event.fallbackVariable)} />
+						<datalist id="fallbackVariableItems">
+							{timeItems.map((name) => <option value={name} />)}
+						</datalist>
+					</label>
+				}
+				{isVariable &&
+					<label>
+						<small>{Lang.get("sensor_fallback_offset")}</small>
+						<input type="number" min="-1439" max="1439" style="width:5.5em" {...BindObservable(event.fallbackOffsetMin, new ConstrainedNumberTransformer(-1439, 1439))} />
+						<span>{Lang.get("minutes")}</span>
+					</label>
+				}
+			</div>
+			{isVariable &&
+				<div class="horizontal hAlignStart vAlignCenter" style="flex-wrap:wrap;gap:16px">
+					<label class="noTitle noDesc">
+						<input type="checkbox" {...BindObservable(event.fallbackDefaultEnabled)} />
+						<span>{Lang.get("sensor_fallback_default")}</span>
+					</label>
+					{event.fallbackDefaultEnabled.get() &&
+						<label>
+							<small>{Lang.get("time")}</small>
+							<input type="time" {...BindObservable(event.fallbackTimeOfDay, TimeTransformer)} />
+						</label>
+					}
+				</div>
+			}
+			{isVariable && variable == "" &&
+				<small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_fallback_variable_missing")}</small>
+			}
+			{isVariable && variable != "" && timeItems.indexOf(variable) == -1 &&
+				<small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_fallback_variable_unknown", variable)}</small>
+			}
+			<small>{Lang.get(isVariable ? "sensor_fallback_variable_info" : "sensor_fallback_info")}</small>
+		</div>
+	}
+
+	/**
 	 * "If this sensor event, then this prompt - else fall back to a fixed time."
 	 * Sensor events arrive as provider webhooks (Withings notify / Fitbit subscriptions);
 	 * the fallback turns the trigger into a time-contingent one when the sensor stays silent.
@@ -358,15 +440,7 @@ export class Content extends SectionContent {
 								<input type="checkbox" {...BindObservable(event.fallbackEnabled)} />
 								<span>{Lang.get("sensor_fallback_enable")}</span>
 							</label>
-							{event.fallbackEnabled.get() &&
-								<div class="horizontal hAlignStart vAlignCenter" style="flex-wrap:wrap;gap:16px">
-									<label>
-										<small>{Lang.get("sensor_fallback_time")}</small>
-										<input type="time" {...BindObservable(event.fallbackTimeOfDay, TimeTransformer)} />
-									</label>
-									<small>{Lang.get("sensor_fallback_info")}</small>
-								</div>
-							}
+							{event.fallbackEnabled.get() && this.getFallbackView(study, event)}
 						</div>
 				})
 			)

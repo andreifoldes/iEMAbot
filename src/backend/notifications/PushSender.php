@@ -73,6 +73,7 @@ class PushSender {
 				continue;
 			$studiesProcessed++;
 			$hasSensorTriggers = SensorTriggerScheduler::hasTriggers($study);
+			$hasVariableFallbacks = $hasSensorTriggers && !empty(SensorTriggerScheduler::variableNames($study));
 
 			foreach(array_diff(scandir($folder), ['.', '..']) as $entry) {
 				if(self::isStateFile($entry))
@@ -116,8 +117,9 @@ class PushSender {
 				$sensorLedger = (is_array($state) && isset($state['sensor']) && is_array($state['sensor'])) ? $state['sensor'] : [];
 				if($hasSensorTriggers) {
 					$events = WearablesEventStore::readSince($studyId, $userId, $now - SensorTriggerScheduler::EVENT_LOOKBACK_MS);
+					$variables = $hasVariableFallbacks ? ParticipantVariableStore::read($studyId, $userId) : [];
 					$occurrences = array_merge($occurrences, SensorTriggerScheduler::computeOccurrences(
-						$study, $events, $anchor, $tz, $now, $lastDataSetTime, $sensorLedger
+						$study, $events, $anchor, $tz, $now, $lastDataSetTime, $sensorLedger, $variables
 					));
 				}
 				// Coalesce everything due for this participant in this run into ONE push so

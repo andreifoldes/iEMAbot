@@ -7,7 +7,7 @@ import schedulesSvg from "../../imgs/icons/schedules.svg?raw"
 import eventsSvg from "../../imgs/icons/events.svg?raw"
 import warnSvg from "../../imgs/icons/warn.svg?raw";
 import { ActionTrigger } from "../data/study/ActionTrigger";
-import { CUE_WEARABLE, EventTrigger } from "../data/study/EventTrigger";
+import { CUE_WEARABLE, EventTrigger, FALLBACK_MODE_VARIABLE } from "../data/study/EventTrigger";
 import { Schedule } from "../data/study/Schedule";
 import { DashRow } from "../components/DashRow";
 import { DashElement } from "../components/DashElement";
@@ -105,9 +105,17 @@ export class Content extends SectionContent {
 			return `${eventTrigger.cueCode.get()}. ${Lang.get('after_x_seconds', eventTrigger.delaySec.get())}`
 		const provider = eventTrigger.wearableProvider.get()
 		const providerLabel = provider == "any" ? Lang.get("sensor_provider_any") : Lang.getDynamic(provider == "googlehealth" ? "googlehealth_experimental" : provider)
-		const fallback = eventTrigger.fallbackEnabled.get()
-			? ` → ${timeStampToTimeString(getMidnightMillis(Date.now()) + eventTrigger.fallbackTimeOfDay.get())}`
-			: ""
+		const fixedTime = timeStampToTimeString(getMidnightMillis(Date.now()) + eventTrigger.fallbackTimeOfDay.get())
+		const variable = eventTrigger.fallbackVariable.get().trim()
+		let fallback = ""
+		if (eventTrigger.fallbackEnabled.get() && eventTrigger.fallbackMode.get() == FALLBACK_MODE_VARIABLE && variable != "") {
+			const offset = eventTrigger.fallbackOffsetMin.get()
+			fallback = ` → ${variable} ${offset < 0 ? "−" : "+"}${Math.abs(offset)} ${Lang.get("minutes")}`
+			if (eventTrigger.fallbackDefaultEnabled.get())
+				fallback += ` (${Lang.get("sensor_fallback_else_short", fixedTime)})`
+		}
+		else if (eventTrigger.fallbackEnabled.get())
+			fallback = ` → ${fixedTime}`
 		return `${providerLabel}: ${Lang.getDynamic(`sensor_event_${eventTrigger.wearableEvent.get()}`)}${fallback}`
 	}
 
