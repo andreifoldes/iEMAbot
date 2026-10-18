@@ -83,9 +83,21 @@ as the cue of an event trigger).
 | Max. prompts per day | `wearableMaxPerDay` (default 1) per participant and local day. |
 | Delay | The existing delay fields: fixed, or a stable pseudo-random value between `delayMinimumSec` and `delaySec`. |
 | Fallback | `fallbackEnabled` + `fallbackTimeOfDay`: at that local time, send the prompt if no qualifying event arrived earlier that day. This also covers participants who never linked a device. |
+| Fallback time from | `fallbackMode`: `fixed` (default, the time above) or `variable`: *participant variable + offset*. The fallback then fires at the participant's latest answer to the time item `fallbackVariable` (for example `habitual_wake_time` from an intake questionnaire) plus `fallbackOffsetMin` (may be negative; wraps over midnight). |
+| If the variable is not set, send at | `fallbackDefaultEnabled` (default on): while a participant has not answered that item (or the answer is not a time), the fixed `fallbackTimeOfDay` is the second fallback. Off: no fallback for them until they answer. |
 
 Behaviour worth knowing:
 
+- A participant variable is the participant's **latest answer in `HH:MM` form** (what clock-time items save) to
+  that item; other answers (empty, free text, or the minutes a *how long …* duration picker saves) are ignored and
+  keep the previous value. The designer only suggests clock-time items. The server keeps only the items an enabled
+  fallback names, in `.participant_variables/<user>.json` in the study folder (emptied with the study's data); the
+  answers themselves stay in the response files as usual.
+- A variable fallback that was due **before** the participant gave that answer is skipped rather than sent late
+  (answering the intake at 08:00 with wake 07:00 + 30 min starts the next day). Changing the answer moves later
+  fallbacks, never a second one on the same day.
+- The fallback ignores the sensor window, and it uses up the daily cap. If a participant's variable + offset falls
+  before the window (or wraps past midnight), their fallback fires first and a sensor prompt cannot follow that day.
 - The fallback **counts against the daily cap**: a sensor event that arrives after the fallback fired does not
   prompt a second time (with the default cap of 1).
 - Reminders (`reminder_count`, `reminder_delay_minu`) follow a sensor or fallback prompt and stop once the

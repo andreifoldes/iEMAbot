@@ -1,6 +1,6 @@
 import { PrimitiveType } from "../observable/types/PrimitiveType";
 import { BaseObservable } from "../observable/BaseObservable";
-import { getMidnightMillis, timeStampToTimeString } from "../constants/methods";
+import { getMidnightMillis } from "../constants/methods";
 
 export interface Transformer {
 	toAttribute(value: PrimitiveType): PrimitiveType
@@ -91,9 +91,9 @@ export const TimeTransformer: Transformer = {
 		if (intValue == -1)
 			return ""
 		else {
-			const midnight = getMidnightMillis()
-
-			return timeStampToTimeString(midnight + intValue)
+			// <input type="time"> only accepts "HH:mm" (24 h); a locale string like "05:00 AM" renders as empty.
+			const d = new Date(getMidnightMillis() + intValue)
+			return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
 		}
 	},
 	toValue(value: string): PrimitiveType {
@@ -104,8 +104,8 @@ export const TimeTransformer: Transformer = {
 			const midnight = getMidnightMillis()
 
 			const date = new Date()
-			date.setHours(parseInt(parts[0]) || 0)
-			date.setMinutes(parseInt(parts[1]) || 0)
+			// seconds and ms must be zeroed too, or the current ones leak into the stored time of day
+			date.setHours(parseInt(parts[0]) || 0, parseInt(parts[1]) || 0, 0, 0)
 
 			return date.getTime() - midnight
 		}
