@@ -23,31 +23,10 @@ const OPTION_ICONS: Record<string, string> = {
   "Someone else's home": '🏡', 'Gym/Sports facility': '🏋️', 'Other': '📍',
 };
 
-// Scale-anchor labels (likert / va_scale min–max) follow the app's text-size
-// accessibility setting, but stay a step smaller than the body text so they
-// don't dominate the buttons. Keyed by App's TEXT_SIZE_CLASS values
-// (normal / large / xlarge / xxlarge); falls back to the smallest if unknown.
-const ANCHOR_LABEL_SIZE: Record<string, string> = {
-  'text-[15px]': 'text-[11px]',
-  'text-lg': 'text-[13px]',
-  'text-xl': 'text-[15px]',
-  'text-2xl': 'text-[17px]',
-};
-const anchorLabelClass = (textSizeClass: string): string =>
-  ANCHOR_LABEL_SIZE[textSizeClass] ?? 'text-[11px]';
-
-// Explanatory subtext under a question: one step smaller than the body text so it
-// reads as a helper, but larger than the tiny scale-anchor labels above — it's
-// readable prose (often a few sentences), not a single word. Keyed by App's
-// TEXT_SIZE_CLASS values; falls back to a sensible small if unknown.
-const SUBTEXT_SIZE: Record<string, string> = {
-  'text-[15px]': 'text-[13px]',
-  'text-lg': 'text-[15px]',
-  'text-xl': 'text-lg',
-  'text-2xl': 'text-xl',
-};
-const subtextClass = (textSizeClass: string): string =>
-  SUBTEXT_SIZE[textSizeClass] ?? 'text-[13px]';
+// Scale-anchor labels and explanatory subtext sit one step below the body text. The
+// text-size setting scales the root font size, so these rem-based classes grow with it.
+const anchorLabelClass = (_textSizeClass: string): string => 'text-sm';
+const subtextClass = (_textSizeClass: string): string => 'text-base';
 
 // Question text is rich-text HTML; strip tags so it's safe to use in aria-labels
 // (a screen reader would otherwise announce literal "<div>" markup).
@@ -101,7 +80,7 @@ export function SurveyInputs({
             transition={{ duration: reduceMotion ? 0 : 0.3 }}
           />
         </div>
-        <span className="text-[10px] font-bold text-on-surface-variant">
+        <span className="text-[0.75rem] font-bold text-on-surface-variant">
           {Math.round(progress * 100)}%
         </span>
       </div>
@@ -347,6 +326,27 @@ function LikertInput({ question, onRespond, labelSizeClass }: { question: Preloa
   const values = Array.from({ length: max - min + 1 }, (_, i) => min + i);
   const groupLabel = `Rate from ${min}${question.scale_min_label ? ` (${question.scale_min_label})` : ''} `
     + `to ${max}${question.scale_max_label ? ` (${question.scale_max_label})` : ''}`;
+  const btnClass = 'min-w-11 w-full h-11 rounded-full bg-surface-container-high hover:bg-primary hover:text-on-primary transition-all font-bold flex items-center justify-center active:scale-90';
+  // Scales of 5+ points cannot fit 44px targets in one row on a phone, so they wrap
+  // into a grid and the end labels move to a legend (WCAG 1.4.10 reflow, 2.5.5 target size).
+  if (values.length > 4) {
+    return (
+      <div role="group" aria-label={groupLabel} className="mt-3 px-1">
+        {(question.scale_min_label || question.scale_max_label) && (
+          <p className={cn('mb-2 font-medium text-on-surface-variant', labelSizeClass)}>
+            {question.scale_min_label ? `${min} = ${question.scale_min_label}` : ''}
+            {question.scale_min_label && question.scale_max_label ? ' · ' : ''}
+            {question.scale_max_label ? `${max} = ${question.scale_max_label}` : ''}
+          </p>
+        )}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(2.75rem,1fr))] gap-2">
+          {values.map((val) => (
+            <button key={val} onClick={() => onRespond(question.id, String(val))} className={btnClass}>{val}</button>
+          ))}
+        </div>
+      </div>
+    );
+  }
   return (
     // Each scale point is an equal-width column (flex-1) so the buttons spread
     // evenly across the card; the anchor label sits centered directly above its
@@ -361,12 +361,7 @@ function LikertInput({ question, onRespond, labelSizeClass }: { question: Preloa
                 {label}
               </span>
             )}
-            <button
-              onClick={() => onRespond(question.id, String(val))}
-              className="w-10 h-10 shrink-0 rounded-full bg-surface-container-high hover:bg-primary hover:text-on-primary transition-all font-bold flex items-center justify-center active:scale-90"
-            >
-              {val}
-            </button>
+            <button onClick={() => onRespond(question.id, String(val))} className={btnClass}>{val}</button>
           </div>
         );
       })}

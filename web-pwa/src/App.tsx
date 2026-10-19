@@ -49,6 +49,7 @@ import { enrollUrl, invitedParticipantId } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
+import { loadA11yPrefs, saveA11yPrefs, TEXT_SIZE_ROOT_PERCENT, type TextSize } from './lib/a11yPrefs';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
 import { saveRecording } from './lib/audioUploads';
@@ -64,7 +65,6 @@ const LAST_KEY_STORE = 'esmira_last_key';
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 /** Display names for wearable provider slugs (used in the Details panel). */
 const WEARABLE_LABEL: Record<string, string> = { fitbit: 'Fitbit', withings: 'Withings', oura: 'Oura Ring', googlehealth: 'Google Health' };
-type TextSize = 'normal' | 'large' | 'xlarge' | 'xxlarge';
 
 interface ChatMsg {
   id: string;
@@ -83,12 +83,10 @@ interface M2c2Complete {
   data?: unknown;
 }
 
-const TEXT_SIZE_CLASS: Record<TextSize, string> = {
-  normal: 'text-[15px]',
-  large: 'text-lg',
-  xlarge: 'text-xl',
-  xxlarge: 'text-2xl',
-};
+// The text-size setting scales the root font size (see the effect that applies
+// TEXT_SIZE_ROOT_PERCENT), so every rem-based size in the app grows with it. Question and
+// chat text starts at 18px, comfortable for older readers at the default setting.
+const TEXT_SIZE_CLASS = 'text-lg';
 
 const TEXT_SIZE_LABEL: Record<TextSize, string> = {
   normal: 'Normal',
@@ -278,17 +276,20 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  // Accessibility (client-only)
-  const [dark, setDark] = useState(false);
-  const [highContrast, setHighContrast] = useState(false);
-  // Default to the participant's OS "reduce motion" preference (still toggleable
-  // in Settings) so motion-sensitive users get calm animations from first paint.
-  const [reduceMotion, setReduceMotion] = useState(
-    () => typeof window !== 'undefined'
-      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
-  );
-  const [textSize, setTextSize] = useState<TextSize>('normal');
-  const textSizeClass = TEXT_SIZE_CLASS[textSize];
+  // Accessibility (client-only). Stored on the device; first run follows the OS settings.
+  const [initialPrefs] = useState(loadA11yPrefs);
+  const [dark, setDark] = useState(initialPrefs.dark);
+  const [highContrast, setHighContrast] = useState(initialPrefs.highContrast);
+  const [reduceMotion, setReduceMotion] = useState(initialPrefs.reduceMotion);
+  const [textSize, setTextSize] = useState<TextSize>(initialPrefs.textSize);
+  const textSizeClass = TEXT_SIZE_CLASS;
+  useEffect(() => {
+    saveA11yPrefs({ dark, highContrast, reduceMotion, textSize });
+  }, [dark, highContrast, reduceMotion, textSize]);
+  useEffect(() => {
+    // Scale from the root so rem-based text, spacing and tap targets all grow together.
+    document.documentElement.style.fontSize = `${TEXT_SIZE_ROOT_PERCENT[textSize]}%`;
+  }, [textSize]);
 
   const [gridMenuOpen, setGridMenuOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
@@ -1631,7 +1632,7 @@ export default function App() {
           <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" aria-hidden="true" className="w-10 h-10 rounded-full shrink-0 object-cover" />
           <div className="flex flex-col min-w-0">
             <h1 className="text-base font-bold leading-none truncate">{study?.title ?? 'iEMAbot Study'}</h1>
-            <span className="text-[10px] opacity-80 uppercase tracking-widest font-semibold truncate">
+            <span className="text-[0.75rem] opacity-80 uppercase tracking-widest font-semibold truncate">
               {headerStatus}
             </span>
           </div>
@@ -1642,7 +1643,7 @@ export default function App() {
       {/* Chat area */}
       <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="flex-1 mt-16 mb-20 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
         <div className="flex justify-center my-2">
-          <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">Today</span>
+          <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[0.75rem] font-bold uppercase tracking-wider shadow-sm">Today</span>
         </div>
 
         <AnimatePresence initial={false}>
@@ -1664,7 +1665,7 @@ export default function App() {
                   ? <div className={cn('leading-relaxed font-medium esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: msg.content }} />
                   : <p className={cn('leading-relaxed font-medium whitespace-pre-wrap', textSizeClass)}>{msg.content}</p>}
                 <div className="flex justify-end items-center gap-1 mt-1">
-                  <span className={cn('text-[10px] font-bold', msg.sender === 'user' ? 'text-on-primary' : 'text-on-surface-variant')}>{nowTime()}</span>
+                  <span className={cn('text-[0.75rem] font-bold', msg.sender === 'user' ? 'text-on-primary' : 'text-on-surface-variant')}>{nowTime()}</span>
                   {msg.sender === 'user' && <CheckCircle size={12} className="text-on-primary opacity-70" aria-hidden="true" />}
                 </div>
               </div>
@@ -1717,7 +1718,7 @@ export default function App() {
                 <ol className="flex flex-col gap-2.5 text-sm">
                   {funnelSteps(justInstalled).map((step) => (
                     <li key={step.n} className={cn('flex items-center gap-2.5', step.state === 'active' ? 'font-semibold text-on-surface' : 'text-on-surface-variant')}>
-                      <span className={cn('flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold shrink-0',
+                      <span className={cn('flex items-center justify-center w-5 h-5 rounded-full text-[0.75rem] font-bold shrink-0',
                         step.state === 'active' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant')}>
                         {step.state === 'done' ? <Check size={12} aria-label="Done" /> : step.n}
                       </span>
@@ -2129,7 +2130,7 @@ export default function App() {
             onKeyDown={(e) => e.key === 'Enter' && onFooterSend()}
             aria-label="Type a response"
             placeholder={footerActive ? footerPlaceholder : 'Tap an option above to continue'}
-            className="flex-1 min-w-0 bg-surface-container-high rounded-full px-4 py-3 text-[15px] text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
+            className="flex-1 min-w-0 bg-surface-container-high rounded-full px-4 py-3 text-[0.9375rem] text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
           />
           <button
             onClick={onFooterSend}
@@ -2159,13 +2160,13 @@ export default function App() {
               <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
                   {settingsView !== 'main' && (
-                    <button onClick={() => setSettingsView('main')} aria-label="Back" className="p-1 -ml-1 hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
+                    <button onClick={() => setSettingsView('main')} aria-label="Back" className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
                   )}
                   <h2 id="settings-dialog-title" className="font-bold text-lg flex items-center gap-2 truncate">
                     {settingsView === 'main' && <Settings size={20} aria-hidden="true" />}{settingsTitle}
                   </h2>
                 </div>
-                <button onClick={closeSettings} aria-label="Close Settings" className="p-1 hover:bg-surface-container-high rounded-full shrink-0"><X size={20} aria-hidden="true" /></button>
+                <button onClick={closeSettings} aria-label="Close Settings" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><X size={20} aria-hidden="true" /></button>
               </div>
 
               {settingsView === 'main' ? (
@@ -2281,7 +2282,7 @@ export default function App() {
                 <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                   <div className="flex items-center gap-2 min-w-0">
                     {aboutView !== 'main' && (
-                      <button onClick={() => setAboutView('main')} aria-label="Back" className="p-1 -ml-1 hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
+                      <button onClick={() => setAboutView('main')} aria-label="Back" className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
                     )}
                     <h2 id="about-dialog-title" className="font-bold text-lg truncate">{aboutView === 'main' ? 'Details' : detailTitle}</h2>
                   </div>
@@ -2290,12 +2291,12 @@ export default function App() {
                       <button
                         onClick={() => { void flushSubmitQueue().then(() => setProtocolTick((t) => t + 1)); }}
                         aria-label="Refresh upload protocol"
-                        className="p-1 hover:bg-surface-container-high rounded-full"
+                        className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"
                       >
                         <RefreshCw size={18} aria-hidden="true" />
                       </button>
                     )}
-                    <button onClick={() => setAboutOpen(false)} aria-label="Close" className="p-1 hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
+                    <button onClick={() => setAboutOpen(false)} aria-label="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
                   </div>
                 </div>
 
@@ -2385,7 +2386,7 @@ export default function App() {
               className="w-full max-w-md max-h-[85vh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
               <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/30 shrink-0">
                 <h2 id="contact-dialog-title" className="font-bold text-lg flex items-center gap-2"><MessageSquare size={20} aria-hidden="true" /> Contact researchers</h2>
-                <button onClick={() => setContactOpen(false)} aria-label="Close" className="p-1 hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
+                <button onClick={() => setContactOpen(false)} aria-label="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
               </div>
               <div className="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
                 {contactStatus === 'sent' ? (

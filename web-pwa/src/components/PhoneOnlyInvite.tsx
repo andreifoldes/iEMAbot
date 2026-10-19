@@ -58,7 +58,7 @@ export function PhoneOnlyInvite({
       </div>
 
       <div className="flex flex-col gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">Other ways to open it</p>
+        <p className="text-[0.75rem] font-semibold uppercase tracking-wider text-on-surface-variant">Other ways to open it</p>
         <CopyLinkRow url={url} />
         {canContinueHere && (
           <button
@@ -70,7 +70,7 @@ export function PhoneOnlyInvite({
         )}
       </div>
 
-      <p className="text-[11px] text-on-surface-variant leading-relaxed text-center">
+      <p className="text-[0.75rem] text-on-surface-variant leading-relaxed text-center">
         Tip: open it in <strong>Safari</strong> or <strong>Chrome</strong> (iPhone), or <strong>Chrome</strong> (Android).
       </p>
     </div>
@@ -101,7 +101,7 @@ function CopyLinkRow({ url }: { url: string }) {
         {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
         {copied ? 'Link copied' : 'Copy link'}
       </button>
-      <p className="text-[11px] text-on-surface-variant leading-relaxed break-all select-all">{url}</p>
+      <p className="text-[0.75rem] text-on-surface-variant leading-relaxed break-all select-all">{url}</p>
       <span role="status" className="sr-only">{copied ? 'Link copied' : ''}</span>
     </div>
   );
