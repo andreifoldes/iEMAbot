@@ -118,8 +118,12 @@ class PromptFactory {
 			case 'location':
 				if(!$caps->supportsLocation)
 					return ['message' => null, 'mode' => self::MODE_SKIP];
-				$m = OutboundMessage::prompt($text . "\n\n" . ChatStrings::t('send_location', $lang),
-					[[OutboundMessage::button(ChatStrings::t('share_location', $lang), '')]], OutboundMessage::KEYBOARD_LOCATION);
+				// A native location keyboard cannot carry inline buttons, so Skip is a keyboard
+				// button too (its label comes back as text; see ReplyReader).
+				$rows = [[OutboundMessage::button(ChatStrings::t('share_location', $lang), '')]];
+				if(empty($item['required']))
+					$rows[] = [OutboundMessage::button(ChatStrings::t('skip', $lang), 'skip')];
+				$m = OutboundMessage::prompt($text . "\n\n" . ChatStrings::t('send_location', $lang), $rows, OutboundMessage::KEYBOARD_LOCATION);
 				return ['message' => $m, 'mode' => self::MODE_LOCATION];
 			case 'countdown':
 				$body = $text . "\n\n" . ChatStrings::t('countdown', $lang, (int) $item['seconds']);

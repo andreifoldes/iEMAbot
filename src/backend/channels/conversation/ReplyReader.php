@@ -15,6 +15,7 @@ use backend\channels\InboundEvent;
  *   ['multi' => int[]]    selected option indexes of a multi-select
  *   ['value' => string]   the answer value
  *   ['media' => array]    {kind, ref, mime, identifier} — file fetched at submission
+ *   ['skip' => true]      skip the item (typed "Skip" under a native keyboard)
  *   []                    not applicable here
  */
 class ReplyReader {
@@ -41,6 +42,8 @@ class ReplyReader {
 			return $mode === PromptFactory::MODE_LOCATION ? ['value' => $text] : ['hint' => $this->modeHint($mode, $item)];
 		if($ev->kind !== InboundEvent::KIND_TEXT)
 			return [];
+		if($mode === PromptFactory::MODE_LOCATION && empty($item['required']) && mb_strtolower($text) === mb_strtolower(ChatStrings::t('skip', $lang)))
+			return ['skip' => true];
 
 		switch($mode) {
 			case PromptFactory::MODE_BUTTONS:

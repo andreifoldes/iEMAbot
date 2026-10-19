@@ -240,10 +240,23 @@ class ResponsesStoreFS implements ResponsesStore {
 		readfile($path);
 	}
 	public function outputImageFromResponses(int $studyId, string $userId, int $entryId, string $key) {
-		$this->outputMediaFromResponses(Paths::fileImageFromData($studyId, $userId, $entryId, $key), 'image/png');
+		$path = Paths::fileImageFromData($studyId, $userId, $entryId, $key);
+		$this->outputMediaFromResponses($path, self::detectMime($path, 'image/', 'image/png'));
 	}
 	public function outputAudioFromResponses(int $studyId, string $userId, int $entryId, string $key) {
-		$this->outputMediaFromResponses(Paths::fileAudioFromData($studyId, $userId, $entryId, $key), 'video/3gpp');
+		$path = Paths::fileAudioFromData($studyId, $userId, $entryId, $key);
+		$this->outputMediaFromResponses($path, self::detectMime($path, '', 'video/3gpp'));
+	}
+	/**
+	 * The stored file's real type, so recordings from other sources (web: webm, Telegram
+	 * voice notes: ogg/opus, JPEG photos) play back. Falls back to the historical type of the
+	 * native apps when detection fails or yields an unexpected family.
+	 */
+	private static function detectMime(string $path, string $family, string $fallback): string {
+		$mime = file_exists($path) && function_exists('mime_content_type') ? (string) @mime_content_type($path) : '';
+		if($mime === '' || $mime === 'application/octet-stream' || ($family !== '' && strpos($mime, $family) !== 0))
+			return $fallback;
+		return $mime;
 	}
 	public function getResponseFilesList(int $studyId): array {
 		$list = [];

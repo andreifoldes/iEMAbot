@@ -176,6 +176,19 @@ class ConversationService {
 		}
 	}
 
+	/** Result of a web-handoff item (HandoffService). False when the item is no longer current. */
+	public function applyHandoff(array $binding, array &$state, string $session, int $index, array $result, int $nowMs): bool {
+		$study = ChannelStudies::load((int) $binding['studyId'], (string) ($binding['lang'] ?? ''));
+		if($study === null)
+			return false;
+		$r = $this->engine($binding, $study, $nowMs)->handoffResult($state, $session, $index, $result, $nowMs);
+		if($r === null)
+			return false;
+		$this->deliver($binding, $state, $r);
+		$this->afterStep($binding, $state, $study, $r, $nowMs);
+		return true;
+	}
+
 	/** Start a questionnaire now (dispatcher or /checkin). */
 	public function startQuestionnaire(array $binding, array &$state, array $study, array $occurrence, int $nowMs): void {
 		$q = ChannelStudies::questionnaire($study, (int) $occurrence['qid']);
@@ -221,9 +234,7 @@ class ConversationService {
 		$lang = (string) ($binding['lang'] ?? 'en');
 		$sub = $r->submission;
 		$events = [['eventType' => CreateDataSet::DATASET_TYPE_QUESTIONNAIRE, 'qid' => $sub['qid'], 'title' => $sub['title'], 'responses' => $sub['responses']]];
-		$trialsEvent = HandoffService::trialsEvent($study, $sub['trials'] ?? [], $this->channel->displayName());
-		if($trialsEvent !== null)
-			$events[] = $trialsEvent;
+		$events = array_merge($events, HandoffService::trialsEvents($study, $sub['trials'] ?? [], $this->channel->displayName()));
 		try {
 			$errors = (new DatasetSubmitter($this->channel->appType(), $this->channel->displayName()))
 				->submit($study, $binding, $events, $sub['media'] ?? [], [$this->channel, 'fetchMedia']);

@@ -5,6 +5,8 @@ namespace backend\channels;
 use backend\channels\conversation\ButtonData;
 use backend\channels\conversation\ConversationService;
 use backend\channels\dispatch\ChannelDispatcher;
+use backend\channels\handoff\HandoffService;
+use backend\channels\handoff\HandoffToken;
 use backend\channels\store\ChannelBindingStore;
 use backend\channels\telegram\TelegramApiClient;
 use backend\channels\telegram\TelegramChannel;
@@ -49,13 +51,14 @@ class TelegramFlowTest extends BaseDataFolderTestSetup {
 				'pages' => [['inputs' => [
 					['name' => 'rested', 'responseType' => 'binary', 'text' => 'Rested?', 'required' => true],
 					['name' => 'quality', 'responseType' => 'likert', 'likertSteps' => 5, 'text' => 'Quality?', 'required' => true],
+					['name' => 'alert', 'responseType' => 'va_scale', 'text' => 'Alertness?', 'relevance' => 'rested == 0'],
 				]]],
 				'actionTriggers' => [[
 					'actions' => [['type' => 1, 'msgText' => 'Good morning!']],
 					'schedules' => [['dailyRepeatRate' => 1, 'signalTimes' => [['startTimeOfDay' => 9 * 3600000]]]],
 				]],
 			]],
-		])), [self::QID => new ResponsesIndex(['rested', 'quality'])]);
+		])), [self::QID => new ResponsesIndex(['rested', 'quality', 'alert'])]);
 		// published studies are reachable through the access index (filled by the admin save flow)
 		$index = Configs::getDataStore()->getStudyAccessIndexStore();
 		$index->add(self::STUDY, 'key1');
@@ -156,6 +159,111 @@ class TelegramFlowTest extends BaseDataFolderTestSetup {
 		$this->text('/stop', $now + 86400000);
 		$this->assertNull(ChannelBindingStore::findByChat('telegram', self::CHAT));
 		$this->assertStringContainsString('You have left the study', $this->sentTexts());
+	}
+
+	/** Join without going through the UI steps (consent + time zone). */
+	private function join(int $now): array {
+		$this->text('/start s' . self::STUDY . '_key1', $now);
+		$this->press(ButtonData::enrol('c', '1'), $now);
+		$this->press(ButtonData::enrol('tz', 'd'), $now);
+		return ChannelBindingStore::findByChat('telegram', self::CHAT);
+	}
+
+	function test_vas_is_answered_through_the_web_handoff() {
+		Configs::resetConfig(array_merge(Configs::getAll(), ['channels_public_base_url' => 'https://ema.example.org/esmira/']));
+		$now = Main::getMilliseconds();
+		$binding = $this->join($now);
+		$this->assertTrue(HandoffService::isAvailable());
+		$this->assertSame('https://ema.example.org/pwa/handoff.html', HandoffService::pageUrl());
+
+		$this->service->withState($binding, function(array &$state) use ($binding, $now) {
+			$this->service->startQuestionnaire($binding, $state, \backend\channels\ChannelStudies::load(self::STUDY), ['qid' => self::QID], $now);
+		});
+		$this->press($this->buttonData('No'), $now);
+		$this->press($this->buttonData('2'), $now);
+
+		// the VAS prompt carries a Mini App button with a signed token
+		$url = '';
+		foreach(array_reverse($this->calls) as [$method, $params]) {
+			foreach(($params['reply_markup']['inline_keyboard'] ?? []) as $row) {
+				foreach($row as $b) {
+					if(isset($b['web_app']) && $url === '')
+						$url = $b['web_app']['url'];
+				}
+			}
+		}
+		$this->assertStringStartsWith('https://ema.example.org/pwa/handoff.html?t=', $url);
+		$token = rawurldecode(substr($url, strpos($url, '?t=') + 3));
+
+		$described = HandoffService::describe($token);
+		$this->assertSame('va_scale', $described['kind']);
+		$this->assertSame('alert', $described['input']['name']);
+
+		$tampered = substr($token, 0, -2) . (substr($token, -2) === 'AA' ? 'BB' : 'AA');
+		$this->assertNull(HandoffToken::verify($tampered, intdiv($now, 1000)));
+		try {
+			HandoffService::complete($token, ['value' => 1000]);
+			$this->fail('out-of-range VAS accepted');
+		}
+		catch(\backend\exceptions\CriticalException $e) {}
+
+		HandoffService::complete($token, ['value' => 63]);
+		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
+		$csv = file_get_contents(PathsFS::fileResponses(self::STUDY, (string) self::QID));
+		$this->assertStringEndsWith('"0";"2";"63"', trim($csv));
+
+		// the token cannot be replayed
+		$this->expectException(\backend\exceptions\CriticalException::class);
+		HandoffService::complete($token, ['value' => 10]);
+	}
+
+	function test_voice_note_is_stored_as_the_items_audio_file() {
+		$this->createStudy(json_decode(json_encode([
+			'id' => 4545, 'title' => 'Voice', 'published' => true, 'channels' => ['telegram' => ['enabled' => true]],
+			'questionnaires' => [['internalId' => 888, 'title' => 'Diary', 'pages' => [['inputs' => [
+				['name' => 'memo', 'responseType' => 'record_audio', 'text' => 'How was your day?'],
+			]]]]],
+		])), [888 => new ResponsesIndex(['memo'], ['memo' => 'audio'])]);
+		$index = Configs::getDataStore()->getStudyAccessIndexStore();
+		$index->add(4545);
+		$index->saveChanges();
+
+		$fake = function(string $method, array $params) {
+			$this->calls[] = [$method, $params];
+			return ['ok' => true, 'result' => ['message_id' => ++$this->messageId]];
+		};
+		$channel = new class(new TelegramApiClient('t', $fake)) extends TelegramChannel {
+			public function fetchMedia(array $media): ?string {
+				$tmp = tempnam(sys_get_temp_dir(), 'voice');
+				file_put_contents($tmp, 'OggS-fake-voice-' . $media['ref']);
+				return $tmp;
+			}
+		};
+		ChannelRegistry::inject(TelegramChannel::ID, $channel);
+		$this->service = new ConversationService($channel);
+
+		$now = Main::getMilliseconds();
+		$this->text('/start s4545', $now);
+		$this->press(ButtonData::enrol('tz', 'd'), $now); // no consent form → straight to the time question
+		$binding = ChannelBindingStore::findByChat('telegram', self::CHAT);
+		$this->assertNotNull($binding);
+		$this->service->withState($binding, function(array &$state) use ($binding, $now) {
+			$this->service->startQuestionnaire($binding, $state, \backend\channels\ChannelStudies::load(4545), ['qid' => 888], $now);
+		});
+		$update = ['update_id' => $this->updateId++, 'message' => [
+			'message_id' => 5, 'chat' => ['id' => (int) self::CHAT, 'type' => 'private'], 'voice' => ['file_id' => 'VOICE1', 'mime_type' => 'audio/ogg'],
+		]];
+		foreach(TelegramUpdateParser::parse($update) as $ev)
+			$this->service->handleEvent($ev, $now);
+
+		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
+		$csv = file(PathsFS::fileResponses(4545, '888'));
+		$row = str_getcsv(trim(end($csv)), ';');
+		$header = str_getcsv(trim($csv[0]), ';');
+		$entryId = $row[array_search('entryId', $header)];
+		$file = \backend\Paths::fileAudioFromData(4545, $binding['userId'], (int) $entryId, 'memo');
+		$this->assertFileExists($file);
+		$this->assertSame('OggS-fake-voice-VOICE1', file_get_contents($file));
 	}
 
 	function test_disabled_study_is_refused() {

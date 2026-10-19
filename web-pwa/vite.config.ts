@@ -76,6 +76,14 @@ export default defineConfig({
     // alongside ESMira's own dist/. Kept out of ESMira's webpack build.
     outDir: path.resolve(__dirname, '..', 'dist', 'pwa'),
     emptyOutDir: true,
+    rollupOptions: {
+      // handoff.html: single-item page opened from chat channels (Telegram Mini App) for
+      // items a chat cannot render — see src/handoff/ and backend/channels/handoff/.
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        handoff: path.resolve(__dirname, 'handoff.html'),
+      },
+    },
   },
   server: {
     port: 5174,

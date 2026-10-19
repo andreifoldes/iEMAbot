@@ -212,4 +212,49 @@ class ConversationEngineTest extends TestCase {
 		$this->assertCount(2, $r->messages); // title + Q
 		$this->assertSame(OutboundMessage::KEYBOARD_INLINE, $r->messages[1]->keyboard);
 	}
+
+	public function test_location_can_be_shared_or_skipped() {
+		$e = $this->engine();
+		$state = [];
+		$q = $this->questionnaire([
+			['name' => 'here', 'responseType' => 'location'],
+			['name' => 'there', 'responseType' => 'location'],
+		]);
+		$r = $e->start($state, $q, [], self::NOW);
+		$this->assertSame(OutboundMessage::KEYBOARD_LOCATION, end($r->messages)->keyboard);
+		$e->handle($state, new InboundEvent(InboundEvent::KIND_LOCATION, '1', '51.24,-0.59'), self::NOW);
+		$r = $this->say($e, $state, 'skip');
+		$this->assertSame('51.24,-0.59', $r->submission['responses']['here']);
+		$this->assertArrayNotHasKey('there', $r->submission['responses']);
+	}
+
+	public function test_handoff_items_use_the_web_view_when_available() {
+		$e = new ConversationEngine($this->caps(), ['handoff' => function(array $s, int $i, array $item) { return "https://x.test/h?i=$i"; }]);
+		$state = [];
+		$q = $this->questionnaire([
+			['name' => 'vas', 'responseType' => 'va_scale', 'text' => 'Alert?'],
+			['name' => 'task', 'responseType' => 'webapp', 'url' => 'https://x.test/pvt', 'text' => 'PVT'],
+		]);
+		$r = $e->start($state, $q, [], self::NOW);
+		$this->assertSame('https://x.test/h?i=0', end($r->messages)->buttons[0][0]['webview']);
+		$this->assertNull($e->handoffResult($state, $state['session']['id'], 1, ['value' => '5'], self::NOW)); // not current
+		$e->handoffResult($state, $state['session']['id'], 0, ['value' => '42'], self::NOW);
+		$r = $e->handoffResult($state, $state['session']['id'], 1, ['value' => '{"session":"s1"}', 'trials' => [['cogRt' => '300']]], self::NOW);
+		$this->assertSame('42', $r->submission['responses']['vas']);
+		$this->assertSame('{"session":"s1"}', $r->submission['responses']['task']);
+		$this->assertSame([['cogRt' => '300']], $r->submission['trials']);
+	}
+
+	public function test_without_handoff_vas_falls_back_to_buttons_and_tasks_are_skipped() {
+		$e = $this->engine();
+		$state = [];
+		$r = $e->start($state, $this->questionnaire([
+			['name' => 'task', 'responseType' => 'webapp', 'url' => 'https://x.test/pvt', 'text' => 'PVT'],
+			['name' => 'vas', 'responseType' => 'va_scale', 'maxValue' => 200],
+		]), [], self::NOW);
+		$this->assertStringContainsString('only available in the web app', $r->messages[1]->text);
+		$r = $this->press($e, $state, $r, '70');
+		$this->assertSame('140', $r->submission['responses']['vas']);
+		$this->assertArrayNotHasKey('task', $r->submission['responses']);
+	}
 }

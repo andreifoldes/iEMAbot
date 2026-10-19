@@ -106,14 +106,16 @@ class DatasetSubmitter {
 		foreach($media as $name => $m) {
 			$tmp = null;
 			try {
-				$tmp = $fetchMedia($m);
+				// Files produced on this server (handoff keystroke logs) already have a path.
+				$tmp = isset($m['localPath']) && is_file($m['localPath']) ? $m['localPath'] : $fetchMedia($m);
 				if($tmp === null)
 					throw new CriticalException("could not download $name");
 				if(filesize($tmp) > (int) Configs::get('max_filesize_for_uploads'))
 					throw new CriticalException("$name is too big");
 				$uploader = new LocalFileUploader($tmp);
-				Configs::getDataStore()->getPluginStore()->handleFileUpload($studyId, $userId, (int) $m['identifier'], $uploader);
-				$responsesStore->uploadFile($studyId, $userId, (int) $m['identifier'], $uploader);
+				$identifier = (int) $m['identifier']; // plugins receive these by reference
+				Configs::getDataStore()->getPluginStore()->handleFileUpload($studyId, $userId, $identifier, $uploader);
+				$responsesStore->uploadFile($studyId, $userId, $identifier, $uploader);
 			}
 			catch(Throwable $e) {
 				$errors[] = $e->getMessage();

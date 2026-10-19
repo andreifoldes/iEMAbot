@@ -139,12 +139,19 @@ class ConversationEngine {
 			$s['selected'] = $read['multi'];
 			return $this->finishMulti($state, $item, $nowMs, $r);
 		}
+		if(isset($read['skip'])) {
+			$r->add(new OutboundMessage('✓', [], OutboundMessage::KEYBOARD_REMOVE));
+			$this->afterAnswer($state, $nowMs, $r, null);
+			return $r;
+		}
 		if(isset($read['media'])) {
 			$s['answers']['responses'][$item['name']] = (string) $read['media']['identifier'];
 			$s['media'][$item['name']] = $read['media'];
 		}
 		else if(isset($read['value'])) {
 			$s['answers']['responses'][$item['name']] = $read['value'];
+			if($s['mode'] === PromptFactory::MODE_LOCATION) // take the share-location keyboard away again
+				$r->add(new OutboundMessage('📍 ✓', [], OutboundMessage::KEYBOARD_REMOVE));
 			if($item['kind'] === 'keystroke') { // typed in chat: no keystroke log, the text goes to name~text
 				$s['answers']['responses'][$item['name']] = '';
 				$s['answers']['keystrokeText'][$item['name']] = $read['value'];
@@ -161,7 +168,7 @@ class ConversationEngine {
 
 	/**
 	 * Record the result of a web-handoff item (VAS slider, keystroke recorder, cognitive task).
-	 * $result: {value, keystrokeText?, captureMode?, trials?: array[]}
+	 * $result: {value, keystrokeText?, captureMode?, media?, trials?: array[]} or {skip: true}
 	 */
 	public function handoffResult(array &$state, string $session, int $index, array $result, int $nowMs): ?EngineResult {
 		$s = &$state['session'];
@@ -169,6 +176,13 @@ class ConversationEngine {
 			return null;
 		$item = $s['items'][$index];
 		$name = $item['name'];
+		$r = new EngineResult();
+		if(!empty($result['skip'])) { // "Skip" on the handoff page
+			if(!empty($item['required']))
+				return null;
+			$this->afterAnswer($state, $nowMs, $r, '—');
+			return $r;
+		}
 		$s['answers']['responses'][$name] = (string) ($result['value'] ?? '');
 		if($item['kind'] === 'keystroke') {
 			$s['answers']['keystrokeText'][$name] = (string) ($result['keystrokeText'] ?? '');
@@ -180,7 +194,6 @@ class ConversationEngine {
 			if(is_array($trial))
 				$s['trials'][] = $trial;
 		}
-		$r = new EngineResult();
 		$this->afterAnswer($state, $nowMs, $r, '✓');
 		return $r;
 	}
