@@ -46,7 +46,9 @@ function inputs(): array {
 		// ── display-only ──────────────────────────────────────────────
 		['header' => '<p><b>1 · Display items</b></p>', 'inputs' => [
 			['name' => 'd_text', 'responseType' => 'text',
-				'text' => '<p>This demo shows every ESMira question type once. <b>Bold</b>, <i>italic</i> and a <a href="' . BASE . '/esmira/">link</a> should render on both channels.</p>'],
+				// No link here: an item whose text holds an <a href> is a cognitive-task launcher (legacy
+				// PWA convention, mirrored by the chat channels).
+				'text' => '<p>This demo shows every ESMira question type once. <b>Bold</b> and <i>italic</i> text should render on both channels.</p>'],
 			['name' => 'd_image', 'responseType' => 'image', 'url' => BASE . '/pwa/pwa-512x512.png',
 				'text' => '<p>An image item.</p>', 'description' => expect('the image inline', 'sent as a photo')],
 			['name' => 'd_video', 'responseType' => 'video', 'url' => BASE . '/pwa/',
