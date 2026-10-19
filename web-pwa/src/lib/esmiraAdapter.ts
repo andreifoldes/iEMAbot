@@ -78,6 +78,21 @@ export function parseRelevance(relevance: string | undefined): ShowIf | null {
   return { question_id: m[1], operator, value: m[3] ?? m[4] ?? m[5] ?? '' };
 }
 
+/** Plain text of a rich-text page header (tags dropped, common entities decoded). */
+export function headerText(html: string | undefined): string {
+  return (html ?? '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Fisher–Yates shuffle (per-session randomization of randomized pages). */
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
@@ -262,8 +277,10 @@ export function adaptQuestionnaire(
     const start = questions.length;
     sections.push({
       id: `page-${pageIdx}`,
-      name: page.header ?? '',
-      description: page.header ?? '',
+      // The page header is authored in the rich-text editor but shown as a small plain
+      // label between pages, so drop its markup (otherwise "<p><b>…</b></p>" shows literally).
+      name: headerText(page.header),
+      description: headerText(page.header),
       start,
       length: mapped.length,
       allow_change_all: false,

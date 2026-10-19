@@ -124,7 +124,7 @@ flowchart LR
 
 | Provider | Registration | Authentication of the callback | Types |
 | --- | --- | --- | --- |
-| **Withings** (Notify) | Automatic when the participant links: the server subscribes each type via `notify` with a URL carrying a key derived from the client secret. | Key in the URL (`k=`); Withings does not sign requests. | sleep (44), activity (16), weight (1), blood pressure (4), ECG (54) |
+| **Withings** (Notify) | Automatic when the participant links: the server subscribes each type via `notify` with a URL carrying a key derived from the client secret. | Key in the URL (`k=`); Withings does not sign requests. | every data category: weight (1), temperature (2), blood pressure (4), activity (16), sleep (44), bed in/out (50/51), sleep sensor ready (52), ECG (54, 55), glucose (58), stethoscope (61), HRV (62), urine (63), bed status (98–100) |
 | **Fitbit** (Subscriptions) | Register the subscriber endpoint `…/api/wearables_webhook.php?provider=fitbit` and a verification code in the Fitbit developer console; the server creates the per-user subscriptions on linking. Store the code with `php cli/wearables_setup.php fitbit-verify <code>`. | `X-Fitbit-Signature` HMAC-SHA1 over the raw body, keyed with `client_secret&`. | sleep, activities, body (weight) |
 
 Optional config key `wearables_webhook_uri` overrides the auto-derived public callback URL (needed behind a
@@ -140,14 +140,19 @@ the complete set the designer offers, each checked against the provider's own do
 | Sleep | 44 (sleep summary) | `sleep` | `sleep` |
 | Activity | 16 (steps, distance, workouts) | `activities` | `steps`, `distance`, `floors`, `active-minutes`, `active-zone-minutes`, `exercise` |
 | Weight / body | 1 (weight and body composition) | `body` | `weight`, `body-fat` |
+| Out of bed | 51 (Sleep Analyzer / sleep mat bed-out event) | not available | not available |
+| Other Withings-only events | 2, 50, 52, 55, 58, 61, 62, 63, 98–100 (see the designer list) | not available | not available |
 | Blood pressure | 4 (blood pressure and heart rate) | not available | not available |
 | ECG | 54 (ECG measurement) | not available | not available (ECG data exists, but has no webhook) |
 
 Sources: [Google Health webhooks](https://developers.google.com/health/webhooks), [Withings notification content](https://oauth.withings.com/developer-guide/v3/data-api/notifications/notification-content/),
 [Fitbit: Using subscriptions](https://dev.fitbit.com/build/reference/web-api/developer-guide/using-subscriptions/).
-Other categories exist (Withings bed-in/bed-out sleep-mat events 50/51, HRV 62, glucose 58; Fitbit `foods`) but
-are deliberately not offered. Withings bed-out (51) would be a closer wake-up signal than "sleep summary
-synced", for owners of a sleep mat, and could be added.
+Withings account events (46 profile changed, 53 device set up, 60 survey answered) carry no data and are not offered; Fitbit `foods` is
+not offered either. Most Withings categories need a specific device and a participant without it never receives that event.
+*Out of bed* (51) is a closer wake-up signal than "sleep summary synced", but only for owners of a Withings Sleep Analyzer.
+It fires on every bed exit, including night-time ones, so pair it with the daily window and the per-day cap. The 10-minute
+bed status events (98–100) need Live Sync enabled on the device. Participants who linked **before** an event was added
+have no subscription for it until they re-link.
 
 :::warning[Fitbit legacy Web API ends on 2026-10-30]
 Fitbit's documentation states that support for the legacy Fitbit Web API ends on 2026-09-30 and the API is
@@ -239,10 +244,15 @@ Source: `sections/wearables.tsx`.
 
 - Enable toggle (`wearablesEnabled`).
 - Provider checkboxes, disabled when the server has no credentials, each with a connected-participant count.
+- A **participant table** (`WearablesParticipantOverview`): every participant who has sent data or linked a device, with the
+  providers they connected, the last sync date per provider and whether data arrived. Participants who have not
+  connected are listed first, with a "N of M participants have connected a wearable" summary. It is built from file
+  names and sync-state files, so no token is decrypted. "Last sync" is the last completed UTC day fetched, not the
+  device's own upload time.
 - A read-only box with the **redirect URI** to register.
 - A **`wearables.zip`** download (read permission); the same link appears in the data list.
 
-There is no per-participant view, data preview, data-type selector or webhook status display. Sensor triggers are
+There is no data preview, data-type selector or webhook status display. Sensor triggers are
 configured per questionnaire in the trigger editor, not here.
 
 ## Participant flow and disconnect

@@ -112,6 +112,10 @@ class WearablesDataSync {
 			$written += WearablesDataStore::append($studyId, $userId, $provider, $rows);
 		}
 
+		// append() only creates the folder when there are rows, and a day with no data yields none.
+		$folder = PathsFS::folderWearablesData($studyId);
+		if(!is_dir($folder))
+			FileSystemBasics::createFolder($folder, true);
 		FileSystemBasics::writeFile($stateFile, json_encode(['lastDayMs' => $yesterday]));
 		return $written;
 	}

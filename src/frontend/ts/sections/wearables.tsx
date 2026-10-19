@@ -11,12 +11,25 @@ import { Requests } from "../singletons/Requests";
 import { FILE_ADMIN, FILE_WEARABLE_DATA } from "../constants/urls";
 import downloadSvg from "../../imgs/icons/download.svg?raw";
 
+interface ParticipantProvider {
+	provider: string
+	/** UTC day (ms) the sync last covered, null if it has not run for this participant yet */
+	lastSync: number | null
+	hasData: boolean
+}
+
+interface ParticipantOverview {
+	userId: string
+	providers: ParticipantProvider[]
+}
+
 interface WearableInfo {
 	allProviders: string[]
 	configuredProviders: string[]
 	redirectUri: string
 	connections: Record<string, number>
 	hasData: boolean
+	participants: ParticipantOverview[]
 }
 
 const PROVIDER_LABEL: Record<string, string> = { fitbit: "Fitbit", withings: "Withings", oura: "Oura Ring", googlehealth: "Google Health (experimental, untested)" }
@@ -38,7 +51,45 @@ export class Content extends SectionContent {
 
 	constructor(sectionData: SectionData, info: WearableInfo) {
 		super(sectionData)
-		this.info = info ?? { allProviders: [], configuredProviders: [], redirectUri: "", connections: {}, hasData: false }
+		this.info = info ?? { allProviders: [], configuredProviders: [], redirectUri: "", connections: {}, hasData: false, participants: [] }
+		this.info.participants = this.info.participants ?? []
+	}
+
+	private providerStatus(p: ParticipantProvider): string {
+		const label = PROVIDER_LABEL[p.provider] ?? p.provider
+		const sync = p.lastSync != null
+			? new Date(p.lastSync).toLocaleDateString()
+			: Lang.get("wearables_participant_not_synced")
+		const data = Lang.get(p.hasData ? "wearables_participant_has_data" : "wearables_participant_no_data")
+		return `${label} (${Lang.get("wearables_participant_last_sync")}: ${sync}, ${data})`
+	}
+
+	private participantsView(participants: ParticipantOverview[]): Vnode<any, any> {
+		const connected = participants.filter((p) => p.providers.length > 0).length
+		return <div class="vertical hAlignStart">
+			<label class="noTitle"><span>{Lang.getWithColon("wearables_participants")}</span></label>
+			{participants.length == 0
+				? <small>{Lang.get("wearables_participants_none")}</small>
+				: <div>
+					<small>{Lang.get("wearables_participants_summary", connected, participants.length)}</small>
+					<table class="spacingTop"><tbody>
+						<tr>
+							<th>{Lang.get("wearables_participant_id")}</th>
+							<th class="spacingLeft">{Lang.get("wearables_participant_status")}</th>
+						</tr>
+						{participants.map((p) =>
+							<tr>
+								<td>{p.userId}</td>
+								<td class="spacingLeft" style={p.providers.length ? "" : "opacity:0.6"}>
+									{p.providers.length
+										? p.providers.map((provider) => <div>{this.providerStatus(provider)}</div>)
+										: Lang.get("wearables_participant_not_connected")}
+								</td>
+							</tr>
+						)}
+					</tbody></table>
+				</div>}
+		</div>
 	}
 
 	public title(): string {
@@ -95,6 +146,10 @@ export class Content extends SectionContent {
 							})}
 						</div>
 				})
+			)}
+
+			{enabled && DashRow(
+				DashElement("stretched", { content: this.participantsView(info.participants) })
 			)}
 
 			{enabled && DashRow(

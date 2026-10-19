@@ -32,6 +32,13 @@ class WearablesWebhookTest extends TestCase {
 		$this->assertSame([], WearablesEventKinds::kindsFor('oura'));
 	}
 
+	function test_bed_out_is_a_withings_only_kind() {
+		$this->assertSame(51, WearablesEventKinds::WITHINGS_APPLI['bed_out']);
+		$this->assertSame('bed_out', WearablesEventKinds::fromWithingsAppli(51));
+		$this->assertContains('bed_out', WearablesEventKinds::kindsFor('withings'));
+		$this->assertNotContains('bed_out', WearablesEventKinds::kindsFor('fitbit'));
+	}
+
 	function test_malformed_payloads_record_nothing() {
 		$this->assertSame(0, WearablesWebhook::handleWithings([], 1));
 		$this->assertSame(0, WearablesWebhook::handleWithings(['userid' => '1', 'appli' => 999], 1));
