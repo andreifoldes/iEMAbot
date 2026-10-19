@@ -97,10 +97,51 @@ async function applyTheme(page, theme) {
   }, theme);
 }
 
+// Label of the non-default viewport being audited ('' = the 390px phone baseline).
+let viewportLabel = '';
+
+/**
+ * WCAG 1.4.10 Reflow: at 320 CSS px (or a 256px-tall viewport, i.e. 400% zoom) content must
+ * not need scrolling in two dimensions. Flags any element sticking out past the viewport
+ * width, other than content inside its own scroll container.
+ */
+async function checkReflow(page, screen, theme) {
+  const overflow = await page.evaluate(() => {
+    const vw = document.documentElement.clientWidth;
+    const out = [];
+    const scrollable = (el) => {
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const o = getComputedStyle(p).overflowX;
+        if (o === 'auto' || o === 'scroll' || o === 'hidden') return true;
+      }
+      return false;
+    };
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0 || r.right <= vw + 1) continue;
+      if (getComputedStyle(el).position === 'fixed' || scrollable(el)) continue;
+      out.push(`${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(/\s+/).slice(0, 3).join('.') : ''} (right=${Math.round(r.right)} > ${vw})`);
+      if (out.length >= 5) break;
+    }
+    const pageScrolls = document.documentElement.scrollWidth > vw + 1;
+    return { out, pageScrolls };
+  });
+  if (!overflow.out.length && !overflow.pageScrolls) return;
+  findings.push({
+    mode: MODE, theme, screen,
+    id: 'reflow-horizontal-scroll', impact: 'serious',
+    help: 'Content overflows the viewport width and forces horizontal scrolling',
+    helpUrl: 'https://www.w3.org/WAI/WCAG22/Understanding/reflow.html',
+    nodes: (overflow.out.length ? overflow.out : ['document scrollWidth exceeds viewport']).map((t) => ({ target: t, html: '', summary: 'Wider than the viewport' })),
+  });
+}
+
 /** Run one axe scan of the current DOM for a labelled screen, in the given theme. */
 async function scan(page, screen, theme) {
+  if (viewportLabel) screen = `${screen} @${viewportLabel}`;
   await applyTheme(page, theme);
   await sleep(120); // let transitions settle
+  await checkReflow(page, screen, theme);
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   auditedScreens.push(`${screen} [${theme}]`);
   for (const v of results.violations) {
@@ -597,6 +638,18 @@ function writeReport() {
         await walkQuestionnaire(page, 'Evening', 'evening', theme);
       }
     }
+
+    // Reflow passes: 320 CSS px wide, and a 256px-tall viewport (≈400% zoom of a laptop).
+    for (const vp of [{ label: '320', width: 320, height: 640 }, { label: 'short', width: 1280, height: 256 }]) {
+      log(`\n▶ Viewport: ${vp.label} (${vp.width}x${vp.height})`);
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      viewportLabel = vp.label;
+      await reachTutorial(page);
+      await scan(page, 'tutorial-overview', THEMES[0]);
+      await walkQuestionnaire(page, 'All Question Types', 'all-types', THEMES[0]);
+      viewportLabel = '';
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
   } finally {
     await context.close();
     await browser.close();
