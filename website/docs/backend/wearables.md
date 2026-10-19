@@ -244,10 +244,15 @@ Source: `sections/wearables.tsx`.
 
 - Enable toggle (`wearablesEnabled`).
 - Provider checkboxes, disabled when the server has no credentials, each with a connected-participant count.
+- A **participant table** (`WearablesParticipantOverview`): every participant who has sent data or linked a device, with the
+  providers they connected, the last sync date per provider and whether data arrived. Participants who have not
+  connected are listed first, with a "N of M participants have connected a wearable" summary. It is built from file
+  names and sync-state files, so no token is decrypted. "Last sync" is the last completed UTC day fetched, not the
+  device's own upload time.
 - A read-only box with the **redirect URI** to register.
 - A **`wearables.zip`** download (read permission); the same link appears in the data list.
 
-There is no per-participant view, data preview, data-type selector or webhook status display. Sensor triggers are
+There is no data preview, data-type selector or webhook status display. Sensor triggers are
 configured per questionnaire in the trigger editor, not here.
 
 ## Participant flow and disconnect

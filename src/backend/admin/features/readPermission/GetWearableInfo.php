@@ -3,7 +3,9 @@
 namespace backend\admin\features\readPermission;
 
 use backend\admin\HasReadPermission;
+use backend\Configs;
 use backend\fileSystem\PathsFS;
+use backend\wearables\WearablesParticipantOverview;
 use backend\wearables\WearablesRegistry;
 
 /**
@@ -42,6 +44,10 @@ class GetWearableInfo extends HasReadPermission {
 			'redirectUri'         => WearablesRegistry::redirectUri(),
 			'connections'         => $connections,
 			'hasData'             => $hasData,
+			'participants'        => WearablesParticipantOverview::build(
+				$this->studyId,
+				Configs::getDataStore()->getStudyStore()->getStudyParticipants($this->studyId)
+			),
 		];
 	}
 }
