@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace backend\channels\dispatch;
 
-use backend\channels\ChannelException;
 use backend\channels\ChannelRegistry;
 use backend\channels\ChannelStudies;
 use backend\channels\conversation\ConversationEngine;
 use backend\channels\conversation\ConversationService;
+use backend\channels\conversation\SubmissionOutbox;
 use backend\channels\store\ChannelBindingStore;
 use backend\channels\store\JsonFile;
 use backend\fileSystem\PathsFS;
@@ -36,16 +36,22 @@ class ChannelDispatcher {
 						continue;
 					$stats['bindings']++;
 					try {
-						$service->withState($binding, function(array &$state) use ($service, $binding, $defaultStudy, $nowMs, &$stats) {
-							self::tick($service, $binding, $state, $defaultStudy, $nowMs, $stats);
+						$service->recipientGone = false;
+						$service->withState($binding, function(?array &$state) use ($service, $binding, $defaultStudy, $nowMs, &$stats) {
+							// Re-read under the lock: the participant may have left (/stop) or
+							// changed their time zone since the binding list was read.
+							$current = ChannelBindingStore::get((int) $binding['studyId'], (string) $binding['userId']);
+							if($current === null) {
+								$state = null; // drop the state file the lock just re-created
+								return;
+							}
+							self::tick($service, $current, $state, $defaultStudy, $nowMs, $stats);
+							if($service->recipientGone) { // bot blocked / chat deleted: pause until they write again
+								$current['blocked'] = true;
+								ChannelBindingStore::save($current);
+								$stats['errors']++;
+							}
 						});
-					}
-					catch(ChannelException $e) {
-						$stats['errors']++;
-						if($e->recipientGone) { // bot blocked / chat deleted: stop sending until they write again
-							$binding['blocked'] = true;
-							ChannelBindingStore::save($binding);
-						}
 					}
 					catch(Throwable $e) {
 						$stats['errors']++;
@@ -64,6 +70,9 @@ class ChannelDispatcher {
 	/** One participant: expire, compute due occurrences, start or queue them. */
 	public static function tick(ConversationService $service, array $binding, array &$state, array $defaultStudy, int $nowMs, array &$stats): void {
 		$study = ChannelStudies::load((int) $binding['studyId'], (string) ($binding['lang'] ?? '')) ?? $defaultStudy;
+		if(!empty($state['outbox']))
+			(new SubmissionOutbox($service->channel()))->flush($study, $binding, $state);
+		$service->resendPromptIfNeeded($binding, $state, $study, $nowMs);
 		$engine = $service->engine($binding, $study, $nowMs);
 		if(($expired = $engine->expireIfDue($state, $nowMs)) !== null) {
 			unset($state['promptRef']);
@@ -86,9 +95,13 @@ class ChannelDispatcher {
 				continue;
 
 			$session = $state['session'] ?? null;
+			if(!empty($session) && (int) $session['qid'] === (int) $occ['qid']) {
+				if(($occ['occKey'] ?? null) === ($session['occKey'] ?? null))
+					continue; // a reminder of the questionnaire being answered
+				unset($state['session'], $state['promptRef']); // a newer occurrence replaces a stale session
+				$session = null;
+			}
 			if(!empty($session)) {
-				if((int) $session['qid'] === (int) $occ['qid'])
-					continue; // already being answered
 				self::enqueue($state, $occ);
 				$stats['queued']++;
 				continue;

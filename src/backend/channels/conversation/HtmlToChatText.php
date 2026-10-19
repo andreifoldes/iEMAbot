@@ -41,12 +41,7 @@ class HtmlToChatText {
 			else if(isset(self::TAG_MAP[$tag])) {
 				$mapped = self::TAG_MAP[$tag];
 				if($closing) {
-					$idx = array_search($mapped, array_reverse($open, true), true);
-					if($idx !== false) {
-						$out .= "</$mapped>";
-						unset($open[$idx]);
-						$open = array_values($open);
-					}
+					$out .= self::close($open, $mapped);
 					if($tag[0] === 'h')
 						$out .= "\n";
 				}
@@ -56,14 +51,8 @@ class HtmlToChatText {
 				}
 			}
 			else if($tag === 'a') {
-				if($closing) {
-					$idx = array_search('a', array_reverse($open, true), true);
-					if($idx !== false) {
-						$out .= '</a>';
-						unset($open[$idx]);
-						$open = array_values($open);
-					}
-				}
+				if($closing)
+					$out .= self::close($open, 'a');
 				else if(preg_match('/href\s*=\s*"([^"]*)"|href\s*=\s*\'([^\']*)\'/i', $attrs, $h)) {
 					$href = html_entity_decode($h[1] !== '' ? $h[1] : ($h[2] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 					if(preg_match('#^(https?://|mailto:|tg://)#i', $href)) {
@@ -80,6 +69,31 @@ class HtmlToChatText {
 		$out = preg_replace("/[ \t]+\n/", "\n", $out);
 		$out = preg_replace("/\n{3,}/", "\n\n", $out);
 		return trim($out);
+	}
+
+	/**
+	 * Close the innermost open $tag. Misnested input (<b><i>x</b></i>) is repaired: tags
+	 * opened inside it are closed first and reopened after it, since Telegram rejects
+	 * overlapping tags. A closing tag that was never opened is dropped.
+	 * @param string[] $open stack of open tags, mutated
+	 */
+	private static function close(array &$open, string $tag): string {
+		$pos = array_search($tag, array_reverse($open, true), true);
+		if($pos === false)
+			return '';
+		$inner = array_slice($open, $pos + 1);
+		$out = '';
+		foreach(array_reverse($inner) as $t)
+			$out .= "</$t>";
+		$out .= "</$tag>";
+		$open = array_slice($open, 0, $pos);
+		foreach($inner as $t) {
+			if($t === 'a')
+				continue; // a link cannot be reopened without its href
+			$out .= "<$t>";
+			$open[] = $t;
+		}
+		return $out;
 	}
 
 	/** Plain text (button labels, previews). */

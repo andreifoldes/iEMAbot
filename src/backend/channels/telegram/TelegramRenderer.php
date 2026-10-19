@@ -72,7 +72,7 @@ class TelegramRenderer {
 			return ['editMessageReplyMarkup', ['chat_id' => $chatId, 'message_id' => (int) $messageId, 'reply_markup' => ['inline_keyboard' => []]]];
 		$params = [
 			'chat_id' => $chatId, 'message_id' => (int) $messageId, 'parse_mode' => 'HTML',
-			'text' => mb_substr($m->text, 0, self::MAX_TEXT),
+			'text' => \backend\channels\conversation\HtmlToChatText::split($m->text, self::MAX_TEXT)[0], // whole lines: no cut tags
 			'link_preview_options' => ['is_disabled' => true],
 			// An empty inline keyboard removes the buttons of the answered question.
 			'reply_markup' => self::replyMarkup($m) ?? ['inline_keyboard' => []],

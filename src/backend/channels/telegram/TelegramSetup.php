@@ -111,6 +111,7 @@ class TelegramSetup {
 	private static function registerCommands(TelegramApiClient $client): void {
 		$client->call('setMyCommands', ['commands' => [
 			['command' => 'checkin', 'description' => 'Answer an open questionnaire'],
+			['command' => 'cancel', 'description' => 'Stop the current questionnaire'],
 			['command' => 'timezone', 'description' => 'Update your local time'],
 			['command' => 'stop', 'description' => 'Leave the study'],
 			['command' => 'help', 'description' => 'What I can do'],

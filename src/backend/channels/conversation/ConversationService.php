@@ -32,6 +32,12 @@ use Throwable;
 class ConversationService {
 	/** @var ConversationalChannel */
 	private $channel;
+	/**
+	 * @var bool set when a send found the chat gone (bot blocked / chat deleted). Sends never
+	 * throw out of this class: a failed message must not roll back state changes that already
+	 * happened (a saved dataset, a started session), see deliver().
+	 */
+	public $recipientGone = false;
 
 	public function __construct(ConversationalChannel $channel) {
 		$this->channel = $channel;
@@ -69,10 +75,17 @@ class ConversationService {
 			if($enrolment->handle($ev, $nowMs))
 				return;
 			$this->channel->ack($ev->ackId);
-			$this->channel->send($ev->chatRef, OutboundMessage::text(HtmlToChatText::escape(ChatStrings::t('not_enrolled'))));
+			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('not_enrolled')));
 			return;
 		}
-		$this->withState($binding, function(array &$state) use ($binding, $ev, $nowMs) {
+		$this->withState($binding, function(?array &$state) use ($binding, $ev, $nowMs) {
+			// Re-read under the lock: a parallel update may have just ended the binding (/stop).
+			$binding = ChannelBindingStore::get((int) $binding['studyId'], (string) $binding['userId']);
+			if($binding === null) {
+				$state = null;
+				$this->channel->ack($ev->ackId);
+				return;
+			}
 			if(!empty($binding['blocked'])) { // they wrote to us again: deliverable again
 				$binding['blocked'] = false;
 				ChannelBindingStore::save($binding);
@@ -87,6 +100,13 @@ class ConversationService {
 	}
 
 	private function handleBound(array $binding, array &$state, InboundEvent $ev, int $nowMs): void {
+		// A redelivered update (webhook retry after a crash) must not answer twice.
+		if(ctype_digit($ev->updateId) && (int) $ev->updateId <= (int) ($state['lastUpdateId'] ?? -1)) {
+			$this->channel->ack($ev->ackId);
+			return;
+		}
+		if(ctype_digit($ev->updateId))
+			$state['lastUpdateId'] = (int) $ev->updateId;
 		$lang = (string) ($binding['lang'] ?? 'en');
 		$study = ChannelStudies::load((int) $binding['studyId'], $lang);
 		if($study === null) {
@@ -98,7 +118,7 @@ class ConversationService {
 			$this->deliver($binding, $state, $expired);
 
 		if($ev->kind === InboundEvent::KIND_START) {
-			$this->channel->send($ev->chatRef, OutboundMessage::text(HtmlToChatText::escape(ChatStrings::t('join_already', $lang, (string) ($study['title'] ?? '')))));
+			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('join_already', $lang, (string) ($study['title'] ?? ''))));
 			$this->deliver($binding, $state, $engine->repeatPrompt($state));
 			return;
 		}
@@ -108,14 +128,16 @@ class ConversationService {
 		}
 
 		$button = $ev->kind === InboundEvent::KIND_CALLBACK ? ButtonData::parse($ev->payload) : null;
-		if(!empty($state['awaitTz']) && ($button === null || $button['type'] === 'enrol')) {
-			$tz = EnrollmentFlow::readTimeAnswer($ev, $button, $nowMs);
-			$this->channel->ack($ev->ackId);
-			if($tz === null) {
-				$this->say($ev->chatRef, '<i>' . HtmlToChatText::escape(ChatStrings::t('hint_time', $lang)) . '</i>');
-				return;
-			}
+		if(!empty($state['awaitTz'])) {
+			// Only a time (or the time button) answers /timezone; anything else ends the
+			// question so answers to an open questionnaire are never swallowed.
+			$tz = ($button === null || $button['type'] === 'enrol') ? EnrollmentFlow::readTimeAnswer($ev, $button, $nowMs) : null;
 			unset($state['awaitTz']);
+		}
+		else
+			$tz = null;
+		if($tz !== null) {
+			$this->channel->ack($ev->ackId);
 			$binding = array_merge($binding, $tz);
 			ChannelBindingStore::save($binding);
 			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('tz_saved', $lang, $tz['tzName'] !== '' ? $tz['tzName'] : EnrollmentFlow::offsetLabel($tz['tzOffsetMin']))));
@@ -146,8 +168,10 @@ class ConversationService {
 		switch($ev->payload) {
 			case 'stop':
 				try {
-					(new DatasetSubmitter($this->channel->appType(), $this->channel->displayName()))
+					$result = (new DatasetSubmitter($this->channel->appType(), $this->channel->displayName()))
 						->submit($study, $binding, [['eventType' => CreateDataSet::DATASET_TYPE_QUIT]]);
+					if($result['failed'])
+						Main::reportError(new \Exception('Chat channel quit event failed: ' . implode('; ', $result['failed'])));
 				}
 				catch(Throwable $e) {
 					Main::reportError($e, 'Chat channel quit event failed');
@@ -155,6 +179,15 @@ class ConversationService {
 				ChannelBindingStore::remove($binding);
 				$state = null; // deletes the state file
 				$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('stopped', $lang)));
+				return;
+			case 'cancel':
+				if(ConversationEngine::hasSession($state)) {
+					unset($state['session'], $state['promptRef']);
+					$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('cancelled', $lang)));
+					$this->openFromQueue($binding, $state, $study, $nowMs);
+				}
+				else
+					$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('no_active', $lang)));
 				return;
 			case 'timezone':
 				$state['awaitTz'] = true;
@@ -217,9 +250,33 @@ class ConversationService {
 				if($m->keepText || (empty($m->buttons) && $canEdit))
 					continue; // only cosmetic (buttons off / answer echo) — not worth a new message
 			}
-			$id = $this->channel->send($chat, $m);
-			if($m->isPrompt)
-				$state['promptRef'] = $id;
+			$id = $this->send($chat, $m);
+			if($m->isPrompt) {
+				$state['promptRef'] = (string) $id;
+				if($id === null) // the question did not arrive: the dispatcher re-sends it
+					$state['resendPrompt'] = true;
+			}
+		}
+	}
+
+	/** Re-send the current question if delivering it failed earlier (dispatcher). */
+	public function resendPromptIfNeeded(array $binding, array &$state, array $study, int $nowMs): void {
+		if(empty($state['resendPrompt']))
+			return;
+		unset($state['resendPrompt']);
+		if(ConversationEngine::hasSession($state))
+			$this->deliver($binding, $state, $this->engine($binding, $study, $nowMs)->repeatPrompt($state));
+	}
+
+	/** Send without throwing; null when the message could not be delivered. */
+	private function send(string $chatRef, OutboundMessage $m): ?string {
+		try {
+			return $this->channel->send($chatRef, $m);
+		}
+		catch(ChannelException $e) {
+			if($e->recipientGone)
+				$this->recipientGone = true;
+			return null;
 		}
 	}
 
@@ -228,38 +285,10 @@ class ConversationService {
 		if($r->submission === null)
 			return;
 		unset($state['promptRef']);
-		$lang = (string) ($binding['lang'] ?? 'en');
-		$sub = $r->submission;
-		$events = [['eventType' => CreateDataSet::DATASET_TYPE_QUESTIONNAIRE, 'qid' => $sub['qid'], 'title' => $sub['title'], 'responses' => $sub['responses']]];
-		$events = array_merge($events, HandoffService::trialsEvents($study, $sub['trials'] ?? [], $this->channel->displayName()));
-		try {
-			$errors = (new DatasetSubmitter($this->channel->appType(), $this->channel->displayName()))
-				->submit($study, $binding, $events, $sub['media'] ?? [], [$this->channel, 'fetchMedia']);
-		}
-		catch(Throwable $e) {
-			$errors = [$e->getMessage()];
-		}
-		if($errors) {
-			Main::reportError(new \Exception('Chat channel dataset failed: ' . implode('; ', $errors)));
-			$this->say((string) $binding['chatRef'], HtmlToChatText::escape(ChatStrings::t('save_failed', $lang)));
-		}
-		else
-			$this->say((string) $binding['chatRef'], HtmlToChatText::escape(ChatStrings::t('saved', $lang)));
-
-		$this->recordCompletion($state, $sub, $nowMs);
+		$saved = (new SubmissionOutbox($this->channel))->submit($study, $binding, $state, $r->submission, $nowMs);
+		// When saving failed the answers wait in the outbox and are retried every minute.
+		$this->say((string) $binding['chatRef'], HtmlToChatText::escape(ChatStrings::t($saved ? 'saved' : 'save_queued', (string) ($binding['lang'] ?? 'en'))));
 		$this->openFromQueue($binding, $state, $study, $nowMs);
-	}
-
-	private function recordCompletion(array &$state, array $sub, int $nowMs): void {
-		if(!empty($sub['occKey']))
-			$state['done'][$sub['qid'] . '|' . $sub['occKey']] = $nowMs;
-		$state['qdone'][(string) $sub['qid']][] = $nowMs;
-		$state['qdone'][(string) $sub['qid']] = array_slice($state['qdone'][(string) $sub['qid']], -50);
-		// Keep the occurrence ledger small: entries older than 8 days can never match again.
-		foreach(($state['done'] ?? []) as $k => $t) {
-			if($t < $nowMs - 8 * 86400000)
-				unset($state['done'][$k]);
-		}
 	}
 
 	/**
@@ -310,7 +339,7 @@ class ConversationService {
 		$rows = [];
 		foreach($titles as $qid => $title)
 			$rows[] = [OutboundMessage::button(HtmlToChatText::truncate(HtmlToChatText::plain($title) ?: '…', 40), ButtonData::openQuestionnaire($qid))];
-		$this->channel->send((string) $binding['chatRef'], new OutboundMessage(ChatStrings::t('choose_q', (string) ($binding['lang'] ?? 'en')), $rows));
+		$this->send((string) $binding['chatRef'], new OutboundMessage(ChatStrings::t('choose_q', (string) ($binding['lang'] ?? 'en')), $rows));
 		return true;
 	}
 
@@ -335,6 +364,7 @@ class ConversationService {
 			'tzOffsetMin' => ChannelStudies::tzOffsetMin($binding, $nowMs),
 			'model'       => $this->channel->displayName(),
 			'handoff'     => $handoff,
+			'sessionTimeoutMin' => (int) ($settings['sessionTimeoutMin'] ?? ConversationEngine::DEFAULT_SESSION_TIMEOUT_MIN),
 		]);
 	}
 
@@ -345,6 +375,6 @@ class ConversationService {
 	}
 
 	private function say(string $chatRef, string $text): void {
-		$this->channel->send($chatRef, OutboundMessage::text($text));
+		$this->send($chatRef, OutboundMessage::text($text));
 	}
 }

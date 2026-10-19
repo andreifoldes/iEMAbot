@@ -23,96 +23,7 @@ require_once __DIR__ . '/../../autoload.php';
  * End to end through real stores and CreateDataSet, with a fake Telegram Bot API:
  * deep link → consent → time zone → scheduled questionnaire → answers saved → /stop.
  */
-class TelegramFlowTest extends BaseDataFolderTestSetup {
-	const STUDY = 4242;
-	const CHAT = '987654321';
-	const QID = 777;
-
-	/** @var array[] Bot API calls made: [method, params] */
-	private $calls = [];
-	/** @var ConversationService */
-	private $service;
-	private $updateId = 1;
-	private $messageId = 100;
-
-	protected function setUp(): void {
-		self::setUpBeforeClass();
-		Configs::resetConfig(array_merge(Configs::getAll(), [
-			'telegram_bot_token' => '123456:' . str_repeat('a', 35),
-			'telegram_bot_username' => 'esm_test_bot',
-			ChannelBindingStore::SECRET_KEY => SecretBox::generateKey(),
-		]));
-		$this->createStudy(json_decode(json_encode([
-			'id' => self::STUDY, 'title' => 'Sleep study', 'published' => true, 'accessKeys' => ['key1'],
-			'studyDescription' => '<p>About <b>sleep</b>.</p>', 'informedConsentForm' => '<p>Do you agree?</p>',
-			'channels' => ['telegram' => ['enabled' => true]],
-			'questionnaires' => [[
-				'internalId' => self::QID, 'title' => 'Morning',
-				'pages' => [['inputs' => [
-					['name' => 'rested', 'responseType' => 'binary', 'text' => 'Rested?', 'required' => true],
-					['name' => 'quality', 'responseType' => 'likert', 'likertSteps' => 5, 'text' => 'Quality?', 'required' => true],
-					['name' => 'alert', 'responseType' => 'va_scale', 'text' => 'Alertness?', 'relevance' => 'rested == 0'],
-				]]],
-				'actionTriggers' => [[
-					'actions' => [['type' => 1, 'msgText' => 'Good morning!']],
-					'schedules' => [['dailyRepeatRate' => 1, 'signalTimes' => [['startTimeOfDay' => 9 * 3600000]]]],
-				]],
-			]],
-		])), [self::QID => new ResponsesIndex(['rested', 'quality', 'alert'])]);
-		// published studies are reachable through the access index (filled by the admin save flow)
-		$index = Configs::getDataStore()->getStudyAccessIndexStore();
-		$index->add(self::STUDY, 'key1');
-		$index->add(4343);
-		$index->saveChanges();
-
-		$fake = function(string $method, array $params) {
-			$this->calls[] = [$method, $params];
-			return ['ok' => true, 'result' => ['message_id' => ++$this->messageId]];
-		};
-		$channel = new TelegramChannel(new TelegramApiClient('t', $fake));
-		ChannelRegistry::inject(TelegramChannel::ID, $channel);
-		$this->service = new ConversationService($channel);
-	}
-
-	protected function tearDown(): void {
-		ChannelRegistry::inject(TelegramChannel::ID, null);
-		self::tearDownAfterClass();
-	}
-
-	private function text(string $text, int $now) {
-		$update = ['update_id' => $this->updateId++, 'message' => [
-			'message_id' => 1, 'chat' => ['id' => (int) self::CHAT, 'type' => 'private'], 'from' => ['language_code' => 'en'], 'text' => $text,
-		]];
-		foreach(TelegramUpdateParser::parse($update) as $ev)
-			$this->service->handleEvent($ev, $now);
-	}
-
-	private function press(string $data, int $now) {
-		$update = ['update_id' => $this->updateId++, 'callback_query' => [
-			'id' => 'cb' . $this->updateId, 'data' => $data, 'from' => ['language_code' => 'en'],
-			'message' => ['message_id' => $this->messageId, 'chat' => ['id' => (int) self::CHAT, 'type' => 'private']],
-		]];
-		foreach(TelegramUpdateParser::parse($update) as $ev)
-			$this->service->handleEvent($ev, $now);
-	}
-
-	/** Callback data of the last sent button whose label contains $label. */
-	private function buttonData(string $label): string {
-		foreach(array_reverse($this->calls) as [$method, $params]) {
-			foreach(($params['reply_markup']['inline_keyboard'] ?? []) as $row) {
-				foreach($row as $b) {
-					if(strpos($b['text'], $label) !== false && isset($b['callback_data']))
-						return $b['callback_data'];
-				}
-			}
-		}
-		$this->fail("no button '$label'");
-	}
-
-	private function sentTexts(): string {
-		return implode("\n---\n", array_map(function($c) { return $c[1]['text'] ?? ($c[1]['caption'] ?? ''); }, $this->calls));
-	}
-
+class TelegramFlowTest extends ChannelFlowTestCase {
 	function test_join_answer_and_leave() {
 		$now = Main::getMilliseconds();
 		$this->text('/start s' . self::STUDY . '_key1', $now);
@@ -159,14 +70,6 @@ class TelegramFlowTest extends BaseDataFolderTestSetup {
 		$this->text('/stop', $now + 86400000);
 		$this->assertNull(ChannelBindingStore::findByChat('telegram', self::CHAT));
 		$this->assertStringContainsString('You have left the study', $this->sentTexts());
-	}
-
-	/** Join without going through the UI steps (consent + time zone). */
-	private function join(int $now): array {
-		$this->text('/start s' . self::STUDY . '_key1', $now);
-		$this->press(ButtonData::enrol('c', '1'), $now);
-		$this->press(ButtonData::enrol('tz', 'd'), $now);
-		return ChannelBindingStore::findByChat('telegram', self::CHAT);
 	}
 
 	function test_vas_is_answered_through_the_web_handoff() {

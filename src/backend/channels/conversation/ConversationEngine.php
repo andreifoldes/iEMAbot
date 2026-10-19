@@ -18,9 +18,16 @@ use backend\channels\OutboundMessage;
  * for free text, and a skipped voice memo reveals its typed fallback.
  *
  * Context ($ctx): lang, baseUrl, tzOffsetMin (JS getTimezoneOffset convention), model,
- * handoff (?callable(array $session, int $index, array $item): ?string — web-view URL).
+ * handoff (?callable(array $session, int $index, array $item): ?string — web-view URL),
+ * sessionTimeoutMin (fallback session lifetime; 0 = none).
  */
 class ConversationEngine {
+	/**
+	 * A session without a completion deadline (on-demand, or a schedule without a timeout)
+	 * still ends after this many minutes, so an ignored prompt never blocks later ones.
+	 */
+	const DEFAULT_SESSION_TIMEOUT_MIN = 180;
+
 	/** @var ChannelCapabilities */
 	private $caps;
 	/** @var array */
@@ -30,7 +37,8 @@ class ConversationEngine {
 
 	public function __construct(ChannelCapabilities $caps, array $ctx) {
 		$this->caps = $caps;
-		$this->ctx = $ctx + ['lang' => 'en', 'baseUrl' => '', 'tzOffsetMin' => 0, 'model' => 'Chat', 'handoff' => null];
+		$this->ctx = $ctx + ['lang' => 'en', 'baseUrl' => '', 'tzOffsetMin' => 0, 'model' => 'Chat', 'handoff' => null,
+			'sessionTimeoutMin' => self::DEFAULT_SESSION_TIMEOUT_MIN];
 		$this->reader = new ReplyReader($this->ctx);
 	}
 
@@ -55,7 +63,9 @@ class ConversationEngine {
 			'qid'       => (int) ($questionnaire['internalId'] ?? 0),
 			'title'     => (string) ($questionnaire['title'] ?? ''),
 			'startedAt' => $nowMs,
-			'deadline'  => isset($occurrence['deadline']) ? (int) $occurrence['deadline'] : null,
+			'deadline'  => !empty($occurrence['deadline'])
+				? (int) $occurrence['deadline']
+				: ((int) $this->ctx['sessionTimeoutMin'] > 0 ? $nowMs + (int) $this->ctx['sessionTimeoutMin'] * 60000 : null),
 			'occKey'    => isset($occurrence['occKey']) ? (string) $occurrence['occKey'] : null,
 			'items'     => [],
 			'headers'   => $headers,

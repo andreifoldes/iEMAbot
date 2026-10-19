@@ -33,9 +33,10 @@ class DatasetSubmitter {
 	 * @param array  $study     decoded study config (language-resolved)
 	 * @param array  $binding   {studyId, userId, accessKey, lang}
 	 * @param array  $events    each {eventType: joined|quit|questionnaire, qid?, title?, responses?}
+	 * @param array  $media     media answers of the FIRST event: name => {kind, ref|localPath, identifier}
 	 * @param callable|null $fetchMedia fn(array $media): ?string — downloads a media answer to a
 	 *                          local temp file (channel specific); null skips file uploads
-	 * @return string[] error messages (empty on success)
+	 * @return array{failed: array<int, string>, mediaErrors: string[]} failed: event index => error
 	 * @throws CriticalException when the envelope is rejected as a whole
 	 */
 	public function submit(array $study, array $binding, array $events, array $media = [], ?callable $fetchMedia = null): array {
@@ -48,39 +49,40 @@ class DatasetSubmitter {
 			'accessKey'       => (string) ($binding['accessKey'] ?? ''),
 		];
 		$dataset = [];
-		foreach($events as $event) {
+		foreach(array_values($events) as $i => $event) {
 			$type = $event['eventType'];
-			$dataset[] = $common + [
-				'dataSetId'               => count($dataset),
+			$dataset[$i] = $common + [
+				'dataSetId'               => $i,
 				'questionnaireName'       => $type === CreateDataSet::DATASET_TYPE_QUESTIONNAIRE ? (string) ($event['title'] ?? '') : null,
 				'questionnaireInternalId' => $type === CreateDataSet::DATASET_TYPE_QUESTIONNAIRE ? (int) $event['qid'] : null,
 				'eventType'               => $type,
-				'responseTime'            => $now,
+				'responseTime'            => (int) ($event['responseTime'] ?? $now),
 				'responses'               => $event['responses'] ?? ['model' => $this->model],
 			];
 		}
+
+		$failed = $this->save($binding, $dataset);
+		// The per-participant anti-flood check (dataset_server_timeout) rejects a submission
+		// that follows the previous one within a second; wait once and resend only those lines.
+		if($failed && strpos(implode(' ', $failed), 'Too many requests') !== false) {
+			usleep(((int) Configs::get('dataset_server_timeout') + 100) * 1000);
+			$failed = $this->save($binding, array_intersect_key($dataset, $failed));
+		}
+		$mediaErrors = [];
+		if($media && !isset($failed[0]) && $fetchMedia !== null)
+			$mediaErrors = $this->uploadMedia((int) $binding['studyId'], (string) $binding['userId'], $media, $fetchMedia);
+		return ['failed' => $failed, 'mediaErrors' => $mediaErrors];
+	}
+
+	/** @return array<int, string> dataSetId => error of the lines that were not saved */
+	private function save(array $binding, array $dataset): array {
 		$payload = [
 			'userId'        => (string) $binding['userId'],
 			'appType'       => $this->appType,
 			'appVersion'    => (string) Main::SERVER_VERSION,
 			'serverVersion' => Main::SERVER_VERSION,
-			'dataset'       => $dataset,
+			'dataset'       => array_values($dataset),
 		];
-
-		$errors = $this->save($payload);
-		// The per-participant anti-flood check (dataset_server_timeout) rejects a submission
-		// that follows the previous one within a second; wait once and retry.
-		if($errors && strpos(implode(' ', $errors), 'Too many requests') !== false) {
-			usleep(((int) Configs::get('dataset_server_timeout') + 100) * 1000);
-			$errors = $this->save($payload);
-		}
-		if(!$errors && $fetchMedia !== null)
-			$errors = array_merge($errors, $this->uploadMedia((int) $binding['studyId'], (string) $binding['userId'], $media, $fetchMedia));
-		return $errors;
-	}
-
-	/** @return string[] per-event error messages */
-	private function save(array $payload): array {
 		$create = new CreateDataSet();
 		try {
 			$create->prepare(json_decode(json_encode($payload)));
@@ -91,12 +93,12 @@ class DatasetSubmitter {
 			$create->close();
 			throw new CriticalException('Saving data failed: ' . $e->getMessage());
 		}
-		$errors = [];
+		$failed = [];
 		foreach($create->output as $line) {
 			if(empty($line['success']))
-				$errors[] = (string) ($line['error'] ?? 'unknown error');
+				$failed[(int) $line['dataSetId']] = (string) ($line['error'] ?? 'unknown error');
 		}
-		return $errors;
+		return $failed;
 	}
 
 	/** Upload the files of media answers (after the dataset registered their identifiers). */

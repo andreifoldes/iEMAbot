@@ -51,6 +51,7 @@ class EnrollmentFlow {
 		}
 
 		$enrol = [
+			'payload' => $ev->payload,
 			'studyId' => $invite['studyId'], 'accessKey' => strtolower($invite['accessKey']), 'pid' => $invite['pid'],
 			'lang' => $lang, 'step' => 'consent', 'startedAt' => $nowMs,
 		];
@@ -72,42 +73,57 @@ class EnrollmentFlow {
 		]]));
 	}
 
-	/** @return bool whether the event belonged to an enrolment in progress */
+	/**
+	 * Next enrolment step. Runs under a lock on the chat's enrolment file, so parallel
+	 * deliveries (webhook) or a double tap cannot create two participants for one chat.
+	 * @return bool whether the event belonged to an enrolment in progress
+	 */
 	public function handle(InboundEvent $ev, int $nowMs): bool {
 		$path = $this->enrolPath($ev->chatRef);
-		$enrol = JsonFile::read($path);
-		if($enrol === null)
+		if(!file_exists($path))
 			return false;
+		return JsonFile::withLock($path, function(?array &$enrol) use ($ev, $nowMs) {
+			if(empty($enrol)) {
+				$enrol = null;
+				return false;
+			}
+			if($ev->ackId !== '')
+				$this->channel->ack($ev->ackId);
+			if(ChannelBindingStore::findByChat($this->channel->id(), $ev->chatRef) !== null) {
+				$enrol = null; // joined meanwhile
+				return true;
+			}
+			$this->step($ev, $enrol, $nowMs);
+			return true;
+		});
+	}
+
+	private function step(InboundEvent $ev, ?array &$enrol, int $nowMs): void {
 		$lang = (string) $enrol['lang'];
 		$button = $ev->kind === InboundEvent::KIND_CALLBACK ? ButtonData::parse($ev->payload) : null;
-		if($ev->ackId !== '')
-			$this->channel->ack($ev->ackId);
-
 		if($enrol['step'] === 'consent') {
 			if($button === null || $button['type'] !== 'enrol' || $button['step'] !== 'c')
-				return true; // waiting for a consent button
+				return; // waiting for a consent button
 			$this->removeButtons($ev);
 			if($button['value'] !== '1') {
-				JsonFile::delete($path);
+				$enrol = null;
 				$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('consent_declined', $lang)));
-				return true;
+				return;
 			}
 			$enrol['step'] = 'time';
 			$enrol['consentAt'] = $nowMs;
-			$this->saveEnrol($ev->chatRef, $enrol);
 			$this->askTime($ev->chatRef, $lang, $nowMs);
-			return true;
+			return;
 		}
 
 		$tz = self::readTimeAnswer($ev, $button, $nowMs);
 		if($tz === null) {
 			$this->say($ev->chatRef, '<i>' . HtmlToChatText::escape(ChatStrings::t('hint_time', $lang)) . '</i>');
-			return true;
+			return;
 		}
 		$this->removeButtons($ev);
 		$this->complete($ev->chatRef, $enrol, $tz, $nowMs);
-		JsonFile::delete($path);
-		return true;
+		$enrol = null;
 	}
 
 	/** "What time is it for you?" with a one-tap answer for the server's default time zone. */
@@ -162,14 +178,17 @@ class EnrollmentFlow {
 			'accessKey' => (string) $enrol['accessKey'], 'lang' => $lang, 'tzName' => $tz['tzName'],
 			'tzOffsetMin' => $tz['tzOffsetMin'], 'joinedAt' => $nowMs, 'consentAt' => $enrol['consentAt'] ?? null,
 		];
-		$existing = ChannelBindingStore::get($studyId, $userId);
-		if($existing !== null) // a PID invite reused on another chat moves the participant there
-			ChannelBindingStore::remove($existing);
+		// A participant id is bound to one chat; a forwarded or leaked invite cannot take it over
+		// (the researcher can free it by removing the participant's binding).
+		if(ChannelBindingStore::get($studyId, $userId) !== null) {
+			$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('join_pid_taken', $lang)));
+			return;
+		}
 		ChannelBindingStore::save($binding);
 
 		try {
 			$errors = (new DatasetSubmitter($this->channel->appType(), $this->channel->displayName()))
-				->submit($study, $binding, [['eventType' => CreateDataSet::DATASET_TYPE_JOINED]]);
+				->submit($study, $binding, [['eventType' => CreateDataSet::DATASET_TYPE_JOINED]])['failed'];
 		}
 		catch(Throwable $e) {
 			$errors = [$e->getMessage()];
@@ -180,6 +199,7 @@ class EnrollmentFlow {
 			$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('save_failed', $lang)));
 			return;
 		}
+		InviteStore::consume((string) ($enrol['payload'] ?? '')); // participant invites work once
 		$zoneLabel = $tz['tzName'] !== '' ? $tz['tzName'] : self::offsetLabel($tz['tzOffsetMin']);
 		$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('tz_saved', $lang, $zoneLabel)));
 		$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('joined', $lang, (string) ($study['title'] ?? ''))));
