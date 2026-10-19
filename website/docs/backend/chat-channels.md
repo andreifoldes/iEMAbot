@@ -55,18 +55,24 @@ sequenceDiagram
   S->>S: CreateDataSet (appType Telegram)
 ```
 
-- **Joining.** The invite link carries the study (and access key). A stored invite can also carry a
-  researcher-assigned participant id. Otherwise ESMira generates a random user id, exactly like the PWA. The
+- **Joining.** The invite link carries the study (and access key). A per-participant invite can also carry
+  a researcher-assigned participant id. Such a link works once and expires after 60 days, and a participant id
+  that is already connected to a chat cannot be taken over by a forwarded link. Otherwise ESMira generates a random user id, exactly like the PWA. The
   participant's local time is asked once. Tapping the suggested time keeps the server's time zone and stays
   correct across daylight-saving changes. A typed time gives a fixed offset, which can be updated with
   `/timezone`.
 - **Prompts.** Signal times, random windows, reminders, completion windows and sensor triggers are computed by
   the same code as [Web Push](./web-push.md) (`notifications/DueOccurrences.php`). When a questionnaire is due,
   the bot sends it as a conversation. If another one is still open, the new one waits in a queue. A session
-  closes when its completion window ends.
+  closes when its completion window ends, or after three hours when the questionnaire has no window. A newer
+  occurrence of the same questionnaire replaces an unfinished one. Questions that failed to arrive are re-sent
+  a minute later.
+- **Saving.** Answers that cannot be saved right away (for example while a study is locked) wait in a
+  per-participant outbox and are retried every minute, so nothing is lost and nothing is saved twice.
 - **Commands.** `/checkin` lists what can be answered now. These are the queued questionnaires plus anything
-  open on demand, using the same availability rules as the PWA. `/timezone` updates the participant's time
-  zone, `/stop` leaves the study (it sends a `quit` event), and `/help` lists the commands.
+  open on demand, using the same availability rules as the PWA. `/cancel` stops the current questionnaire,
+  `/timezone` updates the participant's time zone, `/stop` leaves the study (it sends a `quit` event), and
+  `/help` lists the commands.
 
 ## Question types in chat
 
