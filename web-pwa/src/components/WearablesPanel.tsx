@@ -7,7 +7,7 @@
  * provider's OAuth page (providers forbid being framed), handled by the parent.
  */
 
-import { Watch, Check, RefreshCw, Link as LinkIcon, Unlink } from 'lucide-react';
+import { Watch, Check, RefreshCw, Link as LinkIcon, Unlink, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { WearableStatus } from '../types';
 
@@ -49,27 +49,33 @@ export function WearablesPanel({ providers, status, busy, onConnect, onDisconnec
         <div className="flex flex-col gap-2">
           {providers.map((provider) => {
             const connected = byProvider.get(provider);
+            const needsReconnect = connected?.needsReconnect === true;
             const isBusy = busy === provider;
             return (
               <div key={provider}
                 className="flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-container-high dark:bg-surface-container-highest">
                 <span className={cn('p-2 rounded-full shrink-0',
-                  connected
-                    ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400'
-                    : 'bg-surface-container-highest dark:bg-surface-container-low text-on-surface-variant')}>
-                  {connected ? <Check size={18} aria-hidden="true" /> : <Watch size={18} aria-hidden="true" />}
+                  needsReconnect
+                    ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    : connected
+                      ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400'
+                      : 'bg-surface-container-highest dark:bg-surface-container-low text-on-surface-variant')}>
+                  {needsReconnect ? <AlertTriangle size={18} aria-hidden="true" />
+                    : connected ? <Check size={18} aria-hidden="true" /> : <Watch size={18} aria-hidden="true" />}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-on-surface">{providerLabel(provider)}</p>
                   <p className="text-xs text-on-surface-variant">
-                    {connected
+                    {needsReconnect
+                      ? 'Connection expired · please reconnect so your data keeps syncing'
+                      : connected
                       ? connected.lastSync
                         ? `Connected · last sync ${new Date(connected.lastSync).toLocaleDateString()}`
                         : 'Connected · no data yet'
                       : 'Not connected'}
                   </p>
                 </div>
-                {connected ? (
+                {connected && !needsReconnect ? (
                   <button onClick={() => onDisconnect(provider)} disabled={isBusy} aria-busy={isBusy}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-60 shrink-0">
                     {isBusy ? <RefreshCw size={15} className="animate-spin" aria-hidden="true" /> : <Unlink size={15} aria-hidden="true" />}

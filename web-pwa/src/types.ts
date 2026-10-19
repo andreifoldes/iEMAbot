@@ -268,4 +268,6 @@ export interface WearableStatus {
   provider: string;
   /** UTC ms of the last day the server synced for this provider, or null if none yet. */
   lastSync: number | null;
+  /** The provider rejected the stored link (revoked, or replaced by linking the same account again). */
+  needsReconnect?: boolean;
 }

@@ -18,8 +18,8 @@ use backend\Paths;
 class WearablesParticipantOverview {
 	/**
 	 * @param string[] $knownUserIds participants the study already knows (see StudyStore::getStudyParticipants)
-	 * @return array<int, array{userId:string, providers:array<int, array{provider:string, lastSync:?int, hasData:bool}>}>
-	 *         unconnected participants first, then by userId
+	 * @return array<int, array{userId:string, providers:array<int, array{provider:string, lastSync:?int, hasData:bool, needsReconnect:bool}>}>
+	 *         participants without a working link first (none, or all links revoked), then by userId
 	 */
 	public static function build(int $studyId, array $knownUserIds): array {
 		$byUser = [];
@@ -40,6 +40,7 @@ class WearablesParticipantOverview {
 					'provider' => $provider,
 					'lastSync' => self::lastSync($studyId, $userId, $provider),
 					'hasData'  => file_exists(PathsFS::fileWearablesData($studyId, $userId, $provider)),
+					'needsReconnect' => WearablesTokenStore::isRevoked($studyId, $userId, $provider),
 				];
 			}
 		}
@@ -50,10 +51,19 @@ class WearablesParticipantOverview {
 			$out[] = ['userId' => (string) $userId, 'providers' => $providers];
 		}
 		usort($out, function($a, $b) {
-			$connected = (count($a['providers']) > 0) <=> (count($b['providers']) > 0);
-			return $connected !== 0 ? $connected : strcmp($a['userId'], $b['userId']);
+			$working = self::hasWorkingLink($a) <=> self::hasWorkingLink($b);
+			return $working !== 0 ? $working : strcmp($a['userId'], $b['userId']);
 		});
 		return $out;
+	}
+
+	/** At least one linked provider the provider still accepts. */
+	private static function hasWorkingLink(array $participant): bool {
+		foreach($participant['providers'] as $p) {
+			if(!$p['needsReconnect'])
+				return true;
+		}
+		return false;
 	}
 
 	/** Last fetched UTC day (ms), or null when the sync has not run for this participant yet. */

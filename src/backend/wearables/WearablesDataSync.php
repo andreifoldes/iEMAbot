@@ -78,6 +78,10 @@ class WearablesDataSync {
 		$provider = (string) ($token['provider'] ?? '');
 		if($userId === '' || $provider === '')
 			return 0;
+		// The provider rejected this link earlier; retrying only fills the error log. Linking again
+		// writes a fresh token (WearablesTokenStore::save), which lifts the marker.
+		if(WearablesTokenStore::isRevoked($studyId, $userId, $provider))
+			return 0;
 		// Respect the study's current provider selection (a researcher may have disabled one).
 		if(!empty($studyProviders) && !in_array($provider, $studyProviders, true))
 			return 0;
@@ -88,7 +92,15 @@ class WearablesDataSync {
 
 		if(empty($providerObj->dataTypes()))
 			return 0; // trigger-only provider (Google Health): nothing to download
-		$access = WearablesTokenStore::getValidAccessToken($studyId, $userId, $provider, $providerObj);
+		try {
+			$access = WearablesTokenStore::getValidAccessToken($studyId, $userId, $provider, $providerObj);
+		}
+		catch(WearablesException $e) {
+			if(!WearablesAuthException::matches($e->getMessage()))
+				throw $e;
+			WearablesTokenStore::markRevoked($studyId, $userId, $provider);
+			return 0; // expected, not an error: the participant is told to reconnect
+		}
 		if($access === null)
 			return 0;
 
@@ -107,9 +119,17 @@ class WearablesDataSync {
 
 		$dataTypes = self::resolveDataTypes($providerObj, $studyDataTypes);
 		$written = 0;
-		foreach($dataTypes as $dataType) {
-			$rows = $providerObj->fetchData($access, (string) ($token['provider_user_id'] ?? ''), $dataType, $startMs, $endMs);
-			$written += WearablesDataStore::append($studyId, $userId, $provider, $rows);
+		try {
+			foreach($dataTypes as $dataType) {
+				$rows = $providerObj->fetchData($access, (string) ($token['provider_user_id'] ?? ''), $dataType, $startMs, $endMs);
+				$written += WearablesDataStore::append($studyId, $userId, $provider, $rows);
+			}
+		}
+		catch(WearablesException $e) {
+			if(!WearablesAuthException::matches($e->getMessage()))
+				throw $e;
+			WearablesTokenStore::markRevoked($studyId, $userId, $provider);
+			return $written; // the cursor stays put, so the days are fetched once the participant reconnects
 		}
 
 		// append() only creates the folder when there are rows, and a day with no data yields none.

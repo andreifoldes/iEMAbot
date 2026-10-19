@@ -248,12 +248,25 @@ Source: `sections/wearables.tsx`.
   providers they connected, the last sync date per provider and whether data arrived. Participants who have not
   connected are listed first, with a "N of M participants have connected a wearable" summary. It is built from file
   names and sync-state files, so no token is decrypted. "Last sync" is the last completed UTC day fetched, not the
-  device's own upload time.
+  device's own upload time. A link the provider has rejected is shown as "link no longer valid, participant must
+  reconnect" and no longer counts as connected (see *Revoked links* below).
 - A read-only box with the **redirect URI** to register.
 - A **`wearables.zip`** download (read permission); the same link appears in the data list.
 
 There is no data preview, data-type selector or webhook status display. Sensor triggers are
 configured per questionnaire in the trigger editor, not here.
+
+## Revoked links
+
+A link stops working when the participant revokes access at the provider, or when the same provider account is linked
+from a second participant ID (Withings, for one, allows a single active authorization per account and app, so linking
+again silently invalidates the first participant's access and refresh tokens). The sync recognises a rejected token
+or refresh token (`WearablesAuthException::matches`), writes a `<participant>.<provider>.revoked` marker next to the
+sync state, and stops retrying that link instead of logging an error every hour. The marker is returned as
+`needsReconnect` by `wearables_status.php` and the researcher panel; the participant app then offers **Reconnect**.
+Saving a new token (any successful link) removes the marker, and the sync cursor was left in place, so the missed days
+are fetched afterwards (up to the 14-day catch-up cap). Transient failures such as timeouts or provider outages never
+set the marker.
 
 ## Participant flow and disconnect
 

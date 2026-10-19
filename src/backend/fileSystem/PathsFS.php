@@ -177,6 +177,11 @@ class PathsFS {
 		return self::folderWearablesData($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.state';
 	}
 
+	/** Marker: the provider rejected this participant's credentials, so they must link the device again. */
+	static function fileWearablesRevoked(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesData($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.revoked';
+	}
+
 	/** Webhook-derived sensor events ("new sleep data arrived"), JSONL, one file per participant. */
 	static function folderWearablesEvents(int $studyId): string {
 		return self::folderStudies() . "$studyId/.wearables_events/";

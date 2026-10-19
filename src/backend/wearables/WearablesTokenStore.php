@@ -38,6 +38,19 @@ class WearablesTokenStore {
 			'created'          => (int) ($token['created'] ?? Main::getMilliseconds()),
 		]);
 		FileSystemBasics::writeFile(PathsFS::fileWearablesToken($studyId, $userId, $provider), self::encrypt($payload));
+		@unlink(PathsFS::fileWearablesRevoked($studyId, $userId, $provider)); // a fresh token means the link works again
+	}
+
+	/** Remember that the provider rejected this link; the participant has to connect again. */
+	public static function markRevoked(int $studyId, string $userId, string $provider): void {
+		$folder = PathsFS::folderWearablesData($studyId);
+		if(!is_dir($folder))
+			FileSystemBasics::createFolder($folder, true);
+		FileSystemBasics::writeFile(PathsFS::fileWearablesRevoked($studyId, $userId, $provider), (string) Main::getMilliseconds());
+	}
+
+	public static function isRevoked(int $studyId, string $userId, string $provider): bool {
+		return file_exists(PathsFS::fileWearablesRevoked($studyId, $userId, $provider));
 	}
 
 	public static function get(int $studyId, string $userId, string $provider): ?array {
@@ -58,12 +71,14 @@ class WearablesTokenStore {
 	/** Remove only the credentials, keeping already collected data (used when a provider is replaced). */
 	public static function deleteToken(int $studyId, string $userId, string $provider): void {
 		@unlink(PathsFS::fileWearablesToken($studyId, $userId, $provider));
+		@unlink(PathsFS::fileWearablesRevoked($studyId, $userId, $provider));
 	}
 
 	public static function delete(int $studyId, string $userId, string $provider): void {
 		@unlink(PathsFS::fileWearablesToken($studyId, $userId, $provider));
 		@unlink(PathsFS::fileWearablesData($studyId, $userId, $provider));
 		@unlink(PathsFS::fileWearablesSyncState($studyId, $userId, $provider));
+		@unlink(PathsFS::fileWearablesRevoked($studyId, $userId, $provider));
 		if(empty(self::listProviders($studyId, $userId))) // no linked device left: drop the event log too
 			WearablesEventStore::delete($studyId, $userId);
 	}

@@ -16,6 +16,8 @@ interface ParticipantProvider {
 	/** UTC day (ms) the sync last covered, null if it has not run for this participant yet */
 	lastSync: number | null
 	hasData: boolean
+	/** The provider rejected this link (revoked, or taken over by another participant ID): the participant must connect again */
+	needsReconnect: boolean
 }
 
 interface ParticipantOverview {
@@ -57,6 +59,8 @@ export class Content extends SectionContent {
 
 	private providerStatus(p: ParticipantProvider): string {
 		const label = PROVIDER_LABEL[p.provider] ?? p.provider
+		if (p.needsReconnect)
+			return `${label} (${Lang.get("wearables_participant_needs_reconnect")})`
 		const sync = p.lastSync != null
 			? new Date(p.lastSync).toLocaleDateString()
 			: Lang.get("wearables_participant_not_synced")
@@ -65,7 +69,7 @@ export class Content extends SectionContent {
 	}
 
 	private participantsView(participants: ParticipantOverview[]): Vnode<any, any> {
-		const connected = participants.filter((p) => p.providers.length > 0).length
+		const connected = participants.filter((p) => p.providers.some((provider) => !provider.needsReconnect)).length
 		return <div class="vertical hAlignStart">
 			<label class="noTitle"><span>{Lang.getWithColon("wearables_participants")}</span></label>
 			{participants.length == 0
@@ -80,7 +84,7 @@ export class Content extends SectionContent {
 						{participants.map((p) =>
 							<tr>
 								<td>{p.userId}</td>
-								<td class="spacingLeft" style={p.providers.length ? "" : "opacity:0.6"}>
+								<td class="spacingLeft" style={p.providers.some((provider) => !provider.needsReconnect) ? "" : "opacity:0.6"}>
 									{p.providers.length
 										? p.providers.map((provider) => <div>{this.providerStatus(provider)}</div>)
 										: Lang.get("wearables_participant_not_connected")}

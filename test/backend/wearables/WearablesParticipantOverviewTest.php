@@ -34,9 +34,39 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 		$this->assertSame(['bob', 'alice'], array_column($rows, 'userId'));
 		$this->assertSame([], $rows[0]['providers']);
 		$this->assertSame(
-			[['provider' => 'withings', 'lastSync' => 1792281600000, 'hasData' => true]],
+			[['provider' => 'withings', 'lastSync' => 1792281600000, 'hasData' => true, 'needsReconnect' => false]],
 			$rows[1]['providers']
 		);
+	}
+
+	function test_revoked_link_is_flagged_and_sorted_with_the_unconnected() {
+		$this->link('alice', 'withings');
+		$this->link('zed', 'withings');
+		WearablesTokenStore::markRevoked(self::STUDY, 'zed', 'withings');
+
+		$rows = WearablesParticipantOverview::build(self::STUDY, ['alice', 'zed']);
+
+		$this->assertSame(['zed', 'alice'], array_column($rows, 'userId'));
+		$this->assertTrue($rows[0]['providers'][0]['needsReconnect']);
+		$this->assertFalse($rows[1]['providers'][0]['needsReconnect']);
+	}
+
+	function test_saving_a_fresh_token_lifts_the_revoked_marker() {
+		$this->link('alice', 'withings');
+		WearablesTokenStore::markRevoked(self::STUDY, 'alice', 'withings');
+		$this->assertTrue(WearablesTokenStore::isRevoked(self::STUDY, 'alice', 'withings'));
+
+		WearablesTokenStore::save(self::STUDY, 'alice', 'withings', ['access_token' => 'new', 'refresh_token' => 'new']);
+
+		$this->assertFalse(WearablesTokenStore::isRevoked(self::STUDY, 'alice', 'withings'));
+	}
+
+	function test_auth_failures_are_told_apart_from_transient_errors() {
+		$this->assertTrue(WearablesAuthException::matches('Withings token request failed: {"status":503,"error":"Invalid Params: invalid refresh_token"}'));
+		$this->assertTrue(WearablesAuthException::matches('XRequestID: Not provided invalid_token: The access token provided is invalid'));
+		$this->assertTrue(WearablesAuthException::matches('{"error":"invalid_grant"}'));
+		$this->assertFalse(WearablesAuthException::matches('cURL error 28: Operation timed out'));
+		$this->assertFalse(WearablesAuthException::matches('Withings fetch failed: {"status":500,"error":"internal"}'));
 	}
 
 	function test_participant_with_only_a_token_is_listed_without_sync_or_data() {
@@ -46,7 +76,7 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 
 		$this->assertSame(['carol'], array_column($rows, 'userId'));
 		$this->assertSame(
-			[['provider' => 'withings', 'lastSync' => null, 'hasData' => false]],
+			[['provider' => 'withings', 'lastSync' => null, 'hasData' => false, 'needsReconnect' => false]],
 			$rows[0]['providers']
 		);
 	}

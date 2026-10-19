@@ -33,7 +33,11 @@ try {
 			if(is_array($state) && isset($state['lastDayMs']))
 				$lastSync = (int) $state['lastDayMs'];
 		}
-		$providers[] = ['provider' => $provider, 'lastSync' => $lastSync];
+		$providers[] = [
+			'provider' => $provider,
+			'lastSync' => $lastSync,
+			'needsReconnect' => WearablesTokenStore::isRevoked($studyId, $userId, $provider),
+		];
 	}
 	echo JsonOutput::successObj(['providers' => $providers]);
 }

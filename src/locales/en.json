@@ -796,6 +796,7 @@
 	"wearables_participant_not_synced": "not synced yet",
 	"wearables_participant_has_data": "data collected",
 	"wearables_participant_no_data": "no data yet",
+	"wearables_participant_needs_reconnect": "link no longer valid, participant must reconnect",
 	"fitbit": "Fitbit",
 	"withings": "Withings",
 	"oura": "Oura Ring",
