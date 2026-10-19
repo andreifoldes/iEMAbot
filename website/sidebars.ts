@@ -14,6 +14,7 @@ const sidebars: SidebarsConfig = {
         'backend/study-model',
         'backend/scheduling',
         'backend/web-push',
+        'backend/chat-channels',
         'backend/wearables',
         'backend/api-reference',
         'backend/sqlite-store',

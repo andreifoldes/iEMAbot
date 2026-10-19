@@ -1,7 +1,7 @@
 ---
 title: "Docker and cron"
 sidebar_label: "Docker and cron"
-description: "The container image, its PHP extensions, the two cron jobs, volumes, and what a host needs to run the fork."
+description: "The container image, its PHP extensions, the cron jobs, volumes, and what a host needs to run the fork."
 ---
 
 # Docker and cron
@@ -26,13 +26,15 @@ database, queue or worker service: ESMira stores files plus one embedded SQLite 
 
 ## Cron jobs
 
-Both use the **absolute** PHP path, because cron's minimal `PATH` excludes `/usr/local/bin` and a bare `php`
+All use the **absolute** PHP path, because cron's minimal `PATH` excludes `/usr/local/bin` and a bare `php`
 fails with "php: not found", silently, so the sender would never run.
 
 | Schedule | Command | Log |
 | --- | --- | --- |
 | Every minute | `/usr/local/bin/php /var/www/html/cli/push_send_due.php` | `/var/log/esmira_push.log` |
 | Hourly (`0 * * * *`) | `/usr/local/bin/php /var/www/html/cli/wearables_sync.php` | `/var/log/esmira_wearables.log` |
+| Every minute | `/usr/local/bin/php /var/www/html/cli/channels_dispatch.php` (due questionnaires for [chat channels](../backend/chat-channels.md)) | `/var/log/esmira_channels.log` |
+| Every minute | `/usr/local/bin/php /var/www/html/cli/telegram_poll.php` (long-polls Telegram for ~55 s; exits at once without a bot or with the webhook transport) | `/var/log/esmira_channels.log` |
 
 `docker-entrypoint.sh` fixes volume ownership, runs the storage migrations (`MigrationManager::autoRun()`),
 starts cron, then runs Apache in the foreground. The researcher panel's **sender heartbeat** warns if the

@@ -257,4 +257,27 @@ class ConversationEngineTest extends TestCase {
 		$this->assertSame('140', $r->submission['responses']['vas']);
 		$this->assertArrayNotHasKey('task', $r->submission['responses']);
 	}
+
+	/** A WhatsApp-like profile (3 reply buttons, no edits, no web views) needs no engine change. */
+	public function test_whatsapp_like_profile_uses_numbered_replies() {
+		$e = new ConversationEngine(new ChannelCapabilities([
+			'maxButtons' => 3, 'maxButtonsPerRow' => 3, 'maxButtonLabel' => 20, 'supportsMessageEdit' => false,
+			'supportsVoice' => true, 'supportsPhoto' => true, 'supportsLinks' => true, 'maxTextLength' => 4096,
+		]), ['model' => 'WhatsApp']);
+		$state = [];
+		$q = $this->questionnaire([
+			['name' => 'alone', 'responseType' => 'binary', 'required' => true],
+			['name' => 'mood', 'responseType' => 'likert', 'likertSteps' => 7, 'required' => true],
+			['name' => 'with', 'responseType' => 'list_multiple', 'listChoices' => ['A', 'B', 'C'], 'required' => true],
+		]);
+		$r = $e->start($state, $q, [], self::NOW);
+		$this->assertCount(2, end($r->messages)->buttons[0]); // yes/no fit as buttons
+		$r = $this->press($e, $state, $r, 'Yes');
+		$this->assertStringContainsString('7. 7', end($r->messages)->text); // 7 options > 3 buttons → numbered
+		$r = $this->say($e, $state, '6');
+		$this->assertStringContainsString('separated by commas', end($r->messages)->text); // no edits → typed multi-select
+		$r = $this->say($e, $state, '1,2');
+		$this->assertSame(['alone' => '1', 'mood' => '6', 'with~1' => true, 'with~2' => true, 'with~3' => false],
+			array_intersect_key($r->submission['responses'], array_flip(['alone', 'mood', 'with~1', 'with~2', 'with~3'])));
+	}
 }
