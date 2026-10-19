@@ -100,3 +100,14 @@ test('engine: changing the count back to 0 drops a stale duration answer', () =>
   assert.equal(next?.id, 'eveningKss');
   assert.equal(engine.getResponseMap()[DURATION], undefined);
 });
+
+test('rich-text page headers become plain section labels', async () => {
+  const { headerText } = await import('./esmiraAdapter.ts');
+  assert.equal(headerText('<p><b>5 · Media</b> &amp; device</p>'), '5 · Media & device');
+  assert.equal(headerText(undefined), '');
+  const s = adaptQuestionnaire(1, {
+    internalId: 1, title: 'T',
+    pages: [{ header: '<p><b>Part 1</b></p>', inputs: [{ name: 'a', responseType: 'text_input' }] }],
+  } as EsmiraQuestionnaire, 0);
+  assert.equal(s.sections?.[0].description, 'Part 1');
+});

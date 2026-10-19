@@ -174,7 +174,8 @@ $study = [
 	'langCodes' => ['en'],
 	'defaultLang' => 'en',
 	'studyDescription' => '<p>A demo study that contains <b>every ESMira question type</b>, for testing the web app and Telegram side by side. Not for real participants.</p>',
-	'informedConsentForm' => '<p>This is a test study. Answers are stored on this server and only used to check that every question type works.</p>',
+	// informedConsentForm is a plain-text field (the PWA shows it verbatim).
+	'informedConsentForm' => 'This is a test study. Answers are stored on this server and only used to check that every question type works.',
 	'channels' => ['telegram' => ['enabled' => true]],
 	'publicStatistics' => ['charts' => []],
 	'personalStatistics' => ['charts' => []],
