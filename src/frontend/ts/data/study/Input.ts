@@ -68,6 +68,13 @@ export class Input extends DataStructure {
 	// regular weight, muted) so it reads as a helper rather than part of the question.
 	// Web/PWA client only — native apps ignore it. Empty for every item by default.
 	public description = this.translatable("description", "")
+	// Accessibility content supplied by the researcher (web/PWA client only; native apps
+	// ignore it). imageAlt: text alternative for an "image" input. screenReaderLabel:
+	// announced by screen readers in place of the question text, e.g. to describe a scale
+	// or slider. spokenText: read aloud by a "Listen" button on the question.
+	public imageAlt = this.translatable("imageAlt", "")
+	public screenReaderLabel = this.translatable("screenReaderLabel", "")
+	public spokenText = this.translatable("spokenText", "")
 	public url = this.translatable("url", "")
 	// "webapp" type: instructions shown on the launch card (the item `text` is the title,
 	// `url` is the launch URL). Empty for every other input type.

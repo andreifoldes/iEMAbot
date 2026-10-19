@@ -213,7 +213,13 @@ export class InputOptionDesigner {
 			title: Lang.get("input_image"),
 			helpUrl: "https://github.com/KL-Psychological-Methodology/ESMira/wiki/Questionnaire-Items#Image",
 			category: "passive",
-			view: () => [this.urlOption()]
+			view: () => [
+				this.urlOption(),
+				<div class="stretched">
+					{this.inputOptionElement(this.input.imageAlt, Lang.get("input_image_alt"), "big")}
+					<small>{Lang.get("input_image_alt_desc")}</small>
+				</div>
+			]
 		},
 		"likert": {
 			title: Lang.get("input_likert"),
@@ -607,6 +613,18 @@ export class InputOptionDesigner {
 								<small>{Lang.get("input_description")}{NotCompatibleIcon("Android", "iOS")}</small>
 								{RichText(this.input.description)}
 								{ObservableLangChooser(this.study)}
+							</div>
+							<div class="fakeLabel line">
+								<small>{Lang.get("input_screen_reader_label")}{NotCompatibleIcon("Android", "iOS")}</small>
+								<input type="text" class="big" {...BindObservable(this.input.screenReaderLabel)} />
+								{ObservableLangChooser(this.study)}
+								<small>{Lang.get("input_screen_reader_label_desc")}</small>
+							</div>
+							<div class="fakeLabel line">
+								<small>{Lang.get("input_spoken_text")}{NotCompatibleIcon("Android", "iOS")}</small>
+								<input type="text" class="big" {...BindObservable(this.input.spokenText)} />
+								{ObservableLangChooser(this.study)}
+								<small>{Lang.get("input_spoken_text_desc")}</small>
 							</div>
 						</div>
 				}),

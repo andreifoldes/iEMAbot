@@ -6,10 +6,11 @@
  * the footer (handled in App), matching the iEMAbot chat experience.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, Check, Play, Mic, PenLine } from 'lucide-react';
+import { ChevronRight, Check, Play, Mic, PenLine, Volume2, Square } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { speak, speechAvailable, stopSpeaking } from '../lib/speech';
 import type { PreloadedQuestion } from '../types';
 
 const OPTION_ICONS: Record<string, string> = {
@@ -32,6 +33,29 @@ const subtextClass = (_textSizeClass: string): string => 'text-base';
 // (a screen reader would otherwise announce literal "<div>" markup).
 const plainText = (html: string): string =>
   html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** "Listen" button: reads the researcher's `spoken_text` aloud; tap again to stop. */
+function ListenButton({ text }: { text: string }) {
+  const [speaking, setSpeaking] = useState(false);
+  // Stop reading when the question goes away.
+  useEffect(() => stopSpeaking, []);
+  if (!speechAvailable()) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (speaking) { stopSpeaking(); setSpeaking(false); return; }
+        setSpeaking(true);
+        speak(text, document.documentElement.lang, () => setSpeaking(false));
+      }}
+      aria-pressed={speaking}
+      className="mb-3 inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-secondary-container text-on-secondary-container font-semibold text-sm active:scale-95 transition-all"
+    >
+      {speaking ? <Square size={16} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
+      {speaking ? 'Stop' : 'Listen'}
+    </button>
+  );
+}
 
 interface Props {
   question: PreloadedQuestion;
@@ -100,7 +124,11 @@ export function SurveyInputs({
             taskActions={taskActions}
           />
         ) : (
-        <div className="bg-white dark:bg-surface-container-lowest border-l-4 border-primary p-5 rounded-xl rounded-tl-none shadow-lg w-full">
+        <div
+          role="group"
+          aria-label={question.aria_label || plainText(question.text) || undefined}
+          className="bg-white dark:bg-surface-container-lowest border-l-4 border-primary p-5 rounded-xl rounded-tl-none shadow-lg w-full"
+        >
           {question.type === 'info' ? (
             <div
               className={cn('text-on-surface leading-relaxed esmira-rich', textSizeClass)}
@@ -137,6 +165,7 @@ export function SurveyInputs({
               dangerouslySetInnerHTML={{ __html: question.subtext }}
             />
           )}
+          {question.spoken_text && <ListenButton key={question.id} text={question.spoken_text} />}
           {question.type !== 'info' && !question.required && (
             <p className="text-xs text-on-surface-variant italic mb-2">(Optional)</p>
           )}

@@ -88,6 +88,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+/** Escape a value for use inside a double-quoted HTML attribute. */
+export function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** Map a single ESMira input to a PreloadedQuestion, or null if unsupported. */
 function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   const rt = input.responseType;
@@ -103,6 +108,8 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
     id: input.name,
     text: input.text ?? '',
     subtext: hasDescText ? descHtml : '',
+    aria_label: input.screenReaderLabel?.trim() || undefined,
+    spoken_text: input.spokenText?.trim() || undefined,
     required: input.required ?? false,
     // Every ESMira `text` field is authored in the rich-text (TipTap) editor, so it
     // may contain HTML (<div>/<br>/<b>…) regardless of input type. Flag it globally
@@ -236,7 +243,7 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
       return {
         ...base,
         type: 'info',
-        text: `${input.text ?? ''}${input.url ? `<br/><img src="${input.url}" alt="" style="max-width:100%;border-radius:12px"/>` : ''}`,
+        text: `${input.text ?? ''}${input.url ? `<br/><img src="${escapeAttr(input.url)}" alt="${escapeAttr(input.imageAlt ?? '')}" style="max-width:100%;border-radius:12px"/>` : ''}`,
       };
     case 'text':
     default:

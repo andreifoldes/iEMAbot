@@ -77,6 +77,15 @@ Fork-added input fields: `description` (shown as muted "Explanation" text), `web
 `maxLength` (audio cap, seconds) and `minLength` (typing floor). `maxLength` and `minLength` have no
 designer field today; they are settable only in the study source.
 
+Researcher-supplied accessibility fields, all translatable per language and ignored by the native
+apps. They have designer fields on the question's edit page:
+
+| Field | Used by | Effect in the PWA |
+|---|---|---|
+| `imageAlt` | `image` | Alt text for the picture (empty means decorative). |
+| `screenReaderLabel` | any | The name screen readers announce for the question group, e.g. to explain a scale. The visible text stays available. |
+| `spokenText` | any | Adds a **Listen** button that reads the text aloud with the browser's speech synthesis. Started and stopped by the participant only. |
+
 ### New response columns
 
 For `record_keystrokes`, `ResponsesIndex.php` creates three columns: `<name>`, `<name>~text` and
