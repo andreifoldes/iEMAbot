@@ -22,6 +22,8 @@ import {DashElement} from "../components/DashElement";
 import fallbackSystemSvg from "../../imgs/dashIcons/fallback.svg?raw"
 import pluginsSvg from "../../imgs/dashIcons/plugins.svg?raw"
 import snapshotsSvg from "../../imgs/dashIcons/snapshots.svg?raw"
+import telegramSvg from "../../imgs/dashIcons/telegram.svg?raw"
+import {ServerInfo} from "../constants/ServerInfo";
 
 type ReleaseType = {
 	version: string,
@@ -231,6 +233,15 @@ export class Content extends SectionContent {
 					},
 					highlight: this.pluginsNeedsAttention,
 					href: this.getUrl("plugins")
+				}),
+				DashElement(null, {
+					small: true,
+					template: {
+						title: Lang.get("messaging_channels"),
+						icon: m.trust(telegramSvg),
+						msg: ServerInfo.telegramBotUsername ? `@${ServerInfo.telegramBotUsername}` : undefined
+					},
+					href: this.getUrl("messagingChannels")
 				}),
 				(tools?.canIssueFallbackTokens) &&
 				DashElement(null, {

@@ -115,7 +115,14 @@ export class Content extends SectionContent {
 								<small>{Lang.get('Web')}</small>
 								<input type="checkbox" {...BindObservable(study.publishedWeb)} />
 							</label>
+							&nbsp;
+							<label class="middle noDesc" title={Lang.get('telegram_availability_info')}>
+								<small>{Lang.get('telegram')}</small>
+								<input type="checkbox" {...BindObservable(study.channels.telegram.enabled)} />
+							</label>
 							{ServerInfo.webOnlyMode && <div><small><i>{Lang.get('web_only_disabled_note')}</i></small></div>}
+							{!ServerInfo.telegramConfigured && study.channels.telegram.enabled.get() &&
+								<div><small class="highlight">{Lang.get('telegram_not_set_up_on_server')}</small></div>}
 						</div>
 				}),
 				DashElement("vertical", {
