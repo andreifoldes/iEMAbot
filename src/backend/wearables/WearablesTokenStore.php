@@ -3,12 +3,11 @@ declare(strict_types=1);
 
 namespace backend\wearables;
 
-use backend\Configs;
+use backend\channels\SecretBox;
 use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\Main;
 use backend\Paths;
-use Throwable;
 
 /**
  * Persists per-participant OAuth tokens, one file per (study, participant, provider),
@@ -109,46 +108,13 @@ class WearablesTokenStore {
 		return (string) $merged['access_token'];
 	}
 
-	// --- encryption --------------------------------------------------------------
-
-	private static function key(): ?string {
-		if(!function_exists('sodium_crypto_secretbox'))
-			return null;
-		$b64 = (string) Configs::get('wearables_token_key');
-		if($b64 === '')
-			return null;
-		$key = base64_decode($b64, true);
-		return ($key !== false && strlen($key) === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) ? $key : null;
-	}
+	// --- encryption (shared libsodium helper, keyed by `wearables_token_key`) -----
 
 	private static function encrypt(string $plain): string {
-		$key = self::key();
-		if($key === null)
-			return 'p0:' . $plain; // plaintext fallback (server has no token key configured)
-		$nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-		$cipher = sodium_crypto_secretbox($plain, $nonce, $key);
-		return 'v1:' . base64_encode($nonce . $cipher);
+		return SecretBox::encrypt($plain, 'wearables_token_key');
 	}
 
 	private static function decrypt(string $blob): ?string {
-		if(strncmp($blob, 'p0:', 3) === 0)
-			return substr($blob, 3);
-		if(strncmp($blob, 'v1:', 3) !== 0)
-			return null;
-		$key = self::key();
-		if($key === null)
-			return null;
-		$raw = base64_decode(substr($blob, 3), true);
-		if($raw === false || strlen($raw) < SODIUM_CRYPTO_SECRETBOX_NONCEBYTES)
-			return null;
-		$nonce  = substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-		$cipher = substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
-		try {
-			$plain = sodium_crypto_secretbox_open($cipher, $nonce, $key);
-		}
-		catch(Throwable $e) {
-			return null;
-		}
-		return $plain === false ? null : $plain;
+		return SecretBox::decrypt($blob, 'wearables_token_key');
 	}
 }

@@ -193,6 +193,50 @@ class PathsFS {
 		return self::folderParticipantVariables($studyId) . Paths::makeUrlFriendly($userId) . '.json';
 	}
 
+	// --- Messaging channels (Telegram; later WhatsApp). Participant bindings and their
+	// conversation state live under the study folder (captured by snapshots/backups); the
+	// chat → participant index and pre-enrolment state are global because an incoming
+	// message carries only the chat address. Chat addresses are never stored in clear:
+	// file names use an HMAC and binding files hold them encrypted (channels/SecretBox).
+
+	static function folderChannelBindings(int $studyId): string {
+		return self::folderStudies() . "$studyId/.channel_bindings/";
+	}
+	/** Binding of one participant to a chat ({channel, chatRef (encrypted), lang, tz, ...}). */
+	static function fileChannelBinding(int $studyId, string $userId): string {
+		return self::folderChannelBindings($studyId) . Paths::makeUrlFriendly($userId) . '.json';
+	}
+	/** Conversation + schedule state of one bound participant (locked while handling an update). */
+	static function fileChannelState(int $studyId, string $userId): string {
+		return self::folderChannelBindings($studyId) . Paths::makeUrlFriendly($userId) . '.state';
+	}
+	static function folderChannelsRoot(): string {
+		return self::folderData() . '.channels/';
+	}
+	static function folderChannel(string $channel): string {
+		return self::folderChannelsRoot() . Paths::makeSafe($channel) . '/';
+	}
+	/** chat HMAC → {studyId, userId} of the active binding. */
+	static function fileChannelIndex(string $channel, string $chatHash): string {
+		return self::folderChannel($channel) . 'index/' . Paths::makeSafe($chatHash) . '.json';
+	}
+	/** Enrolment progress of a chat that has not joined a study yet. */
+	static function fileChannelEnrolment(string $channel, string $chatHash): string {
+		return self::folderChannel($channel) . 'enrol/' . Paths::makeSafe($chatHash) . '.json';
+	}
+	/** Transport state of a channel (e.g. Telegram getUpdates offset, processed update ids). */
+	static function fileChannelTransport(string $channel): string {
+		return self::folderChannel($channel) . 'transport.json';
+	}
+	/** Short invite codes → {studyId, accessKey, pid?, expires}. */
+	static function fileChannelInvite(string $code): string {
+		return self::folderChannelsRoot() . 'invites/' . Paths::makeSafe($code) . '.json';
+	}
+	/** Global dispatcher heartbeat ({lastRunMs, bindings, started, sent}). */
+	static function fileChannelsHeartbeat(): string {
+		return self::folderChannelsRoot() . 'heartbeat.json';
+	}
+
 	// OAuth CSRF states are global (the provider callback carries only `state`, not a
 	// study id); the state file content records which study/participant it belongs to.
 	static function folderWearablesOAuthStates(): string {

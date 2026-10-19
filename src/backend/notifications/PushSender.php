@@ -5,10 +5,8 @@ namespace backend\notifications;
 
 use backend\Configs;
 use backend\FileSystemBasics;
-use backend\fileSystem\loader\UserDataLoader;
 use backend\fileSystem\PathsFS;
 use backend\Main;
-use backend\wearables\WearablesEventStore;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 use Throwable;
@@ -72,8 +70,6 @@ class PushSender {
 			if(!is_dir($folder))
 				continue;
 			$studiesProcessed++;
-			$hasSensorTriggers = SensorTriggerScheduler::hasTriggers($study);
-			$hasVariableFallbacks = $hasSensorTriggers && !empty(SensorTriggerScheduler::variableNames($study));
 
 			foreach(array_diff(scandir($folder), ['.', '..']) as $entry) {
 				if(self::isStateFile($entry))
@@ -86,42 +82,16 @@ class PushSender {
 				$userId = (string) ($data['userId'] ?? $entry);
 				$tz     = (int) ($data['tzOffset'] ?? 0);
 
-				// Prefer the participant's real join time (and read completion state)
-				// from UserData; fall back to the subscribe time if they haven't
-				// submitted yet (UserData is created on first submission).
-				$anchor = (int) ($data['created'] ?? $now);
-				$lastDataSetTime = -1;
-				$userDataPath = PathsFS::fileUserData($studyId, $userId);
-				if(file_exists($userDataPath)) {
-					try {
-						$ud = UserDataLoader::import(file_get_contents($userDataPath));
-						if(!empty($ud->joinedTime))
-							$anchor = (int) $ud->joinedTime;
-						$lastDataSetTime = (int) $ud->lastDataSetTime;
-					}
-					catch(Throwable $e) { /* corrupt/unreadable — use subscribe time */ }
-				}
-
 				$stateFile = $file . '.state';
 				$state     = self::readJsonFile($stateFile);
-				$cursor    = (is_array($state) && isset($state['cursor'])) ? (int) $state['cursor'] : $now;
-				$realized  = (is_array($state) && isset($state['realized']) && is_array($state['realized'])) ? $state['realized'] : [];
+				$schedule  = is_array($state) ? $state : [];
 				// Per-occurrence "already sent" ledger (key => sentAtMs). Belt-and-suspenders
 				// over the cursor: the exact same notification (type:qid:sendTime) is never
 				// queued twice, even across cursor resets. Pruned to a rolling window below.
 				$sent      = (is_array($state) && isset($state['sent']) && is_array($state['sent'])) ? $state['sent'] : [];
 
-				$occurrences = PushScheduler::computeDueOccurrences($study, $anchor, $tz, $cursor, $now, $lastDataSetTime, $realized);
-				// Sensor-contingent triggers (wearable webhooks + time fallback) carry their own
-				// idempotence ledger instead of relying on the cursor.
-				$sensorLedger = (is_array($state) && isset($state['sensor']) && is_array($state['sensor'])) ? $state['sensor'] : [];
-				if($hasSensorTriggers) {
-					$events = WearablesEventStore::readSince($studyId, $userId, $now - SensorTriggerScheduler::EVENT_LOOKBACK_MS);
-					$variables = $hasVariableFallbacks ? ParticipantVariableStore::read($studyId, $userId) : [];
-					$occurrences = array_merge($occurrences, SensorTriggerScheduler::computeOccurrences(
-						$study, $events, $anchor, $tz, $now, $lastDataSetTime, $sensorLedger, $variables
-					));
-				}
+				$due = DueOccurrences::compute($studyId, $userId, $study, $tz, (int) ($data['created'] ?? $now), $schedule, $now);
+				$occurrences = $due['occurrences'];
 				// Coalesce everything due for this participant in this run into ONE push so
 				// clients are never flooded. The constant tag (REMINDER_TAG) additionally makes
 				// each successive push replace the previous one, so at most one is ever visible.
@@ -148,7 +118,7 @@ class PushSender {
 				// stable across the per-minute runs) and the sent ledger (pruned to a
 				// rolling 48h window) whether or not anything was due.
 				$sent = self::pruneSentLedger($sent, $now);
-				try { FileSystemBasics::writeFile($stateFile, json_encode(['cursor' => $now, 'realized' => $realized, 'sent' => $sent, 'sensor' => $sensorLedger])); }
+				try { FileSystemBasics::writeFile($stateFile, json_encode(['cursor' => $now, 'realized' => $schedule['realized'], 'sent' => $sent, 'sensor' => $schedule['sensor']])); }
 				catch(Throwable $e) { /* non-fatal */ }
 			}
 		}
