@@ -12,12 +12,29 @@ namespace backend\wearables;
  * value, so sensor triggers cannot (yet) be conditioned on the value itself.
  */
 class WearablesEventKinds {
+	/**
+	 * Every Withings Notify data category (https://oauth.withings.com/developer-guide/v3/data-api/notifications/notification-content/).
+	 * Left out: 46 (profile changed), 53 (device set up) and 60 (survey answered) are account events, not data.
+	 * Most need a specific device; a participant without it simply never receives that event.
+	 */
 	const WITHINGS_APPLI = [
-		'weight'         => 1,
-		'blood_pressure' => 4,
-		'activity'       => 16,
-		'sleep'          => 44,
-		'ecg'            => 54,
+		'weight'               => 1,
+		'temperature'          => 2,
+		'blood_pressure'       => 4,
+		'activity'             => 16,
+		'sleep'                => 44,
+		'bed_in'               => 50, // Withings Sleep sensor: lay down
+		'bed_out'              => 51, // Withings Sleep sensor: got out of bed
+		'sleep_sensor_ready'   => 52, // Withings Sleep sensor: finished initial inflation
+		'ecg'                  => 54,
+		'ecg_failed'           => 55,
+		'glucose'              => 58,
+		'stethoscope'          => 61,
+		'hrv'                  => 62,
+		'urine'                => 63,
+		'bed_occupied'         => 98,  // 10-minute status, needs Live Sync on the Sleep sensor
+		'bed_empty'            => 99,  // idem
+		'bed_occupied_or_empty' => 100, // idem
 	];
 	const FITBIT_COLLECTION = [
 		'sleep'    => 'sleep',

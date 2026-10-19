@@ -29,8 +29,21 @@ export const WEARABLE_EVENTS: Record<string, { withings: number | null, fitbit: 
 	sleep:          { withings: 44, fitbit: "sleep",      googlehealth: true },
 	activity:       { withings: 16, fitbit: "activities", googlehealth: true },
 	weight:         { withings: 1,  fitbit: "body",       googlehealth: true },
-	blood_pressure: { withings: 4,  fitbit: null,         googlehealth: false },
-	ecg:            { withings: 54, fitbit: null,         googlehealth: false },
+	// Withings-only events. Keep in sync with WearablesEventKinds::WITHINGS_APPLI.
+	bed_in:                { withings: 50,  fitbit: null, googlehealth: false },
+	bed_out:               { withings: 51,  fitbit: null, googlehealth: false },
+	sleep_sensor_ready:    { withings: 52,  fitbit: null, googlehealth: false },
+	bed_occupied:          { withings: 98,  fitbit: null, googlehealth: false },
+	bed_empty:             { withings: 99,  fitbit: null, googlehealth: false },
+	bed_occupied_or_empty: { withings: 100, fitbit: null, googlehealth: false },
+	blood_pressure:        { withings: 4,   fitbit: null, googlehealth: false },
+	temperature:           { withings: 2,   fitbit: null, googlehealth: false },
+	glucose:               { withings: 58,  fitbit: null, googlehealth: false },
+	hrv:                   { withings: 62,  fitbit: null, googlehealth: false },
+	ecg:                   { withings: 54,  fitbit: null, googlehealth: false },
+	ecg_failed:            { withings: 55,  fitbit: null, googlehealth: false },
+	stethoscope:           { withings: 61,  fitbit: null, googlehealth: false },
+	urine:                 { withings: 63,  fitbit: null, googlehealth: false },
 }
 
 export class EventTrigger extends DataStructure {

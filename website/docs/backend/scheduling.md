@@ -78,7 +78,7 @@ as the cue of an event trigger).
 | Setting | Meaning |
 | --- | --- |
 | Provider | `any` connected wearable, `withings` or `fitbit`. (`googlehealth` exists in the backend as a hidden, untested placeholder; see [Wearables](./wearables.md#google-health-api).) |
-| New data of type | `sleep`, `activity`, `weight`, `blood_pressure` (Withings only), `ecg` (Withings only). The designer warns when the chosen provider has no webhook for the type. |
+| New data of type | `sleep`, `activity`, `weight`, plus Withings-only events: `bed_in`, `bed_out`, `sleep_sensor_ready`, `bed_occupied`, `bed_empty`, `bed_occupied_or_empty`, `blood_pressure`, `temperature`, `glucose`, `hrv`, `ecg`, `ecg_failed`, `stethoscope`, `urine`. The designer warns when the chosen provider has no webhook for the type. |
 | Only within a daily window | Ignore events outside `wearableWindowStart`–`wearableWindowEnd` (participant-local; may wrap midnight), e.g. 05:00–12:00 for a wake-up prompt. |
 | Max. prompts per day | `wearableMaxPerDay` (default 1) per participant and local day. |
 | Delay | The existing delay fields: fixed, or a stable pseudo-random value between `delayMinimumSec` and `delaySec`. |

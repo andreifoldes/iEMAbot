@@ -138,8 +138,9 @@ class WearablesWebhook {
 				WearablesRegistry::webhookUri($provider),
 				$kinds
 			);
-			if($subscribed < count($kinds))
-				Main::reportError(new WearablesException("only $subscribed of " . count($kinds) . " webhook subscriptions succeeded"), "Subscribing $provider webhooks incomplete:");
+			// Most Withings categories need a device the participant may not own, so a partial result is normal.
+			if($subscribed === 0)
+				Main::reportError(new WearablesException("none of " . count($kinds) . " webhook subscriptions succeeded"), "Subscribing $provider webhooks failed:");
 		}
 		catch(Throwable $e) {
 			Main::reportError($e, "Subscribing $provider webhooks failed:");
