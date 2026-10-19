@@ -266,6 +266,39 @@ class TelegramFlowTest extends BaseDataFolderTestSetup {
 		$this->assertSame('OggS-fake-voice-VOICE1', file_get_contents($file));
 	}
 
+	function test_checkin_offers_on_demand_questionnaires() {
+		$this->createStudy(json_decode(json_encode([
+			'id' => 4646, 'title' => 'Diary', 'published' => true, 'channels' => ['telegram' => ['enabled' => true]],
+			'questionnaires' => [
+				['internalId' => 991, 'title' => 'Evening diary', 'completableOncePerDay' => true, 'pages' => [['inputs' => [
+					['name' => 'ok', 'responseType' => 'binary', 'required' => true],
+				]]]],
+				['internalId' => 992, 'title' => 'Cognitive Trials', 'pages' => [['inputs' => [['name' => 'cogRt', 'responseType' => 'text_input']]]]],
+			],
+		])), [991 => new ResponsesIndex(['ok']), 992 => new ResponsesIndex(['cogRt'])]);
+		$index = Configs::getDataStore()->getStudyAccessIndexStore();
+		$index->add(4646);
+		$index->saveChanges();
+
+		$now = Main::getMilliseconds();
+		$this->text('/start s4646', $now);
+		$this->press(ButtonData::enrol('tz', 'd'), $now);
+		$this->calls = [];
+		$this->text('/checkin', $now);
+		$keyboard = json_encode($this->calls[0][1]['reply_markup'] ?? []);
+		$this->assertStringContainsString('Evening diary', $keyboard);
+		$this->assertStringNotContainsString('Cognitive Trials', $keyboard);
+
+		$this->press(ButtonData::openQuestionnaire(991), $now);
+		$this->press($this->buttonData('Yes'), $now);
+		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
+
+		// once per day: nothing left to offer today
+		$this->calls = [];
+		$this->text('/checkin', $now + 60000);
+		$this->assertStringContainsString('nothing to answer right now', $this->sentTexts());
+	}
+
 	function test_disabled_study_is_refused() {
 		$this->createStudy((object) ['id' => 4343, 'title' => 'Web only', 'published' => true]);
 		$this->text('/start s4343', Main::getMilliseconds());

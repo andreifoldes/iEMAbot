@@ -9,6 +9,7 @@ use backend\channels\ConversationalChannel;
 use backend\channels\handoff\HandoffService;
 use backend\channels\InboundEvent;
 use backend\channels\OutboundMessage;
+use backend\channels\QuestionnaireAvailability;
 use backend\channels\store\ChannelBindingStore;
 use backend\channels\store\JsonFile;
 use backend\Configs;
@@ -130,9 +131,8 @@ class ConversationService {
 		$result = $engine->handle($state, $ev, $nowMs);
 		if($result->unhandled && !ConversationEngine::hasSession($state)) {
 			$this->channel->ack($ev->ackId);
-			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t(empty($state['queue']) ? 'no_active' : 'choose_q', $lang)));
-			if(!empty($state['queue']))
-				$this->offerQueue($binding, $state, $study);
+			if(!$this->offerOpen($binding, $state, $study, $nowMs))
+				$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('no_active', $lang)));
 			return;
 		}
 		if($result->unhandled)
@@ -165,11 +165,8 @@ class ConversationService {
 					$this->deliver($binding, $state, $engine->repeatPrompt($state));
 					return;
 				}
-				if(empty($state['queue'])) {
+				if(!$this->offerOpen($binding, $state, $study, $nowMs))
 					$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('no_active', $lang)));
-					return;
-				}
-				$this->offerQueue($binding, $state, $study);
 				return;
 			default:
 				$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('help', $lang)));
@@ -265,11 +262,12 @@ class ConversationService {
 		}
 	}
 
-	/** Open the next queued (or a chosen) questionnaire whose deadline has not passed. */
+	/**
+	 * Open the next queued questionnaire whose deadline has not passed — or, with $qid, that
+	 * questionnaire: from the queue, else when it is answerable on demand right now.
+	 */
 	private function openFromQueue(array $binding, array &$state, array $study, int $nowMs, int $qid = -1): void {
-		$queue = array_values(array_filter($state['queue'] ?? [], function($o) use ($nowMs) {
-			return empty($o['deadline']) || (int) $o['deadline'] > $nowMs;
-		}));
+		$queue = $this->liveQueue($state, $nowMs);
 		foreach($queue as $i => $occ) {
 			if($qid >= 0 && (int) $occ['qid'] !== $qid)
 				continue;
@@ -279,17 +277,51 @@ class ConversationService {
 			return;
 		}
 		$state['queue'] = $queue;
+		if($qid < 0)
+			return;
+		$q = ChannelStudies::questionnaire($study, $qid);
+		$availability = $q === null ? null : $this->availability($binding, $state, $q, $nowMs);
+		if($availability !== null && $availability['state'] === 'available')
+			$this->startQuestionnaire($binding, $state, $study, ['qid' => $qid, 'occKey' => $availability['occKey']], $nowMs);
+		else
+			$this->say((string) $binding['chatRef'], HtmlToChatText::escape(ChatStrings::t('no_active', (string) ($binding['lang'] ?? 'en'))));
 	}
 
-	private function offerQueue(array $binding, array $state, array $study): void {
-		$rows = [];
-		foreach(($state['queue'] ?? []) as $occ) {
+	/**
+	 * Offer buttons for every questionnaire that can be answered now (queued by the schedule
+	 * or open on demand, same rules as the PWA). Returns false when there is none.
+	 */
+	private function offerOpen(array $binding, array $state, array $study, int $nowMs): bool {
+		$titles = [];
+		foreach($this->liveQueue($state, $nowMs) as $occ) {
 			$q = ChannelStudies::questionnaire($study, (int) $occ['qid']);
 			if($q !== null)
-				$rows[(int) $occ['qid']] = [OutboundMessage::button(HtmlToChatText::truncate(HtmlToChatText::plain((string) ($q['title'] ?? '…')), 40), ButtonData::openQuestionnaire((int) $occ['qid']))];
+				$titles[(int) $occ['qid']] = (string) ($q['title'] ?? '');
 		}
-		if($rows)
-			$this->channel->send((string) $binding['chatRef'], new OutboundMessage(ChatStrings::t('choose_q', (string) ($binding['lang'] ?? 'en')), array_values($rows)));
+		foreach(($study['questionnaires'] ?? []) as $q) {
+			$qid = (int) ($q['internalId'] ?? 0);
+			if(isset($titles[$qid]) || ($q['title'] ?? '') === HandoffService::TRIALS_QN_TITLE)
+				continue;
+			if($this->availability($binding, $state, $q, $nowMs)['state'] === 'available')
+				$titles[$qid] = (string) ($q['title'] ?? '');
+		}
+		if(!$titles)
+			return false;
+		$rows = [];
+		foreach($titles as $qid => $title)
+			$rows[] = [OutboundMessage::button(HtmlToChatText::truncate(HtmlToChatText::plain($title) ?: '…', 40), ButtonData::openQuestionnaire($qid))];
+		$this->channel->send((string) $binding['chatRef'], new OutboundMessage(ChatStrings::t('choose_q', (string) ($binding['lang'] ?? 'en')), $rows));
+		return true;
+	}
+
+	private function liveQueue(array $state, int $nowMs): array {
+		return array_values(array_filter($state['queue'] ?? [], function($o) use ($nowMs) {
+			return empty($o['deadline']) || (int) $o['deadline'] > $nowMs;
+		}));
+	}
+
+	private function availability(array $binding, array $state, array $q, int $nowMs): array {
+		return QuestionnaireAvailability::compute($q, (int) $binding['joinedAt'], $nowMs, ChannelStudies::tzOffsetMin($binding, $nowMs), $state);
 	}
 
 	public function engine(array $binding, array $study, int $nowMs): ConversationEngine {
