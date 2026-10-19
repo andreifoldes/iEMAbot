@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
+import { useDialogA11y } from '../lib/useDialogA11y';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -33,6 +34,7 @@ interface Props {
 }
 
 export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
+  const dialogRef = useDialogA11y<HTMLDivElement>(true, onClose);
   const [t, setT] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
   const [gesturing, setGesturing] = useState(false);
 
@@ -195,7 +197,8 @@ export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
 
   return (
     <motion.div
-      ref={overlayRef}
+      ref={(el) => { overlayRef.current = el; dialogRef.current = el; }}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={alt || 'Enlarged image'}

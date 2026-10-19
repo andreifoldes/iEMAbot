@@ -49,6 +49,7 @@ import { enrollUrl, invitedParticipantId } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
+import { useDialogA11y } from './lib/useDialogA11y';
 import { loadA11yPrefs, saveA11yPrefs, TEXT_SIZE_ROOT_PERCENT, type TextSize } from './lib/a11yPrefs';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
@@ -191,52 +192,6 @@ function pickStr(o: any, keys: string[]): string {
   return '';
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
-
-/**
- * Accessibility for a modal dialog: on open, move focus into the dialog and trap Tab
- * within it; Escape closes it; on close, focus returns to whatever opened it. Returns a
- * ref to attach to the dialog's content element (give it tabIndex={-1} as a fallback).
- * onClose is read from a ref so the effect only re-runs when `open` toggles (no focus
- * stealing on inner re-renders).
- */
-function useDialogA11y<T extends HTMLElement>(open: boolean, onClose: () => void) {
-  const ref = useRef<T>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    if (!open) return;
-    const node = ref.current;
-    const opener = document.activeElement as HTMLElement | null;
-    const focusable = () =>
-      Array.from(
-        node?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-    (focusable()[0] ?? node)?.focus?.();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key === 'Tab') {
-        const els = focusable();
-        if (els.length === 0) { e.preventDefault(); return; }
-        const first = els[0], last = els[els.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
-    };
-    node?.addEventListener('keydown', onKey);
-    return () => {
-      node?.removeEventListener('keydown', onKey);
-      opener?.focus?.();
-    };
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  return ref;
-}
 
 export default function App() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -754,6 +709,7 @@ export default function App() {
   const contactDialogRef = useDialogA11y<HTMLDivElement>(contactOpen, () => setContactOpen(false));
   const gridMenuRef = useDialogA11y<HTMLDivElement>(gridMenuOpen, () => setGridMenuOpen(false));
   const specifyDialogRef = useDialogA11y<HTMLDivElement>(!!specify, () => handleCancelSpecify());
+  const webviewDialogRef = useDialogA11y<HTMLDivElement>(!!webview, () => setWebview(null));
 
   // ── Update studies: re-download the study config and flush the queue ──
   const updateStudies = async () => {
@@ -1612,7 +1568,7 @@ export default function App() {
   // ── Render ───────────────────────────────────────────────────
   return (
     <div className={cn(
-      'flex flex-col h-screen bg-surface overflow-hidden transition-colors duration-300',
+      'app-shell flex flex-col h-dvh bg-surface overflow-hidden transition-colors duration-300',
       dark && 'dark', highContrast && 'high-contrast',
     )}>
       {/* Wearable connect/disconnect result toast (auto-dismisses). */}
@@ -1627,7 +1583,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header aria-label={study?.title ?? 'iEMAbot Study'} className="fixed top-0 w-full z-50 bg-[#075E54] dark:bg-surface-container-lowest text-white dark:text-on-surface shadow-md flex items-center justify-between px-4 py-3">
+      <header aria-label={study?.title ?? 'iEMAbot Study'} className="app-header shrink-0 relative z-50 bg-[#075E54] dark:bg-surface-container-lowest text-white dark:text-on-surface shadow-md flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" aria-hidden="true" className="w-10 h-10 rounded-full shrink-0 object-cover" />
           <div className="flex flex-col min-w-0">
@@ -1641,7 +1597,7 @@ export default function App() {
       </header>
 
       {/* Chat area */}
-      <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="flex-1 mt-16 mb-20 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+      <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="flex-1 min-h-0 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
         <div className="flex justify-center my-2">
           <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[0.75rem] font-bold uppercase tracking-wider shadow-sm">Today</span>
         </div>
@@ -2063,7 +2019,7 @@ export default function App() {
       {/* Footer. Not on the smartphone-only invite page: its menu actions (contact, error report,
           notifications, wearables) all need a participant id, which that page never creates. */}
       {phase !== 'phone-only' && (
-      <footer aria-label="Message input" className="fixed bottom-0 left-0 right-0 z-50 bg-white/85 dark:bg-surface-container-lowest/85 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
+      <footer aria-label="Message input" className="app-footer shrink-0 relative z-50 bg-white/85 dark:bg-surface-container-lowest/85 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
         <div className="flex items-center gap-2">
           {/* Quick-actions grid menu */}
           <div className="relative shrink-0">
@@ -2156,7 +2112,7 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <motion.div ref={settingsDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title" initial={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }}
-              className="w-full max-w-md max-h-[85vh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
+              className="w-full max-w-md max-h-[85dvh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
               <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
                   {settingsView !== 'main' && (
@@ -2278,7 +2234,7 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}
               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <motion.div ref={aboutDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="about-dialog-title" initial={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }}
-                className="w-full max-w-md max-h-[85vh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
+                className="w-full max-w-md max-h-[85dvh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
                 <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                   <div className="flex items-center gap-2 min-w-0">
                     {aboutView !== 'main' && (
@@ -2383,7 +2339,7 @@ export default function App() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <motion.div ref={contactDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="contact-dialog-title" initial={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }}
-              className="w-full max-w-md max-h-[85vh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
+              className="w-full max-w-md max-h-[85dvh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
               <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/30 shrink-0">
                 <h2 id="contact-dialog-title" className="font-bold text-lg flex items-center gap-2"><MessageSquare size={20} aria-hidden="true" /> Contact researchers</h2>
                 <button onClick={() => setContactOpen(false)} aria-label="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
@@ -2484,6 +2440,11 @@ export default function App() {
       <AnimatePresence>
         {webview && (
           <motion.div
+            ref={webviewDialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="task-dialog-title"
             initial={reduceMotion ? { opacity: 1 } : { y: '100%' }}
             animate={{ y: 0, opacity: 1 }}
             exit={reduceMotion ? { opacity: 0 } : { y: '100%' }}
@@ -2491,7 +2452,7 @@ export default function App() {
             className="fixed inset-0 z-[110] bg-surface flex flex-col"
           >
             <header className="bg-surface-container-high text-on-surface px-4 py-3 flex items-center justify-between border-b border-outline-variant/30 shadow-sm shrink-0">
-              <h2 className="font-bold text-base truncate pr-2">{webview.title}</h2>
+              <h2 id="task-dialog-title" className="font-bold text-base truncate pr-2">{webview.title}</h2>
               <button
                 onClick={() => setWebview(null)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-surface-container-highest rounded-full text-sm font-semibold hover:brightness-95 active:scale-95 transition-all shrink-0"

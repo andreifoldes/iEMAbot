@@ -250,3 +250,18 @@ textarea:focus-visible {
   cursor: zoom-in;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Reflow for very short viewports (400 % zoom on a phone is about 320 x 256 CSS px,
+   WCAG 1.4.10): the header and footer stop reserving space and the whole page scrolls
+   as one document instead of leaving a sliver for the conversation. */
+@media (max-height: 30rem) {
+  .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .app-shell > main {
+    flex: none;
+    overflow: visible;
+  }
+}

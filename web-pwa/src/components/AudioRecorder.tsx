@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Pause, Play, Mic, Square, RotateCcw, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { useDialogA11y } from '../lib/useDialogA11y';
 import { newAudioIdentifier } from '../lib/audioUploads';
 import type { PreloadedQuestion } from '../types';
 
@@ -57,6 +58,7 @@ interface Props {
 }
 
 export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Props) {
+  const dialogRef = useDialogA11y<HTMLDivElement>(true, onCancel);
   const maxSec = question.max_recording_seconds ?? 300;
   // Picture-description prompts embed the image mid-text: the pitch before it
   // stays on the chat card, while the picture and the instructions after it
@@ -272,6 +274,8 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden="true" />
       <motion.div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}

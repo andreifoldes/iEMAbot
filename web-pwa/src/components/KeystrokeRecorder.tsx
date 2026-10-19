@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { useDialogA11y } from '../lib/useDialogA11y';
 import { KeystrokeRecorderCore, type CaptureMode } from '../lib/keystrokeCapture';
 import { newKeystrokeIdentifier } from '../lib/keystrokeUploads';
 import type { PreloadedQuestion } from '../types';
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: Props) {
+  const dialogRef = useDialogA11y<HTMLDivElement>(true, onCancel);
   const minChars = question.min_length ?? 0;
   // Picture-description prompts embed the image mid-text: the pitch before it
   // stays on the chat card, while the picture and the instructions after it
@@ -157,6 +159,8 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden="true" />
       <motion.div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={title}
