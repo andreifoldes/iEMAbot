@@ -43,6 +43,13 @@ RUN printf '0 * * * * www-data /usr/local/bin/php /var/www/html/cli/wearables_sy
 	&& chmod 0644 /etc/cron.d/esmira-wearables \
 	&& touch /var/log/esmira_wearables.log && chown www-data:www-data /var/log/esmira_wearables.log
 
+# Cron: chat channels (Telegram; see backend/channels/). The dispatcher opens questionnaires
+# that became due; the poller receives Telegram updates by long polling for ~55 s per run
+# (it exits at once when no bot is configured or the webhook transport is selected).
+RUN printf '* * * * * www-data /usr/local/bin/php /var/www/html/cli/channels_dispatch.php >> /var/log/esmira_channels.log 2>&1\n* * * * * www-data /usr/local/bin/php /var/www/html/cli/telegram_poll.php >> /var/log/esmira_channels.log 2>&1\n' > /etc/cron.d/esmira-channels \
+	&& chmod 0644 /etc/cron.d/esmira-channels \
+	&& touch /var/log/esmira_channels.log && chown www-data:www-data /var/log/esmira_channels.log
+
 # Enable mod rewrite
 RUN a2enmod rewrite & a2enmod md & a2enmod ssl
 RUN service apache2 restart

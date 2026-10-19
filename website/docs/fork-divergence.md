@@ -58,6 +58,7 @@ Upstream's participant UI is a Mithril web client with no scheduling. The fork a
 | --- | --- | --- |
 | Web Push with VAPID: subscribe, schedule, send, analytics | <span className="status status--shipped">Shipped</span> | [Web Push](./backend/web-push.md) |
 | Reminder suppression for already-completed surveys | <span className="status status--shipped">Shipped</span> | [Web Push](./backend/web-push.md#suppressing-reminders) |
+| Telegram delivery through a channel-adapter layer (one server-wide bot, Mini App handoff) | <span className="status status--partial">Partial</span> | [Chat channels](./backend/chat-channels.md) |
 | Server statistics, and statistics of studies without an access key, need a researcher login | <span className="status status--shipped">Shipped</span> | This page |
 | Wearables: Fitbit and Withings over OAuth 2.0 | <span className="status status--shipped">Shipped</span> | [Wearables](./backend/wearables.md) |
 | New endpoints: `push_*`, `wearables_*`, `client_info` | <span className="status status--shipped">Shipped</span> | [API reference](./backend/api-reference.md) |
@@ -82,7 +83,7 @@ Upstream's participant UI is a Mithril web client with no scheduling. The fork a
 
 | Feature | Status | Docs |
 | --- | --- | --- |
-| Dockerfile with PHP extensions, Composer, two cron jobs | <span className="status status--shipped">Shipped</span> | [Docker and cron](./deployment/docker-and-cron.md) |
+| Dockerfile with PHP extensions, Composer, cron jobs | <span className="status status--shipped">Shipped</span> | [Docker and cron](./deployment/docker-and-cron.md) |
 | `deploy.sh` / `ship.sh` build-gate-deploy flow | <span className="status status--shipped">Shipped</span> | [CI and release](./deployment/ci-and-release.md) |
 | Accessibility workflow | <span className="status status--shipped">Shipped</span> | [CI and release](./deployment/ci-and-release.md) |
 | Security audit workflow | <span className="status status--shipped">Shipped</span> | [Security audit](./deployment/security-audit.md) |

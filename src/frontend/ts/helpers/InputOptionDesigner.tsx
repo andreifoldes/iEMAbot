@@ -14,6 +14,7 @@ import { NotCompatibleIcon, PossibleDevices } from "../components/NotCompatibleI
 import { BtnAdd, BtnTrash } from "../components/Buttons";
 import { CodeEditor } from "../components/CodeEditor";
 import { RegexTextInput } from "../components/RegexTextInput";
+import { telegramSupportForType } from "./TelegramCompatibility";
 
 
 const InputCategories = {
@@ -631,6 +632,12 @@ export class InputOptionDesigner {
 			)
 		)
 	}
+	/** Marks types that are skipped or approximated in a Telegram chat, when the study uses Telegram. */
+	private withTelegramCompatibility(key: InputResponseType, entry: InputEntry, telegramEnabled: boolean): InputEntry {
+		if (!telegramEnabled || telegramSupportForType(key) == "native")
+			return entry
+		return { ...entry, notCompatible: [...(entry.notCompatible ?? []), "Telegram"] }
+	}
 	public createTypesView(
 		categoryView: (title: string, inputViews: Vnode<any, any>[]) => Vnode<any, any>,
 		inputView: (title: InputEntry, isActive: boolean, onclick: () => void) => Vnode<any, any> | null
@@ -638,12 +645,13 @@ export class InputOptionDesigner {
 		const categoryViews: Record<string, Vnode<any, any>[]> = {}
 
 		const selectedType = this.input.responseType.get()
+		const telegramEnabled = this.study.channels.telegram.enabled.get()
 		for (const key of this.sortedInputTypeKeys) {
 			const entry = this.inputTypes[key];
 			if (!categoryViews.hasOwnProperty(entry.category))
 				categoryViews[entry.category] = []
 
-			const view = inputView(entry, key == selectedType, () => { this.input.responseType.set(key) })
+			const view = inputView(this.withTelegramCompatibility(key, entry, telegramEnabled), key == selectedType, () => { this.input.responseType.set(key) })
 			if (view)
 				categoryViews[entry.category].push(view)
 		}

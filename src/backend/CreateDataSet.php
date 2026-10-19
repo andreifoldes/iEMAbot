@@ -477,6 +477,9 @@ class CreateDataSet {
 					case 'Web-NoJs':
 						$statistics->incrementWeb($newUserCount);
 						break;
+					case 'Telegram': // chat channels (backend/channels): counted in the user total only
+					case 'WhatsApp':
+						break;
 					default:
 						return false;
 				}

@@ -15,6 +15,7 @@ import publishSvg from "../../imgs/dashIcons/publish.svg?raw"
 import rewardsSvg from "../../imgs/dashIcons/rewards.svg?raw"
 import settingsSvg from "../../imgs/dashIcons/settings.svg?raw"
 import wearablesSvg from "../../imgs/dashIcons/participate.svg?raw"
+import telegramSvg from "../../imgs/dashIcons/telegram.svg?raw"
 import {Study} from "../data/study/Study";
 import {ObservableLangChooser} from "../components/ObservableLangChooser";
 import {ObserverId} from "../observable/BaseObservable";
@@ -102,6 +103,14 @@ export class Content extends SectionContent {
 			DashElement(null, {template: {title: Lang.get("reward_system"), icon: m.trust(rewardsSvg), noCompatibilityIcon: ["Web"] }, href: this.getUrl("rewards")}),
 			DashElement(null, {template: {title: Lang.get("push_notifications"), icon: m.trust(alarmsSvg) }, href: this.getUrl("pushNotifications")}),
 			DashElement(null, {template: {title: Lang.get("wearables"), icon: m.trust(wearablesSvg) }, href: this.getUrl("wearables")}),
+			DashElement(null, {
+				template: {
+					title: Lang.get("telegram"),
+					icon: m.trust(telegramSvg),
+					msg: this.getStudyOrThrow().channels.telegram.enabled.get() ? undefined : Lang.get("disabled")
+				},
+				href: this.getUrl("telegram")
+			}),
 			DashElement(null, {template: {title: Lang.get("study_settings"), icon: m.trust(settingsSvg) }, href: this.getUrl("studySettings")}),
 			DashElement(null, {template: {title: Lang.get("edit_source") }, href: this.getUrl("source")}),
 		)

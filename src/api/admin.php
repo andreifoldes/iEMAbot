@@ -79,6 +79,8 @@ $classIndex = [
 	'MarkStudyAsUpdated' => 'backend\admin\features\writePermission\MarkStudyAsUpdated',
 	'GetOutboundFallbackUrls' => 'backend\admin\features\writePermission\GetOutboundFallbackUrls',
 	'GetDuplicateAccessKeys' => 'backend\admin\features\writePermission\GetDuplicateAccessKeys',
+	'GetTelegramStudyInfo' => 'backend\admin\features\writePermission\GetTelegramStudyInfo',
+	'CreateTelegramInvite' => 'backend\admin\features\writePermission\CreateTelegramInvite',
 	
 	//create
 	'CreateStudy' => 'backend\admin\features\createPermission\CreateStudy',
@@ -111,6 +113,11 @@ $classIndex = [
 	'SetupFallbackSystem' => 'backend\admin\features\adminPermission\SetupFallbackSystem',
 	'PingFallbackServer' => 'backend\admin\features\adminPermission\PingFallbackServer',
 	'SynchAllStudiesToFallback' => 'backend\admin\features\adminPermission\SynchAllStudiesToFallback',
+	'GetTelegramStatus' => 'backend\admin\features\adminPermission\GetTelegramStatus',
+	'SaveTelegramToken' => 'backend\admin\features\adminPermission\SaveTelegramToken',
+	'RemoveTelegramToken' => 'backend\admin\features\adminPermission\RemoveTelegramToken',
+	'SetTelegramTransport' => 'backend\admin\features\adminPermission\SetTelegramTransport',
+	'SetChannelsBaseUrl' => 'backend\admin\features\adminPermission\SetChannelsBaseUrl',
 	'DeletePlugin' => 'backend\admin\features\adminPermission\DeletePlugin',
 	'InstallPlugin' => 'backend\admin\features\adminPermission\InstallPlugin',
 	'ListPlugins' => 'backend\admin\features\adminPermission\ListPlugins',

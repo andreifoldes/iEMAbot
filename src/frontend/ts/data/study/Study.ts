@@ -9,6 +9,7 @@ import { Input, InputMediaTypes } from "./Input";
 import { RepairStudy } from "../../helpers/RepairStudy";
 import { Lang } from "../../singletons/Lang";
 import { PluginContainer } from "./PluginContainer";
+import { StudyChannels } from "./StudyChannels";
 
 export class Study extends DataStructure implements TranslatableRootInterface {
 	public lastChanged: number
@@ -97,6 +98,9 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	public publicStatistics = this.object("publicStatistics", Statistics)
 	public personalStatistics = this.object("personalStatistics", Statistics)
 	public pluginData = this.object("pluginData", PluginContainer)
+	// Messaging channels (currently Telegram, see backend/channels/). The backend reads
+	// channels.telegram.enabled; defaults are omitted from the saved JSON.
+	public channels = this.object("channels", StudyChannels)
 
 	constructor(data: DataStructureInputType, parent: BaseObservable<ObservableTypes> | null, lastChanged: number, repair: RepairStudy | null) {
 		if (repair != null && !repair.repairStudy(data))

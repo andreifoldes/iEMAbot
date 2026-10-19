@@ -40,6 +40,9 @@ import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatu
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
 import { KeystrokeRecorder } from './components/KeystrokeRecorder';
+import {
+  cognitiveSummaryValue, cognitiveTrialRows, newCognitiveSession, TRIALS_QN_TITLE, type M2c2Complete,
+} from './lib/cognitiveTrials';
 import { InstallPrompt } from './components/InstallPrompt';
 import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
@@ -76,12 +79,6 @@ interface ChatMsg {
   qid?: string;
 }
 
-interface M2c2Complete {
-  type: string;
-  assessment?: string;
-  summary?: { n_trials?: number; duration_s?: number | null; correct_count?: number | null };
-  data?: unknown;
-}
 
 const TEXT_SIZE_CLASS: Record<TextSize, string> = {
   normal: 'text-[15px]',
@@ -160,8 +157,6 @@ function generateUserId(): string {
   return `u${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
 }
 
-// Hidden questionnaire used as the tabular sink for cognitive trial rows.
-const TRIALS_QN_TITLE = 'Cognitive Trials';
 
 /** localStorage flag marking that this device has already seen the study's tutorial
  *  overview (so it only auto-shows on the participant's first visit). */
@@ -176,23 +171,6 @@ function countQuestions(q: EsmiraQuestionnaire): number {
   );
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function pickNum(o: any, keys: string[]): number | '' {
-  for (const k of keys) {
-    const v = o?.[k];
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(+v)) return +v;
-  }
-  return '';
-}
-function pickStr(o: any, keys: string[]): string {
-  for (const k of keys) {
-    const v = o?.[k];
-    if (v !== undefined && v !== null) return typeof v === 'object' ? JSON.stringify(v) : String(v);
-  }
-  return '';
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Accessibility for a modal dialog: on open, move focus into the dialog and trap Tab
@@ -1475,8 +1453,7 @@ export default function App() {
     const engine = engineRef.current;
     if (!engine) return;
     const q = engine.session.questions.find((x) => x.id === qid);
-    const s = payload.summary || {};
-    const session = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `s${Date.now()}`;
+    const session = newCognitiveSession();
     if (q) {
       pushBot(q.title || 'Cognitive task', false, qid);
       // Participant sees only a neutral confirmation — no performance feedback.
@@ -1486,28 +1463,15 @@ export default function App() {
     // Store a compact summary (incl. the session id, to join the trial rows) in
     // the cognitive item's own column.
     pvtLinesRef.current[qid] = pvtSummary((payload.data as { trials?: unknown } | undefined)?.trials);
-    const next = engine.respond(qid, JSON.stringify({ session, ...s }));
+    const next = engine.respond(qid, cognitiveSummaryValue(payload, session));
     setWebview(null);
     afterAdvance(next);
 
     // Write the tabular trial rows to the hidden "Cognitive Trials" questionnaire.
-    const data = payload.data as { trials?: unknown[] } | undefined;
-    const trials = Array.isArray(data?.trials) ? data!.trials : [];
     const trialsQn = study?.questionnaires.find((x) => x.title === TRIALS_QN_TITLE);
     const active = activeQRef.current;
-    if (!practiceRef.current && study && trialsQn && active && trials.length) {
-      const rows = trials.map((t, i) => ({
-        cogAssessment: payload.assessment ?? '',
-        cogSource: active.name,
-        cogInputName: qid,
-        cogSession: session,
-        cogTrialIndex: i,
-        cogRt: pickNum(t, ['response_time_ms', 'rt', 'reaction_time_ms', 'elapsed_test_time_ms']),
-        cogCorrect: pickStr(t, ['is_correct', 'correct']),
-        cogResponse: pickStr(t, ['response', 'user_response', 'selected', 'tapped']),
-        cogStimulus: pickStr(t, ['stimulus', 'condition', 'trial_type']),
-        cogRaw: JSON.stringify(t),
-      }));
+    const rows = active ? cognitiveTrialRows(payload, active.name, qid, session) : [];
+    if (!practiceRef.current && study && trialsQn && active && rows.length) {
       void submitCognitiveTrials({
         study, serverVersion, accessKey, userId,
         trialsInternalId: trialsQn.internalId, trialsName: trialsQn.title, rows,

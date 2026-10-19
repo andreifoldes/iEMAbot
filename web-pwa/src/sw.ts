@@ -26,14 +26,15 @@ clientsClaim();
 const manifest = self.__WB_MANIFEST;
 precacheAndRoute(manifest);
 
-// SPA navigation fallback → the precached index.html, but never intercept the PHP API.
+// SPA navigation fallback → the precached index.html, but never intercept the PHP API
+// or the chat-channel handoff page (its own entry, handoff.html — opened from Telegram).
 // Guarded: in `vite dev` the injected manifest is empty, and createHandlerBoundToURL
 // throws for a non-precached URL ("index.html"), which would fail SW evaluation and
 // stop it registering. Dev serves index.html directly, so the fallback isn't needed there.
 if (manifest && manifest.length) {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('index.html'), {
-      denylist: [/^\/esmira\/api\//],
+      denylist: [/^\/esmira\/api\//, /^\/pwa\/handoff/],
     }),
   );
 }

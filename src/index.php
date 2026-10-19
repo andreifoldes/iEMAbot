@@ -67,6 +67,10 @@ else if(isset($_GET['grayscaleDark']))
 else
 	$type = '';
 
+//Telegram channel: only public values (the bot's @username is shown to participants anyway)
+$telegramConfigured = (string) Configs::get('telegram_bot_token') !== '' ? 'true' : 'false';
+$telegramBotUsername = preg_replace('/[^A-Za-z0-9_]/', '', (string) Configs::get('telegram_bot_username'));
+
 $pluginStore = $dataStore->getPluginStore();
 $pluginsEnabled = $pluginStore->isEnabled();
 ?>
@@ -91,7 +95,7 @@ $pluginsEnabled = $pluginStore->isEnabled();
 		}
 	?></script>
 </head>
-<body onload="ESMira.init(<?php echo "'$jsKey','$servername',$serverVersion,'$accessKey','$lang','$type'," . (Configs::get('webOnlyMode') ? 'true' : 'false'); ?>)">
+<body onload="ESMira.init(<?php echo "'$jsKey','$servername',$serverVersion,'$accessKey','$lang','$type'," . (Configs::get('webOnlyMode') ? 'true' : 'false') . ",$telegramConfigured,'$telegramBotUsername'"; ?>)">
 
 <div id="header">
 	<a href="#<?php echo $jsKey; ?>">

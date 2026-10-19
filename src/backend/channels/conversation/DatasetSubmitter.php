@@ -1,0 +1,132 @@
+<?php
+declare(strict_types=1);
+
+namespace backend\channels\conversation;
+
+use backend\channels\media\LocalFileUploader;
+use backend\Configs;
+use backend\CreateDataSet;
+use backend\exceptions\CriticalException;
+use backend\Main;
+use Throwable;
+
+/**
+ * Saves chat-channel data through the same path as the apps (CreateDataSet), with an
+ * envelope shaped like the PWA's (web-pwa/src/lib/esmiraApi.ts buildPayload) and
+ * `appType` set to the channel (e.g. "Telegram").
+ *
+ * All events of one moment go into ONE envelope: CreateDataSet rejects a second
+ * submission from the same participant within `dataset_server_timeout` (1 s).
+ */
+class DatasetSubmitter {
+	/** @var string */
+	private $appType;
+	/** @var string */
+	private $model;
+
+	public function __construct(string $appType, string $model) {
+		$this->appType = $appType;
+		$this->model = $model;
+	}
+
+	/**
+	 * @param array  $study     decoded study config (language-resolved)
+	 * @param array  $binding   {studyId, userId, accessKey, lang}
+	 * @param array  $events    each {eventType: joined|quit|questionnaire, qid?, title?, responses?}
+	 * @param array  $media     media answers of the FIRST event: name => {kind, ref|localPath, identifier}
+	 * @param callable|null $fetchMedia fn(array $media): ?string — downloads a media answer to a
+	 *                          local temp file (channel specific); null skips file uploads
+	 * @return array{failed: array<int, string>, mediaErrors: string[]} failed: event index => error
+	 * @throws CriticalException when the envelope is rejected as a whole
+	 */
+	public function submit(array $study, array $binding, array $events, array $media = [], ?callable $fetchMedia = null): array {
+		$now = Main::getMilliseconds();
+		$common = [
+			'studyId'         => (int) $binding['studyId'],
+			'studyVersion'    => (int) ($study['version'] ?? 0),
+			'studySubVersion' => (int) ($study['subVersion'] ?? 0),
+			'studyLang'       => (string) ($study['lang'] ?? ($binding['lang'] ?? 'en')),
+			'accessKey'       => (string) ($binding['accessKey'] ?? ''),
+		];
+		$dataset = [];
+		foreach(array_values($events) as $i => $event) {
+			$type = $event['eventType'];
+			$dataset[$i] = $common + [
+				'dataSetId'               => $i,
+				'questionnaireName'       => $type === CreateDataSet::DATASET_TYPE_QUESTIONNAIRE ? (string) ($event['title'] ?? '') : null,
+				'questionnaireInternalId' => $type === CreateDataSet::DATASET_TYPE_QUESTIONNAIRE ? (int) $event['qid'] : null,
+				'eventType'               => $type,
+				'responseTime'            => (int) ($event['responseTime'] ?? $now),
+				'responses'               => $event['responses'] ?? ['model' => $this->model],
+			];
+		}
+
+		$failed = $this->save($binding, $dataset);
+		// The per-participant anti-flood check (dataset_server_timeout) rejects a submission
+		// that follows the previous one within a second; wait once and resend only those lines.
+		if($failed && strpos(implode(' ', $failed), 'Too many requests') !== false) {
+			usleep(((int) Configs::get('dataset_server_timeout') + 100) * 1000);
+			$failed = $this->save($binding, array_intersect_key($dataset, $failed));
+		}
+		$mediaErrors = [];
+		if($media && !isset($failed[0]) && $fetchMedia !== null)
+			$mediaErrors = $this->uploadMedia((int) $binding['studyId'], (string) $binding['userId'], $media, $fetchMedia);
+		return ['failed' => $failed, 'mediaErrors' => $mediaErrors];
+	}
+
+	/** @return array<int, string> dataSetId => error of the lines that were not saved */
+	private function save(array $binding, array $dataset): array {
+		$payload = [
+			'userId'        => (string) $binding['userId'],
+			'appType'       => $this->appType,
+			'appVersion'    => (string) Main::SERVER_VERSION,
+			'serverVersion' => Main::SERVER_VERSION,
+			'dataset'       => array_values($dataset),
+		];
+		$create = new CreateDataSet();
+		try {
+			$create->prepare(json_decode(json_encode($payload)));
+			$create->handlePlugins();
+			$create->exec();
+		}
+		catch(Throwable $e) {
+			$create->close();
+			throw new CriticalException('Saving data failed: ' . $e->getMessage());
+		}
+		$failed = [];
+		foreach($create->output as $line) {
+			if(empty($line['success']))
+				$failed[(int) $line['dataSetId']] = (string) ($line['error'] ?? 'unknown error');
+		}
+		return $failed;
+	}
+
+	/** Upload the files of media answers (after the dataset registered their identifiers). */
+	private function uploadMedia(int $studyId, string $userId, array $media, callable $fetchMedia): array {
+		$errors = [];
+		$responsesStore = Configs::getDataStore()->getResponsesStore();
+		foreach($media as $name => $m) {
+			$tmp = null;
+			try {
+				// Files produced on this server (handoff keystroke logs) already have a path.
+				$tmp = isset($m['localPath']) && is_file($m['localPath']) ? $m['localPath'] : $fetchMedia($m);
+				if($tmp === null)
+					throw new CriticalException("could not download $name");
+				if(filesize($tmp) > (int) Configs::get('max_filesize_for_uploads'))
+					throw new CriticalException("$name is too big");
+				$uploader = new LocalFileUploader($tmp);
+				$identifier = (int) $m['identifier']; // plugins receive these by reference
+				Configs::getDataStore()->getPluginStore()->handleFileUpload($studyId, $userId, $identifier, $uploader);
+				$responsesStore->uploadFile($studyId, $userId, $identifier, $uploader);
+			}
+			catch(Throwable $e) {
+				$errors[] = $e->getMessage();
+			}
+			finally {
+				if($tmp !== null && file_exists($tmp))
+					@unlink($tmp);
+			}
+		}
+		return $errors;
+	}
+}
