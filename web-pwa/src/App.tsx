@@ -59,7 +59,7 @@ import { saveRecording } from './lib/audioUploads';
 import { saveKeystrokes } from './lib/keystrokeUploads';
 import type { CaptureMode } from './lib/keystrokeCapture';
 
-type Phase = 'loading' | 'error' | 'consent' | 'name' | 'notifications' | 'list' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
+type Phase = 'loading' | 'error' | 'consent' | 'name' | 'notifications' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
 
 /** localStorage key holding the last study invite code that loaded successfully,
  *  so an installed home-screen launch (which carries no ?key=) reopens it. */
@@ -1457,6 +1457,12 @@ export default function App() {
     clearPaused(study.id, userId);
     engineRef.current = null;
     activeQRef.current = null;
+    // A study with an end snapshot (webSnapshot) ends on its thank-you: no offer of another
+    // questionnaire and no list. Reopening the app returns to the list.
+    if (messages) {
+      setPhase('done');
+      return;
+    }
     // Only offer another questionnaire if one is actually completable right now —
     // otherwise the prompt dead-ends into a locked card (e.g. "Opens tomorrow 08:00"),
     // which reads as a bug rather than as there simply being nothing left to do today.
@@ -1529,6 +1535,7 @@ export default function App() {
       case 'tutorialOffer':
       case 'tutorial': return 'Tutorial';
       case 'survey': return activeQTitle || 'Survey';
+      case 'done': return 'Done';
       case 'list': {
         const DAY_MS = 24 * 60 * 60 * 1000;
         const avValues = [...questionnaireAvailability.values()];

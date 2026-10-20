@@ -137,6 +137,9 @@ the Telegram bot's esrs2026 study:
 
 It is computed in the browser by `lib/snapshot.ts`.
 
+The thank-you ends the session: the app does not offer another questionnaire or show the list. Reopening the app
+returns to the list.
+
 ## Local-only studies
 
 A study with `webLocalOnly` (source-edit only) sends nothing to the server. One switch in `lib/esmiraApi.ts`

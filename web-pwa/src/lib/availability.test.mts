@@ -19,7 +19,7 @@ const store: Record<string, string> = {};
   length: 0,
 } as Storage;
 
-const { computeAvailability, recordCompletion, loadCompletions } = await import('./availability.ts');
+const { computeAvailability, recordCompletion, loadCompletions, summarize } = await import('./availability.ts');
 
 const DAY = 86400000;
 const H = 3600000;
@@ -100,4 +100,12 @@ test('no completion flag: signal window still locks after completion (regression
   const after = computeAvailability(q, JOINED, at(D1, 14), cs());
   assert.equal(after.state, 'locked', 'no flag needed ⇒ the opened occurrence is still marked done');
   assert.equal(after.opensAt, D1 + DAY + 12 * H, 'reopens at tomorrow’s 12:00 signal, not immediately re-completable');
+});
+
+test('summarize: asks to choose only when more than one questionnaire is open', () => {
+  const { cs } = ctx();
+  const passive = { actionTriggers: [] } as unknown as EsmiraQuestionnaire;
+  const now = at(D1, 12);
+  assert.equal(summarize([passive], JOINED, now, cs()).message, 'Tap below to begin.');
+  assert.equal(summarize([passive, passive], JOINED, now, cs()).message, 'Choose a questionnaire to begin.');
 });

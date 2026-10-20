@@ -200,7 +200,10 @@ export function computeAvailability(q: EsmiraQuestionnaire, joined: number, now:
 /** A chat-friendly summary message for the questionnaire list given current availability. */
 export function summarize(qs: EsmiraQuestionnaire[], joined: number, now: number, completions: Completions): { anyAvailable: boolean; message: string } {
   const avs = qs.map((q) => computeAvailability(q, joined, now, completions));
-  if (avs.some((a) => a.state === 'available')) return { anyAvailable: true, message: 'Choose a questionnaire to begin.' };
+  const open = avs.filter((a) => a.state === 'available').length;
+  // "Choose" only makes sense when there is a choice; a single open questionnaire is just started.
+  if (open === 1) return { anyAvailable: true, message: 'Tap below to begin.' };
+  if (open > 1) return { anyAvailable: true, message: 'Choose a questionnaire to begin.' };
 
   const opens = avs.map((a) => a.opensAt).filter((x): x is number => typeof x === 'number').sort((a, b) => a - b);
   if (opens.length) {
