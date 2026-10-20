@@ -249,10 +249,17 @@ Source: `sections/wearables.tsx`.
   names and sync-state files, so no token is decrypted. "Last sync" is the last completed UTC day fetched, not the
   device's own upload time. A link the provider has rejected is shown as "link no longer valid, participant must
   reconnect" and no longer counts as connected (see *Revoked links* below).
+- A **last sensor event** column in that table: the newest webhook event still in the participant's event log (kind,
+  provider, time). It proves the provider reaches this server for that participant. Events are only logged for kinds
+  a trigger of the study waits for and are kept for 3 days, so "none in the last 3 days" can also mean no trigger
+  wants that kind.
+- A provider whose credentials are set but whose notifications this server cannot receive yet (for Google Health:
+  no webhook secret from `wearables_setup.php googlehealth-webhook`) is flagged "sensor triggers unavailable".
+  Whether Google has the subscriber registered in the Cloud project cannot be seen from here.
 - A read-only box with the **redirect URI** to register.
 - A **`wearables.zip`** download (read permission); the same link appears in the data list.
 
-There is no data preview, data-type selector or webhook status display. Sensor triggers are
+There is no data preview or data-type selector. Sensor triggers are
 configured per questionnaire in the trigger editor, not here.
 
 ## Revoked links

@@ -89,6 +89,18 @@ class WearablesRegistry {
 		return $base . '?' . http_build_query($query);
 	}
 
+	/**
+	 * Whether this server can accept the provider's "new data" notifications at all. Withings and
+	 * Fitbit need their OAuth credentials (the callback key / signature derives from the client
+	 * secret); Google Health needs the webhook secret created by `wearables_setup.php googlehealth-webhook`.
+	 * Google's side (the subscriber registered in the Cloud project) cannot be seen from here.
+	 */
+	public static function webhookReady(string $provider): bool {
+		if($provider === 'googlehealth')
+			return self::credentials($provider) !== null && (string) Configs::get('wearables_googlehealth_webhook_secret') !== '';
+		return self::credentials($provider) !== null;
+	}
+
 	/** Shared secret embedded in the callback URL, or null without provider credentials. */
 	public static function webhookKey(string $provider): ?string {
 		$creds = self::credentials($provider);

@@ -18,7 +18,7 @@ use backend\Paths;
 class WearablesParticipantOverview {
 	/**
 	 * @param string[] $knownUserIds participants the study already knows (see StudyStore::getStudyParticipants)
-	 * @return array<int, array{userId:string, providers:array<int, array{provider:string, lastSync:?int, hasData:bool, needsReconnect:bool}>}>
+	 * @return array<int, array{userId:string, lastEvent:?array{t:int, provider:string, kind:string}, providers:array<int, array{provider:string, lastSync:?int, hasData:bool, needsReconnect:bool}>}>
 	 *         participants without a working link first (none, or all links revoked), then by userId
 	 */
 	public static function build(int $studyId, array $knownUserIds): array {
@@ -48,13 +48,22 @@ class WearablesParticipantOverview {
 		$out = [];
 		foreach($byUser as $userId => $providers) {
 			usort($providers, fn($a, $b) => strcmp($a['provider'], $b['provider']));
-			$out[] = ['userId' => (string) $userId, 'providers' => $providers];
+			$out[] = ['userId' => (string) $userId, 'lastEvent' => self::lastEvent($studyId, (string) $userId), 'providers' => $providers];
 		}
 		usort($out, function($a, $b) {
 			$working = self::hasWorkingLink($a) <=> self::hasWorkingLink($b);
 			return $working !== 0 ? $working : strcmp($a['userId'], $b['userId']);
 		});
 		return $out;
+	}
+
+	/**
+	 * Newest webhook event still in the (3 day) event log: proof that the provider reaches this
+	 * server for the participant. Only events some trigger of the study waits for are logged.
+	 */
+	private static function lastEvent(int $studyId, string $userId): ?array {
+		$events = WearablesEventStore::readSince($studyId, $userId, 0);
+		return $events ? $events[count($events) - 1] : null;
 	}
 
 	/** At least one linked provider the provider still accepts. */

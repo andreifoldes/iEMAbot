@@ -20,14 +20,25 @@ interface ParticipantProvider {
 	needsReconnect: boolean
 }
 
+interface ParticipantEvent {
+	/** When the webhook reached the server (ms) */
+	t: number
+	provider: string
+	kind: string
+}
+
 interface ParticipantOverview {
 	userId: string
+	/** Newest webhook event still in the server's 3 day event log */
+	lastEvent: ParticipantEvent | null
 	providers: ParticipantProvider[]
 }
 
 interface WearableInfo {
 	allProviders: string[]
 	configuredProviders: string[]
+	/** Providers whose webhooks this server can receive */
+	webhookProviders: string[]
 	redirectUri: string
 	connections: Record<string, number>
 	hasData: boolean
@@ -53,8 +64,9 @@ export class Content extends SectionContent {
 
 	constructor(sectionData: SectionData, info: WearableInfo) {
 		super(sectionData)
-		this.info = info ?? { allProviders: [], configuredProviders: [], redirectUri: "", connections: {}, hasData: false, participants: [] }
+		this.info = info ?? { allProviders: [], configuredProviders: [], webhookProviders: [], redirectUri: "", connections: {}, hasData: false, participants: [] }
 		this.info.participants = this.info.participants ?? []
+		this.info.webhookProviders = this.info.webhookProviders ?? []
 	}
 
 	private providerStatus(p: ParticipantProvider): string {
@@ -68,6 +80,13 @@ export class Content extends SectionContent {
 		return `${label} (${Lang.get("wearables_participant_last_sync")}: ${sync}, ${data})`
 	}
 
+	private eventStatus(e: ParticipantEvent | null): string {
+		if (e == null)
+			return Lang.get("wearables_participant_no_event")
+		const label = PROVIDER_LABEL[e.provider] ?? e.provider
+		return `${Lang.getDynamic(`sensor_event_${e.kind}`)} (${label}), ${new Date(e.t).toLocaleString()}`
+	}
+
 	private participantsView(participants: ParticipantOverview[]): Vnode<any, any> {
 		const connected = participants.filter((p) => p.providers.some((provider) => !provider.needsReconnect)).length
 		return <div class="vertical hAlignStart">
@@ -76,10 +95,12 @@ export class Content extends SectionContent {
 				? <small>{Lang.get("wearables_participants_none")}</small>
 				: <div>
 					<small>{Lang.get("wearables_participants_summary", connected, participants.length)}</small>
+					<small class="spacingLeft">{Lang.get("wearables_last_event_info")}</small>
 					<table class="spacingTop"><tbody>
 						<tr>
 							<th>{Lang.get("wearables_participant_id")}</th>
 							<th class="spacingLeft">{Lang.get("wearables_participant_status")}</th>
+							<th class="spacingLeft">{Lang.get("wearables_participant_last_event")}</th>
 						</tr>
 						{participants.map((p) =>
 							<tr>
@@ -89,6 +110,7 @@ export class Content extends SectionContent {
 										? p.providers.map((provider) => <div>{this.providerStatus(provider)}</div>)
 										: Lang.get("wearables_participant_not_connected")}
 								</td>
+								<td class="spacingLeft">{this.eventStatus(p.lastEvent)}</td>
 							</tr>
 						)}
 					</tbody></table>
@@ -146,6 +168,8 @@ export class Content extends SectionContent {
 									<small>{configured
 										? Lang.get("wearables_connected_count", count)
 										: Lang.get("wearables_provider_not_configured")}</small>
+									{configured && !info.webhookProviders.includes(provider) &&
+										<small>{Lang.get("wearables_webhook_not_ready")}</small>}
 								</label>
 							})}
 						</div>

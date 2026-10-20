@@ -2,6 +2,7 @@
 
 namespace backend\wearables;
 
+use backend\Configs;
 use backend\fileSystem\PathsFS;
 use testConfigs\BaseDataFolderTestSetup;
 
@@ -49,6 +50,29 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 		$this->assertSame(['zed', 'alice'], array_column($rows, 'userId'));
 		$this->assertTrue($rows[0]['providers'][0]['needsReconnect']);
 		$this->assertFalse($rows[1]['providers'][0]['needsReconnect']);
+	}
+
+	function test_shows_the_newest_sensor_event_per_participant() {
+		$this->link('alice', 'googlehealth');
+		WearablesEventStore::append(self::STUDY, 'alice', 'googlehealth', 'sleep', 1000);
+		WearablesEventStore::append(self::STUDY, 'alice', 'googlehealth', 'activity', 2000);
+
+		$rows = WearablesParticipantOverview::build(self::STUDY, ['alice', 'bob']);
+
+		$this->assertNull($rows[0]['lastEvent']); // bob, unconnected, sorted first
+		$this->assertSame(['t' => 2000, 'provider' => 'googlehealth', 'kind' => 'activity'], $rows[1]['lastEvent']);
+	}
+
+	function test_webhook_readiness_follows_the_server_configuration() {
+		Configs::$configs['wearables_withings_client_id'] = 'i';
+		Configs::$configs['wearables_withings_client_secret'] = 's';
+		Configs::$configs['wearables_googlehealth_client_id'] = 'i';
+		Configs::$configs['wearables_googlehealth_client_secret'] = 's';
+		$this->assertTrue(WearablesRegistry::webhookReady('withings'));
+		$this->assertFalse(WearablesRegistry::webhookReady('fitbit'));
+		$this->assertFalse(WearablesRegistry::webhookReady('googlehealth')); // no webhook secret yet
+		Configs::$configs['wearables_googlehealth_webhook_secret'] = 'x';
+		$this->assertTrue(WearablesRegistry::webhookReady('googlehealth'));
 	}
 
 	function test_saving_a_fresh_token_lifts_the_revoked_marker() {

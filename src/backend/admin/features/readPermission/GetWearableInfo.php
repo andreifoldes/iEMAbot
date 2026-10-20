@@ -41,6 +41,7 @@ class GetWearableInfo extends HasReadPermission {
 		return [
 			'allProviders'        => array_keys(WearablesRegistry::PROVIDERS),
 			'configuredProviders' => WearablesRegistry::configuredProviders(),
+			'webhookProviders'    => array_values(array_filter(array_keys(WearablesRegistry::PROVIDERS), [WearablesRegistry::class, 'webhookReady'])),
 			'redirectUri'         => WearablesRegistry::redirectUri(),
 			'connections'         => $connections,
 			'hasData'             => $hasData,
