@@ -13,7 +13,8 @@ set -euo pipefail
 #
 # Any DEPLOY_*/A11Y_* overrides pass straight through to deploy.sh, e.g.
 #   DEPLOY_NO_BUMP=1 ./ship.sh          # ship without bumping the patch version
-#   A11Y_SKIP=1 ./ship.sh               # emergency: skip the accessibility gate
+#   A11Y_RUN=1 ./ship.sh                # force the accessibility gate (default: only when web-pwa/ or locales changed)
+#   A11Y_SKIP=1 ./ship.sh               # emergency: never run the accessibility gate
 #
 # Usage: ./ship.sh [HOST]               HOST defaults to surrey-vps (see deploy.sh).
 cd "$(dirname "$0")"

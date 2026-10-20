@@ -130,16 +130,34 @@ echo "=== Building locally (webpack dist/ + participant PWA) ==="
 # run after (it writes dist/pwa). build:all does both in the right order.
 npm run build:all
 
-# ── Accessibility gate (hard) ────────────────────────────────────────────────
+# ── Accessibility gate (hard, automatic) ─────────────────────────────────────
 # Audit the participant PWA we just built against WCAG 2.2 A/AA (axe-core driving
 # the real build through every question type in light + dark). A critical or
 # serious violation aborts the deploy (set -e). Runs fully offline against a
-# fixture study, so no VPN/server is needed. Skip with A11Y_SKIP=1 in an
-# emergency; tune gate severities with A11Y_FAIL_ON (default critical,serious).
+# fixture study, so no VPN/server is needed; tune severities with A11Y_FAIL_ON
+# (default critical,serious).
+#
+# The audit takes minutes and only tests the participant PWA, so by default it runs
+# only when something that can change what participants see has changed since the
+# live commit (web-pwa/, src/locales/). Backend-only deploys skip it.
+#   A11Y_RUN=1   always run it            A11Y_SKIP=1   never run it (emergency)
+# With no known live commit to compare against it always runs.
+A11Y_PATHS="web-pwa src/locales"
 if [ "${A11Y_SKIP:-0}" = "1" ]; then
-  echo "=== Accessibility gate SKIPPED (A11Y_SKIP=1) ==="
+  RUN_A11Y=0; A11Y_WHY="A11Y_SKIP=1"
+elif [ "${A11Y_RUN:-0}" = "1" ]; then
+  RUN_A11Y=1; A11Y_WHY="A11Y_RUN=1"
+elif [ -z "${LIVE_SHA:-}" ] || ! git cat-file -e "${LIVE_SHA}^{commit}" 2>/dev/null; then
+  RUN_A11Y=1; A11Y_WHY="no known live commit to compare against"
+elif [ -n "$(git diff --name-only "$LIVE_SHA" HEAD -- $A11Y_PATHS)" ]; then
+  RUN_A11Y=1; A11Y_WHY="PWA files changed since live ${LIVE_SHA:0:7}"
 else
-  echo "=== Accessibility gate (WCAG 2.2, participant PWA) ==="
+  RUN_A11Y=0; A11Y_WHY="no changes under $A11Y_PATHS since live ${LIVE_SHA:0:7}"
+fi
+if [ "$RUN_A11Y" = "0" ]; then
+  echo "=== Accessibility gate SKIPPED ($A11Y_WHY; A11Y_RUN=1 forces it) ==="
+else
+  echo "=== Accessibility gate (WCAG 2.2, participant PWA): $A11Y_WHY ==="
   ( cd web-pwa/a11y \
       && { [ -d node_modules ] || npm install --no-audit --no-fund; } \
       && node audit.mjs )
