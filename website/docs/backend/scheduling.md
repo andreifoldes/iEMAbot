@@ -69,7 +69,7 @@ Details: [Web Push](./web-push.md), [Participant flow](../pwa/participant-flow.m
 ## Sensor triggers {/* #sensor-triggers */}
 
 <span className="status status--partial">Partial</span> Implemented end to end; **not yet tested against live
-Withings or Fitbit accounts** (unit-tested scheduling logic only).
+Withings or Google Health accounts** beyond a single Withings test participant.
 
 *If the wearable reports new data, then send the prompt; otherwise send it at a fixed time anyway.* Add one
 with **Add sensor trigger** in the questionnaire's *Filter and trigger* section (or pick *Wearable sensor event*
@@ -77,7 +77,7 @@ as the cue of an event trigger).
 
 | Setting | Meaning |
 | --- | --- |
-| Provider | `any` connected wearable, `withings` or `fitbit`. (`googlehealth` exists in the backend as a hidden, untested placeholder; see [Wearables](./wearables.md#google-health-api).) |
+| Provider | `any` connected wearable, `withings` or `googlehealth` (which also carries Fitbit and Pixel Watch data; see [Wearables](./wearables.md#google-health-api)). |
 | New data of type | `sleep`, `activity`, `weight`, plus Withings-only events: `bed_in`, `bed_out`, `sleep_sensor_ready`, `bed_occupied`, `bed_empty`, `bed_occupied_or_empty`, `blood_pressure`, `temperature`, `glucose`, `hrv`, `ecg`, `ecg_failed`, `stethoscope`, `urine`. The designer warns when the chosen provider has no webhook for the type. |
 | Only within a daily window | Ignore events outside `wearableWindowStart`–`wearableWindowEnd` (participant-local; may wrap midnight), e.g. 05:00–12:00 for a wake-up prompt. |
 | Max. prompts per day | `wearableMaxPerDay` (default 1) per participant and local day. |

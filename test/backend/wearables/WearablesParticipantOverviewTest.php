@@ -69,7 +69,7 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 		Configs::$configs['wearables_googlehealth_client_id'] = 'i';
 		Configs::$configs['wearables_googlehealth_client_secret'] = 's';
 		$this->assertTrue(WearablesRegistry::webhookReady('withings'));
-		$this->assertFalse(WearablesRegistry::webhookReady('fitbit'));
+		$this->assertFalse(WearablesRegistry::webhookReady('fitbit')); // removed provider
 		$this->assertFalse(WearablesRegistry::webhookReady('googlehealth')); // no webhook secret yet
 		Configs::$configs['wearables_googlehealth_webhook_secret'] = 'x';
 		$this->assertTrue(WearablesRegistry::webhookReady('googlehealth'));

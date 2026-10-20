@@ -153,9 +153,9 @@ class PathsFS {
 		return self::folderClientInfo($studyId) . Paths::makeUrlFriendly($userId);
 	}
 
-	// --- Wearables (Fitbit / Withings / Google Health) data sharing. Everything lives under
+	// --- Wearables (Withings / Google Health) data sharing. Everything lives under
 	// the study folder so it is captured by snapshots/backups, mirroring the push
-	// subscription layout above. `provider` is a short ascii slug (fitbit/withings/googlehealth).
+	// subscription layout above. `provider` is a short ascii slug (withings/googlehealth).
 
 	static function folderWearablesTokens(int $studyId): string {
 		return self::folderStudies() . "$studyId/.wearables_tokens/";

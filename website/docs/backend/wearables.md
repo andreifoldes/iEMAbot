@@ -1,13 +1,13 @@
 ---
 title: "Wearables"
 sidebar_label: "Wearables"
-description: "Fitbit and Withings linking over OAuth 2.0, token storage, sync schedule, stored data, and the limits of what the data is used for."
+description: "Withings and Google Health linking over OAuth 2.0, token storage, sync schedule, stored data, and the limits of what the data is used for."
 ---
 
 # Wearables
 
 <span className="status status--shipped">Shipped</span> ingestion and export · fork-only
-<span className="status status--partial">Partial</span> webhook-triggered prompts for Withings and Fitbit (untested against live providers)
+<span className="status status--partial">Partial</span> webhook-triggered prompts for Withings and Google Health (untested against live providers)
 <span className="status status--tbc">TBC</span> tailoring prompts from measurement values
 
 Participants can link a consumer wearable to a study. The server pulls their data on a schedule and stores it
@@ -24,8 +24,7 @@ is no value threshold and no real wake-up detection. See [Current status](../cur
 
 | Provider | Data types fetched by default |
 | --- | --- |
-| **Fitbit** | activity (steps; 1-minute intraday with a daily fallback on HTTP 403), heart rate, sleep, weight, SpO₂, HRV, breathing rate |
-| **Google Health** (Fitbit / Pixel Watch) | same study data types as Fitbit: steps, heart rate, sleep, weight, SpO₂, HRV, respiratory rate (sleep summary). One row per UTC day, value = that day's data points verbatim |
+| **Google Health** (Fitbit / Pixel Watch) | steps, heart rate, sleep, weight, SpO₂, HRV, respiratory rate (sleep summary). One row per UTC day, value = that day's data points verbatim |
 | **Withings** | weight, blood pressure, activity, sleep (summary), ECG |
 
 `Study.wearablesDataTypes` can narrow the list, but **no designer UI sets it**; use the study source. If it is
@@ -37,7 +36,7 @@ Credentials are server-wide, set with the CLI:
 
 ```bash
 php cli/wearables_setup.php genkey                                  # token-encryption key
-php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]
+php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> [redirect_uri]
 ```
 
 | Config key | Purpose |
@@ -56,7 +55,7 @@ URI to register with each provider.
 sequenceDiagram
   participant P as PWA
   participant S as ESMira server
-  participant W as Provider (Fitbit / Withings)
+  participant W as Provider (Withings / Google Health)
   P->>S: POST wearables_connect.php (userId, studyId, provider)
   S->>S: validate study, provider credentials, wearablesEnabled
   S->>S: create single-use state (10 min TTL) in .wearables_states/
@@ -72,8 +71,7 @@ sequenceDiagram
 - The `state` is `bin2hex(random_bytes(24))`, stored server-side with study, user and provider, and is
   single-use. It is **not bound to a browser cookie** and **PKCE is not used**.
 - Scopes are requested together, not per data type: Withings `user.info,user.metrics,user.activity,user.sleepevents`;
-  Fitbit `activity heartrate sleep weight profile settings oxygen_saturation respiratory_rate temperature
-  nutrition`.
+  Google Health `sleep.readonly`, `activity_and_fitness.readonly`, `health_metrics_and_measurements.readonly`.
 - Both authorization URLs send `prompt=login`.
 
 ## Token storage
@@ -112,7 +110,7 @@ userId ; provider ; measurement_time ; data_type ; value ; fetched_at
 
 ## Webhooks and sensor triggers {/* #webhooks-and-sensor-triggers */}
 
-<span className="status status--partial">Partial</span> Not yet verified against live Withings or Fitbit accounts.
+<span className="status status--partial">Partial</span> Not yet verified against live provider accounts beyond a single Withings test participant.
 
 ```mermaid
 flowchart LR
@@ -126,48 +124,37 @@ flowchart LR
 | Provider | Registration | Authentication of the callback | Types |
 | --- | --- | --- | --- |
 | **Withings** (Notify) | Automatic when the participant links: the server subscribes each type via `notify` with a URL carrying a key derived from the client secret. | Key in the URL (`k=`); Withings does not sign requests. | every data category: weight (1), temperature (2), blood pressure (4), activity (16), sleep (44), bed in/out (50/51), sleep sensor ready (52), ECG (54, 55), glucose (58), stethoscope (61), HRV (62), urine (63), bed status (98–100) |
-| **Fitbit** (Subscriptions) | Register the subscriber endpoint `…/api/wearables_webhook.php?provider=fitbit` and a verification code in the Fitbit developer console; the server creates the per-user subscriptions on linking. Store the code with `php cli/wearables_setup.php fitbit-verify <code>`. | `X-Fitbit-Signature` HMAC-SHA1 over the raw body, keyed with `client_secret&`. | sleep, activities, body (weight) |
 
 Optional config key `wearables_webhook_uri` overrides the auto-derived public callback URL (needed behind a
 proxy that rewrites the host or path). Participants who linked **before** this feature was deployed have no
 webhook subscription until they re-link.
 
-**Only these providers have webhooks.** The designer offers *Any connected wearable*, *Withings*, *Fitbit* and *Google Health*. The data types below are
+**Only these providers have webhooks.** The designer offers *Any connected wearable*, *Withings* and *Google Health*. The data types below are
 the complete set the designer offers, each checked against the provider's own documentation (2026-10-09):
 
-| Designer type | Withings `appli` | Fitbit collection | Google Health data types |
-| --- | --- | --- | --- |
-| Sleep | 44 (sleep summary) | `sleep` | `sleep` |
-| Activity | 16 (steps, distance, workouts) | `activities` | `steps`, `distance`, `floors`, `active-minutes`, `active-zone-minutes`, `exercise` |
-| Weight / body | 1 (weight and body composition) | `body` | `weight`, `body-fat` |
-| Out of bed | 51 (Sleep Analyzer / sleep mat bed-out event) | not available | not available |
-| Other Withings-only events | 2, 50, 52, 55, 58, 61, 62, 63, 98–100 (see the designer list) | not available | not available |
-| Blood pressure | 4 (blood pressure and heart rate) | not available | not available |
-| ECG | 54 (ECG measurement) | not available | not available (ECG data exists, but has no webhook) |
+| Designer type | Withings `appli` | Google Health data types |
+| --- | --- | --- |
+| Sleep | 44 (sleep summary) | `sleep` |
+| Activity | 16 (steps, distance, workouts) | `steps`, `distance`, `floors`, `active-minutes`, `active-zone-minutes`, `exercise` |
+| Weight / body | 1 (weight and body composition) | `weight`, `body-fat` |
+| Out of bed | 51 (Sleep Analyzer / sleep mat bed-out event) | not available |
+| Other Withings-only events | 2, 50, 52, 55, 58, 61, 62, 63, 98–100 (see the designer list) | not available |
+| Blood pressure | 4 (blood pressure and heart rate) | not available |
+| ECG | 54 (ECG measurement) | not available (ECG data exists, but has no webhook) |
 
-Sources: [Google Health webhooks](https://developers.google.com/health/webhooks), [Withings notification content](https://oauth.withings.com/developer-guide/v3/data-api/notifications/notification-content/),
-[Fitbit: Using subscriptions](https://dev.fitbit.com/build/reference/web-api/developer-guide/using-subscriptions/).
-Withings account events (46 profile changed, 53 device set up, 60 survey answered) carry no data and are not offered; Fitbit `foods` is
-not offered either. Most Withings categories need a specific device and a participant without it never receives that event.
+Sources: [Google Health webhooks](https://developers.google.com/health/webhooks) and [Withings notification content](https://oauth.withings.com/developer-guide/v3/data-api/notifications/notification-content/).
+Withings account events (46 profile changed, 53 device set up, 60 survey answered) carry no data and are not offered. Most Withings categories need a specific device and a participant without it never receives that event.
 *Out of bed* (51) is a closer wake-up signal than "sleep summary synced", but only for owners of a Withings Sleep Analyzer.
 It fires on every bed exit, including night-time ones, so pair it with the daily window and the per-day cap. The 10-minute
 bed status events (98–100) need Live Sync enabled on the device. Participants who linked **before** an event was added
 have no subscription for it until they re-link.
 
-:::warning[Fitbit legacy Web API ends on 2026-10-30]
-Fitbit's documentation states that support for the legacy Fitbit Web API ends on 2026-09-30 and the API is
-**turned off on 2026-10-30**, with Google Health API as the replacement (new project onboarding was paused when
-last checked). This affects the *whole* Fitbit provider in ESMira (OAuth linking, hourly sync and these
-webhooks), not only sensor triggers. Fitbit webhook triggers are therefore usable only until that date; a
-migration to the Google Health API, which uses a different subscription and signature scheme, has not been done.
-Withings is unaffected. Google Health, below, is the replacement path.
-:::
-
-:::note[Unverified: Fitbit request signature]
-The `X-Fitbit-Signature` check (HMAC-SHA1 of the raw body, key `client_secret&`, Base64) follows a third-party
-description of Fitbit's webhooks. Fitbit's own "Using subscriptions" page refers to a separate *Subscriber
-Security* section that was not checked. Confirm against a real notification before relying on it; if the check
-rejects genuine notifications, Fitbit receives 404s and may disable the endpoint.
+:::note[Fitbit is no longer a provider]
+Fitbit's legacy Web API is turned off on 2026-10-30, so ESMira dropped its Fitbit provider (OAuth linking, hourly sync
+and webhooks). Fitbit and Pixel Watch data reach ESMira through **Google Health**. A study imported from an older
+version may still name `fitbit` as its trigger provider or in `wearablesProviders`; the designer flags such a
+trigger as never firing, and the leftover entries are otherwise ignored. Token files and data written earlier stay on
+disk but are no longer read or synced.
 :::
 
 ### Google Health API
@@ -185,14 +172,12 @@ Triggers and measurement download. Data points are read from `users/me/dataTypes
 (`steps`, `heart-rate`, `heart-rate-variability`, `oxygen-saturation`, `respiratory-rate-sleep-summary`, `sleep`, `weight`);
 a type whose scope was not granted (HTTP 403) is skipped.
 
-| | Fitbit (legacy) | Google Health |
-| --- | --- | --- |
-| Sign-in | Fitbit OAuth; Basic auth on the token call | Google OAuth 2.0; credentials in the body; `access_type=offline` + `prompt=consent` for a refresh token; 1 h access tokens |
-| User id | In the token response | Not in it; `GET /v4/users/me/identity` right after sign-in (`healthUserId`). `ACCOUNT_NOT_LINKED` (no Google Health profile) aborts the link. |
-| Webhook registration | Per participant, per collection | **Once per server**, as a "subscriber" with `AUTOMATIC` subscriptions; nothing happens at link time |
-| Callback check | Verify code, GET | Two POSTs `{"type":"verification"}`: with the secret expect 2xx, without it 401/403 |
-| Authenticity | HMAC-SHA1 (unconfirmed) | Secret in `Authorization` **and** an ECDSA P-256 signature (`GOOGLE-HEALTH-API-SIGNATURE`, Tink prefix) against Google's published keyset |
-| Delivery | List per request | Batches of up to 99; must answer 204 at once; retried for 7 days, so events can repeat (harmless: the cap and ledger absorb them) |
+- **Sign-in:** Google OAuth 2.0; credentials in the body; `access_type=offline` + `prompt=consent` for a refresh token; 1 h access tokens
+- **User id:** Not in it; `GET /v4/users/me/identity` right after sign-in (`healthUserId`). `ACCOUNT_NOT_LINKED` (no Google Health profile) aborts the link.
+- **Webhook registration:** **Once per server**, as a "subscriber" with `AUTOMATIC` subscriptions; nothing happens at link time
+- **Callback check:** Two POSTs `{"type":"verification"}`: with the secret expect 2xx, without it 401/403
+- **Authenticity:** Secret in `Authorization` **and** an ECDSA P-256 signature (`GOOGLE-HEALTH-API-SIGNATURE`, Tink prefix) against Google's published keyset
+- **Delivery:** Batches of up to 99; must answer 204 at once; retried for 7 days, so events can repeat (harmless: the cap and ledger absorb them)
 
 Setup:
 
@@ -211,8 +196,6 @@ What is and is not done:
   (the three Google's webhook page ties to sleep, activity and weight; its scope page gives no per-type mapping).
 - **Measurement data is not downloaded**, so a Google Health participant adds no rows to `wearables.zip`; the
   hourly sync skips the provider.
-- Linking Google Health removes the participant's legacy Fitbit *token* (Google forbids holding both); already
-  collected Fitbit data stays, and the token is not revoked at Fitbit.
 - Unverified: whether Google's scopes count as sensitive/restricted (affecting app verification, and whether a
   project in *Testing* mode, whose refresh tokens expire, is enough), and the exact notification envelope. The
   parser accepts the plausible shapes. If genuine notifications are rejected with 403, set the server config key
@@ -220,8 +203,7 @@ What is and is not done:
 - The webhook route must receive the `Authorization` header. Under Apache with PHP-FPM/CGI that needs
   `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` or an equivalent rewrite.
 
-- The endpoint answers 200/204 quickly (Fitbit requires a 204 within 5 seconds). A bad Withings key gets 403; a bad Fitbit signature or verification
-  code gets 404.
+- The endpoint answers 200/204 quickly (Google Health requires a 204 at once). A bad Withings key gets 403; a missing Google Health secret gets 401.
 - The callback maps the provider's user id to participants by scanning the token files, then stores an event
   **only** for studies that have wearables enabled and a sensor trigger for that provider and type. The event
   is the time the webhook arrived, kept for three days; it contains no measurement.
@@ -231,7 +213,6 @@ What is and is not done:
 - The Withings callback URL carries one key shared by all participants and appears in web server access logs;
   anyone who learns it can forge events for a Withings user id. Keep query strings out of access logs, and note
   that rotating the Withings client secret invalidates existing subscriptions (participants must re-link).
-- Fitbit subscription IDs are derived per user and collection, as Fitbit requires them to be unique per stream.
 - Ceilings: the provider decides when to call the webhook (devices must sync first), so latency is not under
   ESMira's control.
 

@@ -57,7 +57,7 @@ unreadable; rotating the VAPID keys invalidates every push subscription.
 # inside the container (as www-data)
 php cli/generate_vapid.php                     # Web Push keys
 php cli/wearables_setup.php genkey             # wearable token key
-php cli/wearables_setup.php fitbit <id> <secret>   # repeat per provider
+php cli/wearables_setup.php withings <id> <secret>   # repeat per provider
 ```
 
 Then register the redirect URI shown in the study's **Wearables** panel with each provider.

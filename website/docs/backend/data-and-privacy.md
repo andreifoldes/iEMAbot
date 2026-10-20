@@ -30,7 +30,7 @@ Everything collected from participants is also copied into a SQLite database in 
 | Party | What is sent |
 | --- | --- |
 | Browser push services (FCM, Mozilla, Apple) | Encrypted push payloads containing the study or questionnaire title and a short body. |
-| Fitbit / Withings | OAuth exchange and API pulls, server to provider. |
+| Withings / Google Health | OAuth exchange and API pulls, server to provider. |
 | Google Fonts | The PWA's service worker fetches the Inter font. |
 
 ## Transport security

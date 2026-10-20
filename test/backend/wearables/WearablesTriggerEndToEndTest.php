@@ -91,16 +91,6 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->assertSame([], $this->dueAfter('alice', self::WAKE + 60000));
 	}
 
-	function test_fitbit_sleep_webhook_fires_the_prompt() {
-		$this->createStudyWithTrigger('fitbit', 'sleep');
-		$this->link('bob', 'fitbit', 'FIT123');
-		$body = json_encode([['collectionType' => 'sleep', 'date' => '2025-03-10', 'ownerId' => 'FIT123', 'ownerType' => 'user', 'subscriptionId' => 'esmira']]);
-
-		$this->assertSame(1, WearablesWebhook::handleFitbit($body, self::WAKE));
-
-		$this->assertPromptDue('bob');
-	}
-
 	function test_google_health_sleep_webhook_fires_the_prompt() {
 		$this->createStudyWithTrigger('googlehealth', 'sleep');
 		$this->link('carol', 'googlehealth', 'gh-user-1');
@@ -149,11 +139,11 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 	function test_provider_any_accepts_every_provider() {
 		$this->createStudyWithTrigger('any', 'sleep');
 		$this->link('alice', 'withings', '4242');
-		$this->link('bob', 'fitbit', 'FIT123');
+		$this->link('bob', 'withings', '77');
 		$this->link('carol', 'googlehealth', 'gh-user-1');
 
 		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 44], self::WAKE);
-		WearablesWebhook::handleFitbit(json_encode([['collectionType' => 'sleep', 'ownerId' => 'FIT123']]), self::WAKE);
+		WearablesWebhook::handleWithings(['userid' => '77', 'appli' => 44], self::WAKE);
 		GoogleHealthWebhook::handleRequest('POST', json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'sleep']]]), 's3cret', '', self::WAKE);
 
 		foreach(['alice', 'bob', 'carol'] as $userId)

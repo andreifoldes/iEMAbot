@@ -13,7 +13,7 @@ self-hosted EMA platform developed by KL Psychological Methodology, and extends 
 
 - an installable, chat-style **participant PWA** (`web-pwa/`) that works in any modern browser,
 - **Web Push** reminders driven by ESMira's own schedule model,
-- **wearable linking** (Fitbit, Withings) over OAuth 2.0, with researcher-side export,
+- **wearable linking** (Withings, Google Health) over OAuth 2.0, with researcher-side export,
 - participant-side **voice memos**, a **keystroke-dynamics typing fallback**, embedded **cognitive tasks**, and
 - an automated **WCAG 2.2 accessibility audit** gating every deploy.
 
@@ -62,7 +62,7 @@ flowchart TB
     CRON["cron<br/>push every minute<br/>wearables hourly"]
   end
   PUSH(("Browser push<br/>services"))
-  WEAR(("Fitbit / Withings"))
+  WEAR(("Withings / Google Health"))
 
   PWA -->|"GET studies, POST datasets"| API
   NATIVE --> API

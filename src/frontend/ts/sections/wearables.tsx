@@ -45,7 +45,7 @@ interface WearableInfo {
 	participants: ParticipantOverview[]
 }
 
-const PROVIDER_LABEL: Record<string, string> = { fitbit: "Fitbit", withings: "Withings", googlehealth: "Google Health (Fitbit)" }
+const PROVIDER_LABEL: Record<string, string> = { withings: "Withings", googlehealth: "Google Health (Fitbit)" }
 
 /**
  * Dedicated study-level admin panel for wearable data sharing: enable it, pick which
@@ -134,7 +134,7 @@ export class Content extends SectionContent {
 		const study = this.getStudyOrThrow()
 		const info = this.info
 		const enabled = study.wearablesEnabled.get()
-		const providers = (info.allProviders.length ? info.allProviders : ["fitbit", "withings", "googlehealth"])
+		const providers = (info.allProviders.length ? info.allProviders : ["withings", "googlehealth"])
 			.filter((p) => SHOW_GOOGLE_HEALTH || p != WEARABLE_PROVIDER_GOOGLE_HEALTH)
 
 		return <div>

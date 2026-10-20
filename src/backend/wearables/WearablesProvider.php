@@ -6,7 +6,7 @@ namespace backend\wearables;
 use backend\Main;
 
 /**
- * Base class for a wearable OAuth2 provider (Fitbit / Withings / Google Health). Ported in
+ * Base class for a wearable OAuth2 provider (Withings / Google Health). Ported in
  * spirit from iema-bot/src/wearables/{fitbit,withings}.py — the same auth URLs,
  * token endpoints, scopes and provider quirks.
  *
@@ -24,10 +24,10 @@ abstract class WearablesProvider {
 		$this->clientSecret = $clientSecret;
 	}
 
-	/** Short ascii slug used in URLs/filenames (e.g. "fitbit"). */
+	/** Short ascii slug used in URLs/filenames (e.g. "withings"). */
 	abstract public function key(): string;
 
-	/** Human-facing label (e.g. "Fitbit"). */
+	/** Human-facing label (e.g. "Withings"). */
 	abstract public function label(): string;
 
 	/** Space/comma separated scope string requested at authorization. */

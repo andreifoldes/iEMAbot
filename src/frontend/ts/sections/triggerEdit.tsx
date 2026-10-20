@@ -7,7 +7,7 @@ import { ObservableLangChooser } from "../components/ObservableLangChooser";
 import { BindObservable, BooleanTransformer, ConstrainedNumberTransformer, TimeTransformer, Transformer } from "../components/BindObservable";
 import { ActionTrigger } from "../data/study/ActionTrigger";
 import { Schedule } from "../data/study/Schedule";
-import { CUE_WEARABLE, EventTrigger, FALLBACK_MODE_FIXED, FALLBACK_MODE_VARIABLE, SHOW_GOOGLE_HEALTH, WEARABLE_EVENTS, WEARABLE_PROVIDERS, WEARABLE_PROVIDER_ANY, WEARABLE_PROVIDER_GOOGLE_HEALTH } from "../data/study/EventTrigger";
+import { CUE_WEARABLE, EventTrigger, LEGACY_PROVIDER_FITBIT, FALLBACK_MODE_FIXED, FALLBACK_MODE_VARIABLE, SHOW_GOOGLE_HEALTH, WEARABLE_EVENTS, WEARABLE_PROVIDERS, WEARABLE_PROVIDER_ANY, WEARABLE_PROVIDER_GOOGLE_HEALTH } from "../data/study/EventTrigger";
 import { TitleRow } from "../components/TitleRow";
 import { PrimitiveType } from "../observable/types/PrimitiveType";
 import { ACTION_INVITATION } from "../constants/actions";
@@ -256,7 +256,7 @@ export class Content extends SectionContent {
 		if (!entry)
 			return false
 		if (provider == WEARABLE_PROVIDER_ANY)
-			return entry.withings != null || entry.fitbit != null || entry.googlehealth
+			return entry.withings != null || entry.googlehealth
 		const supported = (entry as Record<string, unknown>)[provider]
 		return supported != null && supported !== false
 	}
@@ -345,7 +345,7 @@ export class Content extends SectionContent {
 
 	/**
 	 * "If this sensor event, then this prompt - else fall back to a fixed time."
-	 * Sensor events arrive as provider webhooks (Withings notify / Fitbit subscriptions);
+	 * Sensor events arrive as provider webhooks (Withings notify / Google Health);
 	 * the fallback turns the trigger into a time-contingent one when the sensor stays silent.
 	 */
 	private getSensorView(study: Study, event: EventTrigger): (Vnode<any, any> | false)[] {
@@ -370,6 +370,7 @@ export class Content extends SectionContent {
 								<small>{Lang.get("wearables_provider")}</small>
 								<select {...BindObservable(event.wearableProvider)}>
 									<option value={WEARABLE_PROVIDER_ANY}>{Lang.get("sensor_provider_any")}</option>
+									{provider == LEGACY_PROVIDER_FITBIT && <option value={LEGACY_PROVIDER_FITBIT}>{Lang.get("fitbit")}</option>}
 									{offeredProviders.map((p) => <option value={p}>{Lang.getDynamic(p == "googlehealth" ? "googlehealth_experimental" : p)}</option>)}
 								</select>
 							</label>
@@ -425,7 +426,7 @@ export class Content extends SectionContent {
 							{!supported && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_event_unsupported")}</small>}
 							{!study.wearablesEnabled.get() && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_wearables_disabled")}</small>}
 							{study.wearablesEnabled.get() && !providerOffered && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_provider_not_offered")}</small>}
-							{(provider == "fitbit" || provider == WEARABLE_PROVIDER_ANY) && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_fitbit_shutdown")}</small>}
+							{provider == LEGACY_PROVIDER_FITBIT && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_fitbit_removed")}</small>}
 							{provider == WEARABLE_PROVIDER_GOOGLE_HEALTH && <small class="center"><div class="inlineIcon">{m.trust(warnSvg)}</div>{Lang.get("sensor_googlehealth_note")}</small>}
 						</div>
 				})

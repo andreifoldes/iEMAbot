@@ -15,7 +15,6 @@ use backend\Configs;
  */
 class WearablesRegistry {
 	const PROVIDERS = [
-		'fitbit'   => FitbitProvider::class,
 		'withings' => WithingsProvider::class,
 		'googlehealth' => GoogleHealthProvider::class,
 	];
@@ -71,8 +70,8 @@ class WearablesRegistry {
 
 	/**
 	 * Server-to-server callback for "new data" webhooks. Withings has no request signature,
-	 * so its URL carries a key derived from the server-side client secret; Fitbit signs its
-	 * requests instead (see WearablesWebhook::verifyFitbitSignature).
+	 * so its URL carries a key derived from the server-side client secret; Google Health sends
+	 * a secret header instead.
 	 */
 	public static function webhookUri(string $provider): string {
 		$configured = (string) Configs::get('wearables_webhook_uri');
@@ -90,9 +89,8 @@ class WearablesRegistry {
 	}
 
 	/**
-	 * Whether this server can accept the provider's "new data" notifications at all. Withings and
-	 * Fitbit need their OAuth credentials (the callback key / signature derives from the client
-	 * secret); Google Health needs the webhook secret created by `wearables_setup.php googlehealth-webhook`.
+	 * Whether this server can accept the provider's "new data" notifications at all. Withings needs
+	 * its OAuth credentials (the callback key derives from the client secret); Google Health needs the webhook secret created by `wearables_setup.php googlehealth-webhook`.
 	 * Google's side (the subscriber registered in the Cloud project) cannot be seen from here.
 	 */
 	public static function webhookReady(string $provider): bool {
@@ -104,7 +102,7 @@ class WearablesRegistry {
 	/** Shared secret embedded in the callback URL, or null without provider credentials. */
 	public static function webhookKey(string $provider): ?string {
 		$creds = self::credentials($provider);
-		if($creds === null || $provider !== 'withings') // Fitbit signs, Google Health sends a secret header
+		if($creds === null || $provider !== 'withings') // Google Health sends a secret header
 			return null;
 		return substr(hash_hmac('sha256', "webhook:$provider", $creds['client_secret']), 0, 32);
 	}

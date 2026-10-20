@@ -29,7 +29,7 @@ upload.
 | `participant_messages` | Messages **sent by participants** to the researchers | A message is received |
 | `push_events` | Push funnel: `sent`, `failed`, `received`, `clicked`. One row per event, so a participant with several devices has several identical `sent` rows | Each event |
 | `client_info` | Latest installed-as-PWA flag and device class per participant | Each report (latest wins) |
-| `wearable_measurements` | Synced Fitbit / Withings measurements | Each hourly sync |
+| `wearable_measurements` | Synced Withings / Google Health measurements | Each hourly sync |
 
 Storing the response as JSON keyed by column name means adding or renaming a study variable never needs a
 schema change. Rows are de-duplicated on who sent them and when (user, entry id, response time), not on the

@@ -4,15 +4,13 @@
 // encryption key on first use. CLI-only. Re-run per provider.
 //
 // Usage:
-//   php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]
+//   php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> [redirect_uri]
 //   php cli/wearables_setup.php genkey            # only (re)generate the token key
-//   php cli/wearables_setup.php fitbit-verify <code>  # Fitbit subscriber verification code
 //   php cli/wearables_setup.php googlehealth-webhook   # secret + request body to register the Google Health subscriber
 //
-// Sensor-triggered prompts need webhooks: register
-//   https://<your-server>/esmira/api/wearables_webhook.php?provider=fitbit
-// as the Fitbit subscriber endpoint (with the verification code above). Withings URLs are
-// registered per participant automatically when they link their device.
+// Sensor-triggered prompts need webhooks. Withings URLs are registered per participant
+// automatically when they link their device; Google Health needs the one-off subscriber
+// request printed by the googlehealth-webhook command.
 //
 // The optional redirect_uri overrides the auto-derived callback URL. Whatever you
 // register with the provider must match: https://<your-server>/esmira/api/wearables_oauth.php
@@ -75,18 +73,8 @@ if(($args[0] ?? '') === 'googlehealth-webhook') {
 	exit(0);
 }
 
-if(($args[0] ?? '') === 'fitbit-verify') {
-	if(empty($args[1])) {
-		fwrite(STDERR, "Usage: php cli/wearables_setup.php fitbit-verify <code>\n");
-		exit(1);
-	}
-	FileSystemBasics::writeServerConfigs(['wearables_fitbit_verify_code' => $args[1]]);
-	fwrite(STDOUT, "Stored the Fitbit subscriber verification code.\n");
-	exit(0);
-}
-
 if(count($args) < 3) {
-	fwrite(STDERR, "Usage: php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]\n");
+	fwrite(STDERR, "Usage: php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> [redirect_uri]\n");
 	fwrite(STDERR, "       php cli/wearables_setup.php genkey\n");
 	exit(1);
 }

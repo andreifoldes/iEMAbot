@@ -5,12 +5,12 @@ namespace backend\wearables;
 
 /**
  * Minimal curl wrapper for the wearables providers. We only need: GET with a bearer
- * token, urlencoded form POST (optionally with HTTP Basic auth, as Fitbit requires),
+ * token, urlencoded form POST (optionally with HTTP Basic auth),
  * and JSON decoding. Deliberately tiny so the feature adds no composer dependency
  * (ext-curl is already required by minishlink/web-push — see Dockerfile).
  *
  * Every call returns ['status' => int, 'body' => string, 'json' => mixed|null] so a
- * provider can branch on the HTTP status (e.g. Fitbit's intraday 403 → daily fallback)
+ * provider can branch on the HTTP status (e.g. a 403 for a data type whose scope was not granted)
  * without exceptions. Transport failures (DNS, timeout) throw WearablesException.
  */
 class WearablesHttp {
@@ -29,7 +29,7 @@ class WearablesHttp {
 
 	/**
 	 * urlencoded form POST. When $basicAuth = [user, pass] is given, an Authorization:
-	 * Basic header is added (Fitbit token exchange/refresh).
+	 * Basic header is added.
 	 * @param array<string,string|int> $form
 	 * @param array{0:string,1:string}|null $basicAuth
 	 * @param array<string,string> $headers

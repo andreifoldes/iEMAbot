@@ -50,10 +50,10 @@ class SensorTriggerSchedulerTest extends TestCase {
 
 	function test_other_kind_or_provider_is_ignored() {
 		$ledger = [];
-		$study = $this->study(['wearableProvider' => 'fitbit']);
+		$study = $this->study(['wearableProvider' => 'googlehealth']);
 		$out = $this->compute($study, [
 			$this->event(self::D0 + 7 * self::H, 'sleep', 'withings'),
-			$this->event(self::D0 + 7 * self::H, 'activity', 'fitbit'),
+			$this->event(self::D0 + 7 * self::H, 'activity', 'googlehealth'),
 		], self::D0 + 8 * self::H, $ledger);
 		$this->assertSame([], $out);
 	}
@@ -202,11 +202,11 @@ class SensorTriggerSchedulerTest extends TestCase {
 	}
 
 	function test_hasTriggers_and_wantsEvent() {
-		$study = $this->study(['wearableProvider' => 'fitbit', 'wearableEvent' => 'activity']);
+		$study = $this->study(['wearableProvider' => 'googlehealth', 'wearableEvent' => 'activity']);
 		$this->assertTrue(SensorTriggerScheduler::hasTriggers($study));
-		$this->assertTrue(SensorTriggerScheduler::wantsEvent($study, 'fitbit', 'activity'));
+		$this->assertTrue(SensorTriggerScheduler::wantsEvent($study, 'googlehealth', 'activity'));
 		$this->assertFalse(SensorTriggerScheduler::wantsEvent($study, 'withings', 'activity'));
-		$this->assertFalse(SensorTriggerScheduler::wantsEvent($study, 'fitbit', 'sleep'));
+		$this->assertFalse(SensorTriggerScheduler::wantsEvent($study, 'googlehealth', 'sleep'));
 		$this->assertFalse(SensorTriggerScheduler::hasTriggers(['questionnaires' => [['actionTriggers' => [['eventTriggers' => [['cueCode' => 'joined']]]]]]]));
 	}
 

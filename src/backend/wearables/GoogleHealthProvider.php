@@ -4,13 +4,14 @@ declare(strict_types=1);
 namespace backend\wearables;
 
 /**
- * Google Health API (successor of the Fitbit Web API, which Google turns off on 2026-10-30).
+ * Google Health API (successor of the Fitbit Web API, which Google turns off on 2026-10-30; ESMira
+ * no longer supports Fitbit directly, Fitbit and Pixel Watch data reach it through this provider).
  *
  * Written from Google's published documentation; verify against a real Google Cloud project and
  * Fitbit/Pixel Watch account before relying on it for a study (an unverified OAuth app is capped at
  * 100 users and, while in Testing, its refresh tokens expire after 7 days).
  *
- * Differences from FitbitProvider that matter here:
+ * Things to know about this provider:
  *  - Google OAuth 2.0: credentials go in the POST body, `access_type=offline` is needed for a
  *    refresh token, access tokens last 1 h, refresh tokens are reusable (the refresh response
  *    carries no new one, which WearablesTokenStore already tolerates).
@@ -20,7 +21,7 @@ namespace backend\wearables;
  *  - Webhooks use AUTOMATIC subscriptions registered once per server (see
  *    cli/wearables_setup.php googlehealth-webhook), so there is no per-participant subscribe call.
  *  - Measurement download uses users/me/dataTypes/<id>/dataPoints (see DATA_TYPES); one row per
- *    day and type holds that day's data points verbatim, like FitbitProvider.
+ *    day and type holds that day's data points verbatim.
  */
 class GoogleHealthProvider extends WearablesProvider {
 	const AUTH_URL     = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -38,7 +39,7 @@ class GoogleHealthProvider extends WearablesProvider {
 	const DATA_BASE = 'https://health.googleapis.com/v4/users/me/dataTypes';
 	const MAX_PAGES = 20;
 	/**
-	 * Study data type (same names as Fitbit) => [Google dataType id, filter field suffix].
+	 * Study data type (the names the researcher panel offers) => [Google dataType id, filter field suffix].
 	 * Filter fields follow Google's category rules: sample types filter on sample_time,
 	 * interval types on interval.start_time, sleep sessions on interval.end_time.
 	 */

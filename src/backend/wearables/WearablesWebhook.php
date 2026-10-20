@@ -32,34 +32,6 @@ class WearablesWebhook {
 	}
 
 	/**
-	 * Fitbit Subscriptions: JSON array of {collectionType, date, ownerId, ownerType, subscriptionId}.
-	 * @return int number of (participant, event) pairs recorded
-	 */
-	public static function handleFitbit(string $rawBody, int $nowMs): int {
-		$notifications = json_decode($rawBody, true);
-		if(!is_array($notifications))
-			return 0;
-		$count = 0;
-		foreach($notifications as $n) {
-			if(!is_array($n))
-				continue;
-			$providerUserId = (string) ($n['ownerId'] ?? '');
-			$kind = WearablesEventKinds::fromFitbitCollection((string) ($n['collectionType'] ?? ''));
-			if($providerUserId !== '' && $kind !== null)
-				$count += self::record('fitbit', $providerUserId, $kind, $nowMs);
-		}
-		return $count;
-	}
-
-	/** Fitbit signs the raw body: base64(HMAC-SHA1(body, clientSecret . '&')). */
-	public static function verifyFitbitSignature(string $rawBody, string $signature, string $clientSecret): bool {
-		if($signature === '' || $clientSecret === '')
-			return false;
-		$expected = base64_encode(hash_hmac('sha1', $rawBody, $clientSecret . '&', true));
-		return hash_equals($expected, $signature);
-	}
-
-	/**
 	 * Store the event for every participant linked to this provider account whose study
 	 * has a matching sensor trigger.
 	 */
@@ -85,7 +57,7 @@ class WearablesWebhook {
 	 * @return array<int, array{0:int, 1:string}>
 	 */
 	public static function findParticipants(string $provider, string $providerUserId): array {
-		// A Fitbit batch often repeats the same owner; scanning decrypts every token file.
+		// A Google Health batch often repeats the same owner; scanning decrypts every token file.
 		static $memo = [];
 		$memoKey = "$provider:$providerUserId";
 		if(isset($memo[$memoKey]))

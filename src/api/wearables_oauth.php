@@ -61,9 +61,6 @@ try {
 	$token['created'] = Main::getMilliseconds();
 	WearablesTokenStore::save($studyId, $userId, $provider, $token);
 	WearablesWebhook::subscribe($provider, $token); // sensor-triggered prompts; best effort
-	// Google forbids one user holding a legacy Fitbit and a Google Health connection at once.
-	if($provider === 'googlehealth')
-		WearablesTokenStore::deleteToken($studyId, $userId, 'fitbit');
 	backToPwa($provider, 'connected');
 }
 catch(Throwable $e) {
