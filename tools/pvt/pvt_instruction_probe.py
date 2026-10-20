@@ -16,7 +16,7 @@ Variants:
   tutorial=true -> force the multi-screen tutorial
   tutorial=false-> force the single instruction screen
 
-Run:  python3 tools/pvt_instruction_probe.py
+Run:  python3 tools/pvt/pvt_instruction_probe.py
 Screenshots + summary land in /tmp/pvt-probe/.
 """
 from __future__ import annotations

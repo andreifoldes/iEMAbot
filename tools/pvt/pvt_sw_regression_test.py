@@ -25,7 +25,7 @@ workers) with a real Chromium + a real service worker, then verifies the fix:
     * the deployed /pwa/ bundle contains the root-SW cleanup
     * the live pvt-ba.js is the tutorial build and defaults show_tutorial=true
 
-Run:  python3 tools/pvt_sw_regression_test.py
+Run:  python3 tools/pvt/pvt_sw_regression_test.py
 Exit code 0 = all core (Part A) assertions passed.
 """
 from __future__ import annotations

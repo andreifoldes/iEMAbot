@@ -9,10 +9,10 @@ two Playwright contexts:
 
 For each, it walks Screen 1 -> Screen 2 -> Screen 3 (never pressing BEGIN),
 then captures screenshots and any console errors. Screenshots are written to
-tools/_pvt_cursor_shots/ for visual confirmation.
+tools/pvt/_pvt_cursor_shots/ for visual confirmation.
 
 Usage:
-    python3 tools/pvt_desktop_cursor_probe.py
+    python3 tools/pvt/pvt_desktop_cursor_probe.py
 """
 
 import functools

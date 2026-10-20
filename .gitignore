@@ -11,7 +11,7 @@
 # Test artifacts (Playwright MCP screenshots, ad-hoc root screenshots)
 /.playwright-mcp/
 /*.png
-/tools/_pvt_cursor_shots/
+/tools/pvt/_pvt_cursor_shots/
 
 # Claude Code session logs & local tooling config (kept out of version control)
 /.claude/logs/
