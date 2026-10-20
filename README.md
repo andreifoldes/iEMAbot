@@ -12,7 +12,9 @@ For more general information about ESMira have a look at the [main Readme](https
 
 
 <p align="center">
-	<img src="website/static/img/mockups-telegram-pwa.png" height="640" alt="Illustrative mockup of the same check-in in a Telegram chat (left) and in the participant web app (right): a 1 to 5 rating, a nine-point sleepiness scale and a reaction-time game."/>
+	<img src="website/static/img/mockup-telegram.svg" height="560" alt="Illustrative mockup of the check-in in a Telegram chat: a 1 to 5 rating, a nine-point sleepiness scale and a reaction-time game offered with Start task, Skip task, Remind me later and Skip check-in buttons."/>
+	&nbsp;&nbsp;&nbsp;
+	<img src="website/static/img/mockup-pwa.svg" height="560" alt="Illustrative mockup of the same check-in in the participant web app: the same rating, sleepiness scale and reaction-time game as cards in a chat-style layout."/>
 	<br>
 	<em>One study, two ways to answer: the same check-in as a Telegram conversation (left) and in the installable participant web app (right). Illustrative mockups.</em>
 </p>
