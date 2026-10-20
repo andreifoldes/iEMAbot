@@ -7,8 +7,19 @@
 	<a href="https://github.com/andreifoldes/iEMAbot/discussions">[Discussions]</a>
 </p>
 
-This is the web server module for [ESMira](https://github.com/KL-Psychological-Methodology/ESMira). It is responsible for providing studies to the [ESMira apps](https://github.com/KL-Psychological-Methodology/ESMira-apps), saving participant's data as well as providing an interface for designing studies and accessing data. If you want to use ESMira to run your own studies, you need to set up your own ESMira server. For more information follow our [step-by-step guide](https://github.com/KL-Psychological-Methodology/ESMira/wiki/Setting-up-a-server).
-For more general information about ESMira have a look at the [main Readme](https://github.com/KL-Psychological-Methodology/ESMira).
+**iEMAbot** is an open-source framework for ecological momentary assessment (EMA) in circadian and sleep research, developed at the Surrey Sleep Research Centre and the UK Dementia Research Institute Care Research & Technology Centre. It is a fork of [ESMira](https://github.com/KL-Psychological-Methodology/ESMira), the open-source experience-sampling platform from Karl Landsteiner University, and keeps ESMira's study designer, data collection and server.
+
+**Why we forked.** Understanding how sleep and circadian rhythms shape daytime functioning takes repeated self-report and task data collected in daily life. Dedicated EMA platforms are often costly and complex (subscriptions, proprietary apps, technical infrastructure), and unfamiliar app interfaces reduce engagement and adherence, especially in older or cognitively vulnerable people. ESMira gave us an open, self-hostable base. We forked it to add what our studies need and upstream does not offer: delivery through a familiar chat-style interface, and prompts that fire at the right moment in the sleep-wake cycle.
+
+**Goals**
+- **Meet participants where they are.** An installable web app (no app store) with a chat-style interface, plus a Telegram bot as a proof of concept for chat delivery. The channel layer is built to be extended to WhatsApp and SMS.
+- **Prompt at the right moment.** Flexible "if this, then that" scheduling (time-contingent, event-contingent and adaptive designs, multi-point daily sampling), including prompts triggered by wearables and nearables, for example when a Withings sleep sensor reports that someone got out of bed, with a time fallback if no event arrives. Fitbit and Pixel Watch data come through Google Health.
+- **Go beyond questionnaires.** Cognitive tasks (M2C2, a psychomotor vigilance test), voice memos and typing-dynamics capture, alongside validated sleep and alertness scales.
+- **Keep it affordable and under your control.** A self-hosted server that runs on a low-cost VPS or your institution's own cloud tenant, so data stay on infrastructure you manage.
+- **Be accessible.** WCAG 2.2 AA is a deploy gate for the participant app.
+- **Stay open.** Everything is AGPL-3.0, documented, and built for community extension.
+
+Several of these are early. [Current status](https://andreifoldes.github.io/iEMAbot/current-status) lists, claim by claim, what is shipped, partial or not yet built, and the [documentation](https://andreifoldes.github.io/iEMAbot/) covers setup and study design. For upstream ESMira, see its [main Readme](https://github.com/KL-Psychological-Methodology/ESMira) and [server setup guide](https://github.com/KL-Psychological-Methodology/ESMira/wiki/Setting-up-a-server).
 
 
 <p align="center">
