@@ -190,6 +190,18 @@ class PathsFS {
 		return self::folderWearablesEvents($studyId) . Paths::makeUrlFriendly($userId) . '.jsonl';
 	}
 
+	/**
+	 * Permanent per-participant record of every webhook notification ("new sleep data arrived"), kept for
+	 * research whether or not a trigger used it. CSV, one file per (participant, provider). Not inside
+	 * .wearables_data, whose *.csv files are imported as measurements.
+	 */
+	static function folderWearablesEventArchive(int $studyId): string {
+		return self::folderStudies() . "$studyId/.wearables_event_archive/";
+	}
+	static function fileWearablesEventArchive(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesEventArchive($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.events.csv';
+	}
+
 	/** Latest answers of the items a sensor-trigger fallback reads (e.g. habitual wake time), JSON, one file per participant. */
 	static function folderParticipantVariables(int $studyId): string {
 		return self::folderStudies() . "$studyId/.participant_variables/";

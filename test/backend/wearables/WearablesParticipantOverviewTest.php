@@ -54,8 +54,8 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 
 	function test_shows_the_newest_sensor_event_per_participant() {
 		$this->link('alice', 'googlehealth');
-		WearablesEventStore::append(self::STUDY, 'alice', 'googlehealth', 'sleep', 1000);
-		WearablesEventStore::append(self::STUDY, 'alice', 'googlehealth', 'activity', 2000);
+		WearablesEventArchive::append(self::STUDY, 'alice', 'googlehealth', 'sleep', 1000);
+		WearablesEventArchive::append(self::STUDY, 'alice', 'googlehealth', 'activity', 2000);
 
 		$rows = WearablesParticipantOverview::build(self::STUDY, ['alice', 'bob']);
 

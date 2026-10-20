@@ -34,7 +34,7 @@ class GoogleHealthWebhook {
 
 	/**
 	 * @param callable|null $keysetLoader fn(bool $forceRefresh): ?array  (tests inject a keyset)
-	 * @param callable|null $recorder     fn(string $provider, string $providerUserId, string $kind, int $nowMs): int
+	 * @param callable|null $recorder     fn(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval): int
 	 * @return int HTTP status to answer with
 	 */
 	public static function handleRequest(string $method, string $raw, string $authHeader, string $signature, int $nowMs, ?callable $keysetLoader = null, ?callable $recorder = null): int {
@@ -52,7 +52,7 @@ class GoogleHealthWebhook {
 		$recorder = $recorder ?? [WearablesWebhook::class, 'record'];
 		foreach(self::parseNotifications($raw) as $n) {
 			if($n['operation'] === 'UPSERT')
-				$recorder('googlehealth', $n['healthUserId'], $n['kind'], $nowMs);
+				$recorder('googlehealth', $n['healthUserId'], $n['kind'], $nowMs, $n['interval']);
 		}
 		return 204;
 	}
@@ -65,7 +65,7 @@ class GoogleHealthWebhook {
 	 * Notifications we can use: a known data type and a user id. Accepts a bare array, an object
 	 * holding the array under `data`/`notifications`, or a single object, each element optionally
 	 * wrapped in `data`.
-	 * @return array<int, array{healthUserId:string, kind:string, operation:string}>
+	 * @return array<int, array{healthUserId:string, kind:string, operation:string, interval:?array}>
 	 */
 	public static function parseNotifications(string $raw): array {
 		$json = json_decode($raw, true);
@@ -86,9 +86,23 @@ class GoogleHealthWebhook {
 			$kind = WearablesEventKinds::fromGoogleHealthDataType((string) ($n['dataType'] ?? ''));
 			$user = (string) ($n['healthUserId'] ?? '');
 			if($kind !== null && $user !== '')
-				$out[] = ['healthUserId' => $user, 'kind' => $kind, 'operation' => (string) ($n['operation'] ?? 'UPSERT')];
+				$out[] = ['healthUserId' => $user, 'kind' => $kind, 'operation' => (string) ($n['operation'] ?? 'UPSERT'), 'interval' => self::interval($n)];
 		}
 		return $out;
+	}
+
+	/** Earliest start and latest end (ms) over the notification's physical time intervals, or null. */
+	private static function interval(array $n): ?array {
+		$from = $to = null;
+		foreach(($n['intervals'] ?? []) as $i) {
+			$start = strtotime((string) ($i['physicalTimeInterval']['startTime'] ?? ''));
+			$end = strtotime((string) ($i['physicalTimeInterval']['endTime'] ?? ''));
+			if($start !== false)
+				$from = $from === null ? $start * 1000 : min($from, $start * 1000);
+			if($end !== false)
+				$to = $to === null ? $end * 1000 : max($to, $end * 1000);
+		}
+		return $from === null ? null : [$from, $to];
 	}
 
 	// --- signature ---------------------------------------------------------------

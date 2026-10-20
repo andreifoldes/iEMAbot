@@ -14,9 +14,9 @@ use Throwable;
  * participants who linked that provider account, so sensor-triggered prompts can fire.
  *
  * The webhooks only carry the provider's own user id and a data category, never the
- * measurement. An event is stored only if the participant's study actually has a sensor
- * trigger waiting for it (data minimisation, and it keeps the event log from filling up
- * with frequent activity pings nobody uses).
+ * measurement. Every notification for a participant of a wearables-enabled study is kept in
+ * WearablesEventArchive for the researcher. Only the ones a sensor trigger waits for also go to
+ * WearablesEventStore, the short hand-off the prompt scheduler reads.
  */
 class WearablesWebhook {
 	/**
@@ -28,20 +28,34 @@ class WearablesWebhook {
 		$kind = WearablesEventKinds::fromWithingsAppli((int) ($post['appli'] ?? 0));
 		if($providerUserId === '' || $kind === null)
 			return 0;
-		return self::record('withings', $providerUserId, $kind, $nowMs);
+		return self::record('withings', $providerUserId, $kind, $nowMs, self::withingsInterval($post));
+	}
+
+	/** Withings sends the covered period as epoch seconds (`startdate`/`enddate`). @return array{0:?int, 1:?int}|null */
+	private static function withingsInterval(array $post): ?array {
+		$from = $post['startdate'] ?? null;
+		$to = $post['enddate'] ?? null;
+		if(!is_numeric($from))
+			return null;
+		return [(int) $from * 1000, is_numeric($to) ? (int) $to * 1000 : null];
 	}
 
 	/**
-	 * Store the event for every participant linked to this provider account whose study
-	 * has a matching sensor trigger.
+	 * Keep the notification for every participant linked to this provider account whose study has
+	 * wearables enabled, and hand it to the prompt scheduler where a sensor trigger waits for it.
+	 * @param array{0:?int, 1:?int}|null $interval [startMs, endMs] the notification covers, if known
+	 * @return int number of participants it was kept for
 	 */
-	public static function record(string $provider, string $providerUserId, string $kind, int $nowMs): int {
+	public static function record(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval = null): int {
 		$count = 0;
 		foreach(self::findParticipants($provider, $providerUserId) as [$studyId, $userId]) {
 			try {
-				if(!self::studyWantsEvent($studyId, $provider, $kind))
+				$study = self::loadStudy($studyId);
+				if($study === null || empty($study['wearablesEnabled']))
 					continue;
-				WearablesEventStore::append($studyId, $userId, $provider, $kind, $nowMs);
+				$isNew = WearablesEventArchive::append($studyId, $userId, $provider, $kind, $nowMs, $interval);
+				if($isNew && SensorTriggerScheduler::wantsEvent($study, $provider, $kind))
+					WearablesEventStore::append($studyId, $userId, $provider, $kind, $nowMs);
 				$count++;
 			}
 			catch(Throwable $e) {
@@ -83,12 +97,10 @@ class WearablesWebhook {
 		return $memo[$memoKey] = $found;
 	}
 
-	private static function studyWantsEvent(int $studyId, string $provider, string $kind): bool {
+	private static function loadStudy(int $studyId): ?array {
 		$defaultLang = Configs::get('defaultLang') ?: 'en';
 		$study = json_decode(Configs::getDataStore()->getStudyStore()->getStudyLangConfigAsJson($studyId, $defaultLang), true);
-		return is_array($study)
-			&& !empty($study['wearablesEnabled'])
-			&& SensorTriggerScheduler::wantsEvent($study, $provider, $kind);
+		return is_array($study) ? $study : null;
 	}
 
 	/**

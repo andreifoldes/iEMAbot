@@ -79,6 +79,7 @@ class WearablesTokenStore {
 		@unlink(PathsFS::fileWearablesData($studyId, $userId, $provider));
 		@unlink(PathsFS::fileWearablesSyncState($studyId, $userId, $provider));
 		@unlink(PathsFS::fileWearablesRevoked($studyId, $userId, $provider));
+		WearablesEventArchive::delete($studyId, $userId, $provider);
 		if(empty(self::listProviders($studyId, $userId))) // no linked device left: drop the event log too
 			WearablesEventStore::delete($studyId, $userId);
 	}

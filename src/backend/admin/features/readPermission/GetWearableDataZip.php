@@ -11,7 +11,7 @@ use ZipArchive;
 
 /**
  * Streams a zip of the study's collected wearable data (the per-participant CSV files
- * under .wearables_data/). Requires read permission, like the response-data downloads.
+ * under .wearables_data/, plus the *.events.csv notification records). Requires read permission, like the response-data downloads.
  * Each CSV is self-describing (userId, provider, measurement_time, data_type, value,
  * fetched_at), so the URL-encoded file names do not need decoding.
  */
@@ -26,7 +26,16 @@ class GetWearableDataZip extends HasReadPermission {
 					$files[] = $entry;
 			}
 		}
-		if(empty($files))
+		// Notification records (when each provider reported new data), kept next to the fetched data.
+		$eventFolder = PathsFS::folderWearablesEventArchive($this->studyId);
+		$eventFiles = [];
+		if(is_dir($eventFolder)) {
+			foreach(array_diff(scandir($eventFolder), ['.', '..']) as $entry) {
+				if(substr($entry, -11) === '.events.csv')
+					$eventFiles[] = $entry;
+			}
+		}
+		if(empty($files) && empty($eventFiles))
 			throw new PageFlowException('No wearable data for this study');
 
 		$tmp = tempnam(sys_get_temp_dir(), 'esmira_wearables');
@@ -37,6 +46,8 @@ class GetWearableDataZip extends HasReadPermission {
 			throw new CriticalException('Could not create zip archive');
 		foreach($files as $entry)
 			$zip->addFile($folder . $entry, $entry);
+		foreach($eventFiles as $entry)
+			$zip->addFile($eventFolder . $entry, $entry);
 		$zip->close();
 
 		Main::setHeader('Cache-Control: no-cache, must-revalidate');

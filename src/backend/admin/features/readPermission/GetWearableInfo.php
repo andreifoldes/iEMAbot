@@ -38,6 +38,11 @@ class GetWearableInfo extends HasReadPermission {
 			}
 		}
 
+		// Notification records are downloadable too, even before the first daily data is fetched.
+		$eventFolder = PathsFS::folderWearablesEventArchive($this->studyId);
+		if(!$hasData && is_dir($eventFolder))
+			$hasData = !empty(glob($eventFolder . '*.events.csv'));
+
 		return [
 			'allProviders'        => array_keys(WearablesRegistry::PROVIDERS),
 			'configuredProviders' => WearablesRegistry::configuredProviders(),

@@ -58,12 +58,11 @@ class WearablesParticipantOverview {
 	}
 
 	/**
-	 * Newest webhook event still in the (3 day) event log: proof that the provider reaches this
-	 * server for the participant. Only events some trigger of the study waits for are logged.
+	 * Newest webhook notification stored for the participant: proof that the provider reaches this
+	 * server for them. Every notification is kept, whether or not a trigger uses it.
 	 */
 	private static function lastEvent(int $studyId, string $userId): ?array {
-		$events = WearablesEventStore::readSince($studyId, $userId, 0);
-		return $events ? $events[count($events) - 1] : null;
+		return WearablesEventArchive::last($studyId, $userId);
 	}
 
 	/** At least one linked provider the provider still accepts. */

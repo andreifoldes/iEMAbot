@@ -81,14 +81,15 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->assertPromptDue('alice');
 	}
 
-	function test_withings_event_of_another_kind_records_nothing() {
+	function test_withings_event_of_another_kind_is_kept_but_does_not_fire() {
 		$this->createStudyWithTrigger('withings', 'bed_out');
 		$this->link('alice', 'withings', '4242');
 
-		$this->assertSame(0, WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 50], self::WAKE)); // bed in
+		$this->assertSame(1, WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 50], self::WAKE)); // bed in: kept for research
 		$this->assertSame(0, WearablesWebhook::handleWithings(['userid' => '9999', 'appli' => 51], self::WAKE)); // unknown account
 
 		$this->assertSame([], $this->dueAfter('alice', self::WAKE + 60000));
+		$this->assertCount(2, $this->archiveRows('alice', 'withings'));
 	}
 
 	function test_google_health_sleep_webhook_fires_the_prompt() {
@@ -158,5 +159,67 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 51], $night);
 
 		$this->assertSame([], $this->dueAfter('alice', $night + 60000));
+	}
+
+	private function archiveRows(string $userId, string $provider): array {
+		$file = \backend\fileSystem\PathsFS::fileWearablesEventArchive(self::STUDY, $userId, $provider);
+		return file_exists($file) ? array_map(fn($line) => str_getcsv($line, ';', '"', ''), array_values(array_filter(explode("\n", file_get_contents($file))))) : [];
+	}
+
+	function test_every_notification_is_kept_even_when_no_trigger_wants_it() {
+		$this->createStudyWithTrigger('withings', 'bed_out'); // nothing waits for Google Health
+		$this->link('carol', 'googlehealth', 'gh-user-1');
+		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'steps', 'operation' => 'UPSERT',
+			'intervals' => [['physicalTimeInterval' => ['startTime' => '2025-03-10T07:55:00Z', 'endTime' => '2025-03-10T08:00:00Z']]]]]]);
+
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
+
+		$rows = $this->archiveRows('carol', 'googlehealth');
+		$this->assertCount(2, $rows); // header + the notification
+		$this->assertSame(['carol', 'googlehealth', 'activity', (string) self::WAKE, (string) (self::WAKE - 5 * 60000), (string) self::WAKE], $rows[1]);
+		$this->assertSame([], $this->dueAfter('carol', self::WAKE + 60000)); // kept for research, not a trigger
+		$this->assertSame([], \backend\wearables\WearablesEventStore::readSince(self::STUDY, 'carol', 0)); // no hand-off entry
+	}
+
+	function test_withings_notification_keeps_its_period() {
+		$this->createStudyWithTrigger('googlehealth', 'sleep');
+		$this->link('alice', 'withings', '4242');
+
+		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 16, 'startdate' => '1741593600', 'enddate' => '1741597200'], self::WAKE);
+
+		$rows = $this->archiveRows('alice', 'withings');
+		$this->assertSame(['alice', 'withings', 'activity', (string) self::WAKE, '1741593600000', '1741597200000'], $rows[1]);
+	}
+
+	function test_a_repeated_notification_is_stored_once() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('carol', 'googlehealth', 'gh-user-1');
+		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'sleep', 'operation' => 'UPSERT',
+			'intervals' => [['physicalTimeInterval' => ['startTime' => '2025-03-09T22:00:00Z', 'endTime' => '2025-03-10T06:00:00Z']]]]]]);
+
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE + 3600000); // Google retries
+
+		$this->assertCount(2, $this->archiveRows('carol', 'googlehealth'));
+	}
+
+	function test_nothing_is_kept_when_the_study_has_wearables_off() {
+		$this->createStudy((object) ['id' => self::STUDY, 'wearablesEnabled' => false]);
+		$this->link('alice', 'withings', '4242');
+
+		$this->assertSame(0, WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 44], self::WAKE));
+
+		$this->assertSame([], $this->archiveRows('alice', 'withings'));
+	}
+
+	function test_disconnecting_removes_the_participants_archive() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('alice', 'withings', '4242');
+		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 44], self::WAKE);
+		$this->assertNotSame([], $this->archiveRows('alice', 'withings'));
+
+		WearablesTokenStore::delete(self::STUDY, 'alice', 'withings');
+
+		$this->assertSame([], $this->archiveRows('alice', 'withings'));
 	}
 }

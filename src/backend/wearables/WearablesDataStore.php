@@ -53,7 +53,7 @@ class WearablesDataStore {
 	}
 
 	/** Proper CSV: wrap each field in quotes and double any embedded quotes. */
-	private static function csvLine(array $fields, string $delimiter): string {
+	public static function csvLine(array $fields, string $delimiter): string {
 		$escaped = array_map(fn($f) => '"' . str_replace('"', '""', (string) $f) . '"', $fields);
 		return implode($delimiter, $escaped);
 	}

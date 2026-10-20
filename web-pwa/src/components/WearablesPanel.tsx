@@ -94,6 +94,8 @@ export function WearablesPanel({ providers, status, busy, onConnect, onDisconnec
 
       <p className="text-xs text-on-surface-variant">
         Your data is collected periodically by the research server while your wearable stays connected.
+        The server also keeps a record of when your provider reports new data (for example a new sleep
+        session), whether or not it leads to a questionnaire. Disconnecting removes what was collected.
       </p>
     </div>
   );

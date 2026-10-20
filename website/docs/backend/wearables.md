@@ -115,6 +115,7 @@ userId ; provider ; measurement_time ; data_type ; value ; fetched_at
 ```mermaid
 flowchart LR
   W[Provider] -->|"webhook: new sleep data for user X"| E["api/wearables_webhook.php"]
+  E -->|"every notification"| A[".wearables_event_archive/&lt;user&gt;.&lt;provider&gt;.events.csv"]
   E -->|"only if a sensor trigger wants it"| L[".wearables_events/&lt;user&gt;.jsonl"]
   L --> S["PushSender (every minute)<br/>SensorTriggerScheduler"]
   S -->|"Web Push"| P[Participant]
@@ -204,12 +205,17 @@ What is and is not done:
   `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1` or an equivalent rewrite.
 
 - The endpoint answers 200/204 quickly (Google Health requires a 204 at once). A bad Withings key gets 403; a missing Google Health secret gets 401.
-- The callback maps the provider's user id to participants by scanning the token files, then stores an event
-  **only** for studies that have wearables enabled and a sensor trigger for that provider and type. The event
-  is the time the webhook arrived, kept for three days; it contains no measurement.
+- The callback maps the provider's user id to participants by scanning the token files, then keeps the
+  notification for every participant of a study with wearables enabled, **whether or not a trigger uses it**:
+  a row in the event archive (`.wearables_event_archive/<user>.<provider>.events.csv`: provider, event kind, the
+  time the webhook arrived, and the period it covers when the provider says so). It contains no measurement.
+  The archive is in `wearables.zip` and is kept for the life of the study. Where a sensor trigger waits for
+  the event it is additionally handed to the prompt scheduler through a short, three-day log. Providers retry,
+  so a notification identical to a recent one (same kind and period) is stored once. Google Health `DELETE`
+  notifications (a user deleting data) are not recorded.
 - Subscription is best effort: if it fails, linking still succeeds and the trigger's time fallback is what
   fires. An incomplete subscription is written to the server error log.
-- Disconnecting the last linked device deletes the participant's event log.
+- Disconnecting a provider deletes that participant's archived notifications for it, like the data already fetched; disconnecting the last one also drops the scheduler's event log.
 - The Withings callback URL carries one key shared by all participants and appears in web server access logs;
   anyone who learns it can forge events for a Withings user id. Keep query strings out of access logs, and note
   that rotating the Withings client secret invalidates existing subscriptions (participants must re-link).
@@ -230,10 +236,9 @@ Source: `sections/wearables.tsx`.
   names and sync-state files, so no token is decrypted. "Last sync" is the last completed UTC day fetched, not the
   device's own upload time. A link the provider has rejected is shown as "link no longer valid, participant must
   reconnect" and no longer counts as connected (see *Revoked links* below).
-- A **last sensor event** column in that table: the newest webhook event still in the participant's event log (kind,
-  provider, time). It proves the provider reaches this server for that participant. Events are only logged for kinds
-  a trigger of the study waits for and are kept for 3 days, so "none in the last 3 days" can also mean no trigger
-  wants that kind.
+- A **last sensor event** column in that table: the newest stored webhook notification (kind, provider, time). It
+  proves the provider reaches this server for that participant. Every notification is kept, so "none yet" means
+  none has arrived since the participant linked.
 - A provider whose credentials are set but whose notifications this server cannot receive yet (for Google Health:
   no webhook secret from `wearables_setup.php googlehealth-webhook`) is flagged "sensor triggers unavailable".
   Whether Google has the subscriber registered in the Cloud project cannot be seen from here.
