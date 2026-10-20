@@ -96,7 +96,7 @@ class GoogleHealthWebhookTest extends TestCase {
 	function test_parse_accepts_wrapper_shapes() {
 		$n = $this->notification('body-fat', '9');
 		foreach([[$n], $n, ['data' => [$n['data']]], ['notifications' => [$n]]] as $shape) {
-			$this->assertSame([['healthUserId' => '9', 'kind' => 'weight', 'operation' => 'UPSERT', 'interval' => null]], GoogleHealthWebhook::parseNotifications(json_encode($shape)));
+			$this->assertSame([['healthUserId' => '9', 'kind' => 'weight', 'operation' => 'UPSERT', 'dataType' => 'body-fat', 'interval' => null]], GoogleHealthWebhook::parseNotifications(json_encode($shape)));
 		}
 		$this->assertSame([], GoogleHealthWebhook::parseNotifications(json_encode([$this->notification('heart-rate')])));
 		$this->assertSame([], GoogleHealthWebhook::parseNotifications('nope'));

@@ -278,13 +278,19 @@ What is and is not done:
 
 - The endpoint answers 200/204 quickly (Google Health requires a 204 at once). A bad Withings key gets 403; a missing Google Health secret gets 401.
 - The callback maps the provider's user id to participants by scanning the token files, then keeps the
-  notification for every participant of a study with wearables enabled, **whether or not a trigger uses it**:
-  a row in the event archive (`.wearables_event_archive/<user>.<provider>.events.csv`: provider, event kind, the
-  time the webhook arrived, and the period it covers when the provider says so). It contains no measurement.
-  The archive is in `wearables.zip` and is kept for the life of the study. Where a sensor trigger waits for
-  the event it is additionally handed to the prompt scheduler through a short, three-day log. Providers retry,
-  so a notification identical to a recent one (same kind and period) is stored once. Google Health `DELETE`
-  notifications (a user deleting data) are not recorded.
+  notification for every participant of a study with wearables enabled, **whether or not a trigger uses it**, as one
+  row in the event archive (`.wearables_event_archive/<user>.<provider>.events.csv`, part of `wearables.zip`, kept for the
+  life of the study). It contains no measurement. Columns: `userId`, `provider`, `event` (the normalised kind, e.g.
+  `activity`), `detail` (the provider's own type: Google Health `steps`, `exercise`, `floors` …, or the Withings `appli`
+  code), `received_at` (when the webhook reached the server, ms), `interval_start` / `interval_end` (the period in UTC
+  ms, empty when the provider omits it) and `local_start` / `local_end` (the period on the user's local clock, ISO 8601
+  without zone, Google Health only). Google omits the UTC period for daily rollups and full-day activities and always
+  sends the local one, so an empty UTC period is normal. Where a sensor trigger waits for the event it is
+  additionally handed to the prompt scheduler through a short, three-day log. A row identical to one stored in the
+  last minute (a retry, or the same type twice in one batch) is skipped; a later update of the same period is a new
+  row, because "the data changed again" is itself the information. Files written by the first version of the archive
+  (no `detail` or local period) are converted on the next notification. Google Health `DELETE` notifications (a
+  user deleting data) are not recorded.
 - Subscription is best effort: if it fails, linking still succeeds and the trigger's time fallback is what
   fires. An incomplete subscription is written to the server error log.
 - Disconnecting a provider deletes that participant's archived notifications for it, like the data already fetched; disconnecting the last one also drops the scheduler's event log.

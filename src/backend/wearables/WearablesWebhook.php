@@ -28,32 +28,33 @@ class WearablesWebhook {
 		$kind = WearablesEventKinds::fromWithingsAppli((int) ($post['appli'] ?? 0));
 		if($providerUserId === '' || $kind === null)
 			return 0;
-		return self::record('withings', $providerUserId, $kind, $nowMs, self::withingsInterval($post));
+		return self::record('withings', $providerUserId, $kind, $nowMs, self::withingsInterval($post), (string) (int) ($post['appli'] ?? 0));
 	}
 
-	/** Withings sends the covered period as epoch seconds (`startdate`/`enddate`). @return array{0:?int, 1:?int}|null */
+	/** Withings sends the covered period as epoch seconds (`startdate`/`enddate`). @return array{from:?int, to:?int}|null */
 	private static function withingsInterval(array $post): ?array {
 		$from = $post['startdate'] ?? null;
 		$to = $post['enddate'] ?? null;
 		if(!is_numeric($from))
 			return null;
-		return [(int) $from * 1000, is_numeric($to) ? (int) $to * 1000 : null];
+		return ['from' => (int) $from * 1000, 'to' => is_numeric($to) ? (int) $to * 1000 : null];
 	}
 
 	/**
 	 * Keep the notification for every participant linked to this provider account whose study has
 	 * wearables enabled, and hand it to the prompt scheduler where a sensor trigger waits for it.
-	 * @param array{0:?int, 1:?int}|null $interval [startMs, endMs] the notification covers, if known
+	 * @param array{from?:?int, to?:?int, localFrom?:?string, localTo?:?string}|null $interval the period it covers, if known
+	 * @param string $detail the provider's own type (Google Health data type, Withings appli code)
 	 * @return int number of participants it was kept for
 	 */
-	public static function record(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval = null): int {
+	public static function record(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval = null, string $detail = ''): int {
 		$count = 0;
 		foreach(self::findParticipants($provider, $providerUserId) as [$studyId, $userId]) {
 			try {
 				$study = self::loadStudy($studyId);
 				if($study === null || empty($study['wearablesEnabled']))
 					continue;
-				$isNew = WearablesEventArchive::append($studyId, $userId, $provider, $kind, $nowMs, $interval);
+				$isNew = WearablesEventArchive::append($studyId, $userId, $provider, $kind, $nowMs, $interval, $detail);
 				if($isNew && SensorTriggerScheduler::wantsEvent($study, $provider, $kind))
 					WearablesEventStore::append($studyId, $userId, $provider, $kind, $nowMs);
 				$count++;

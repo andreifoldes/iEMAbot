@@ -170,37 +170,84 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->createStudyWithTrigger('withings', 'bed_out'); // nothing waits for Google Health
 		$this->link('carol', 'googlehealth', 'gh-user-1');
 		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'steps', 'operation' => 'UPSERT',
-			'intervals' => [['physicalTimeInterval' => ['startTime' => '2025-03-10T07:55:00Z', 'endTime' => '2025-03-10T08:00:00Z']]]]]]);
+			'intervals' => [['physicalTimeInterval' => ['startTime' => '2025-03-10T07:55:00Z', 'endTime' => '2025-03-10T08:00:00Z'],
+				'civilIso8601TimeInterval' => ['startTime' => '2025-03-10T08:55:00', 'endTime' => '2025-03-10T09:00:00']]]]]]);
 
 		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
 
 		$rows = $this->archiveRows('carol', 'googlehealth');
 		$this->assertCount(2, $rows); // header + the notification
-		$this->assertSame(['carol', 'googlehealth', 'activity', (string) self::WAKE, (string) (self::WAKE - 5 * 60000), (string) self::WAKE], $rows[1]);
+		$this->assertSame(WearablesEventArchive::COLUMNS, $rows[0]);
+		$this->assertSame(['carol', 'googlehealth', 'activity', 'steps', (string) self::WAKE, (string) (self::WAKE - 5 * 60000), (string) self::WAKE,
+			'2025-03-10T08:55:00', '2025-03-10T09:00:00'], $rows[1]);
 		$this->assertSame([], $this->dueAfter('carol', self::WAKE + 60000)); // kept for research, not a trigger
 		$this->assertSame([], \backend\wearables\WearablesEventStore::readSince(self::STUDY, 'carol', 0)); // no hand-off entry
 	}
 
-	function test_withings_notification_keeps_its_period() {
+	function test_a_daily_rollup_has_only_its_local_period() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('carol', 'googlehealth', 'gh-user-1');
+		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'floors', 'operation' => 'UPSERT',
+			'intervals' => [['civilIso8601TimeInterval' => ['startTime' => '2025-03-10T00:00:00', 'endTime' => '2025-03-11T00:00:00']]]]]]);
+
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE); // Google omits physicalTimeInterval here
+
+		$row = $this->archiveRows('carol', 'googlehealth')[1];
+		$this->assertSame(['floors', '', '', '2025-03-10T00:00:00', '2025-03-11T00:00:00'], [$row[3], $row[5], $row[6], $row[7], $row[8]]);
+	}
+
+	function test_several_data_types_of_one_kind_keep_their_own_rows() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('carol', 'googlehealth', 'gh-user-1');
+		$notification = fn($type) => ['data' => ['healthUserId' => 'gh-user-1', 'dataType' => $type, 'operation' => 'UPSERT',
+			'intervals' => [['civilIso8601TimeInterval' => ['startTime' => '2025-03-10T08:50:00', 'endTime' => '2025-03-10T08:55:00']]]]];
+
+		GoogleHealthWebhook::handleRequest('POST', json_encode([$notification('steps'), $notification('distance'), $notification('steps')]), 's3cret', '', self::WAKE);
+
+		$details = array_column(array_slice($this->archiveRows('carol', 'googlehealth'), 1), 3);
+		$this->assertSame(['steps', 'distance'], $details); // the second steps is a repeat inside the same batch
+	}
+
+	function test_withings_notification_keeps_its_period_and_appli_code() {
 		$this->createStudyWithTrigger('googlehealth', 'sleep');
 		$this->link('alice', 'withings', '4242');
 
 		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 16, 'startdate' => '1741593600', 'enddate' => '1741597200'], self::WAKE);
 
 		$rows = $this->archiveRows('alice', 'withings');
-		$this->assertSame(['alice', 'withings', 'activity', (string) self::WAKE, '1741593600000', '1741597200000'], $rows[1]);
+		$this->assertSame(['alice', 'withings', 'activity', '16', (string) self::WAKE, '1741593600000', '1741597200000', '', ''], $rows[1]);
 	}
 
-	function test_a_repeated_notification_is_stored_once() {
+	function test_a_quick_repeat_is_stored_once_but_a_later_update_is_a_new_row() {
 		$this->createStudyWithTrigger('withings', 'bed_out');
 		$this->link('carol', 'googlehealth', 'gh-user-1');
 		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'sleep', 'operation' => 'UPSERT',
-			'intervals' => [['physicalTimeInterval' => ['startTime' => '2025-03-09T22:00:00Z', 'endTime' => '2025-03-10T06:00:00Z']]]]]]);
+			'intervals' => [['civilIso8601TimeInterval' => ['startTime' => '2025-03-09T22:00:00', 'endTime' => '2025-03-10T06:00:00']]]]]]);
 
 		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
-		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE + 3600000); // Google retries
-
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE + 20000); // a retry seconds later
 		$this->assertCount(2, $this->archiveRows('carol', 'googlehealth'));
+
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE + 3600000); // the same night edited an hour later
+		$this->assertCount(3, $this->archiveRows('carol', 'googlehealth'));
+	}
+
+	function test_a_file_in_the_old_layout_is_converted_on_the_next_notification() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('carol', 'googlehealth', 'gh-user-1');
+		mkdir(\backend\fileSystem\PathsFS::folderWearablesEventArchive(self::STUDY), 0777, true);
+		$file = \backend\fileSystem\PathsFS::fileWearablesEventArchive(self::STUDY, 'carol', 'googlehealth');
+		file_put_contents($file, "\"userId\";\"provider\";\"event\";\"received_at\";\"interval_start\";\"interval_end\"\n"
+			. "\"carol\";\"googlehealth\";\"activity\";\"111\";\"\";\"\"\n");
+		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'weight', 'operation' => 'UPSERT']]]);
+
+		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
+
+		$rows = $this->archiveRows('carol', 'googlehealth');
+		$this->assertSame(WearablesEventArchive::COLUMNS, $rows[0]);
+		$this->assertSame(['carol', 'googlehealth', 'activity', '', '111', '', '', '', ''], $rows[1]); // old row kept, new columns empty
+		$this->assertSame(['carol', 'googlehealth', 'weight', 'weight', (string) self::WAKE, '', '', '', ''], $rows[2]);
+		$this->assertSame(['t' => self::WAKE, 'provider' => 'googlehealth', 'kind' => 'weight'], WearablesEventArchive::last(self::STUDY, 'carol'));
 	}
 
 	function test_nothing_is_kept_when_the_study_has_wearables_off() {

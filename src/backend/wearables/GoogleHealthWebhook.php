@@ -34,7 +34,7 @@ class GoogleHealthWebhook {
 
 	/**
 	 * @param callable|null $keysetLoader fn(bool $forceRefresh): ?array  (tests inject a keyset)
-	 * @param callable|null $recorder     fn(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval): int
+	 * @param callable|null $recorder     fn(string $provider, string $providerUserId, string $kind, int $nowMs, ?array $interval, string $detail): int
 	 * @return int HTTP status to answer with
 	 */
 	public static function handleRequest(string $method, string $raw, string $authHeader, string $signature, int $nowMs, ?callable $keysetLoader = null, ?callable $recorder = null): int {
@@ -52,7 +52,7 @@ class GoogleHealthWebhook {
 		$recorder = $recorder ?? [WearablesWebhook::class, 'record'];
 		foreach(self::parseNotifications($raw) as $n) {
 			if($n['operation'] === 'UPSERT')
-				$recorder('googlehealth', $n['healthUserId'], $n['kind'], $nowMs, $n['interval']);
+				$recorder('googlehealth', $n['healthUserId'], $n['kind'], $nowMs, $n['interval'], $n['dataType']);
 		}
 		return 204;
 	}
@@ -65,7 +65,7 @@ class GoogleHealthWebhook {
 	 * Notifications we can use: a known data type and a user id. Accepts a bare array, an object
 	 * holding the array under `data`/`notifications`, or a single object, each element optionally
 	 * wrapped in `data`.
-	 * @return array<int, array{healthUserId:string, kind:string, operation:string, interval:?array}>
+	 * @return array<int, array{healthUserId:string, kind:string, operation:string, dataType:string, interval:?array}>
 	 */
 	public static function parseNotifications(string $raw): array {
 		$json = json_decode($raw, true);
@@ -86,23 +86,38 @@ class GoogleHealthWebhook {
 			$kind = WearablesEventKinds::fromGoogleHealthDataType((string) ($n['dataType'] ?? ''));
 			$user = (string) ($n['healthUserId'] ?? '');
 			if($kind !== null && $user !== '')
-				$out[] = ['healthUserId' => $user, 'kind' => $kind, 'operation' => (string) ($n['operation'] ?? 'UPSERT'), 'interval' => self::interval($n)];
+				$out[] = ['healthUserId' => $user, 'kind' => $kind, 'operation' => (string) ($n['operation'] ?? 'UPSERT'), 'dataType' => (string) $n['dataType'], 'interval' => self::interval($n)];
 		}
 		return $out;
 	}
 
-	/** Earliest start and latest end (ms) over the notification's physical time intervals, or null. */
+	/**
+	 * The period a notification covers. `physicalTimeInterval` (UTC) is optional: Google leaves it out for daily
+	 * rollups and full-day activities. `civilIso8601TimeInterval` (the user's local clock, no zone) is always there.
+	 * Over several intervals: earliest start and latest end.
+	 * @return array{from:?int, to:?int, localFrom:?string, localTo:?string}|null
+	 */
 	private static function interval(array $n): ?array {
-		$from = $to = null;
+		$from = $to = $localFrom = $localTo = null;
 		foreach(($n['intervals'] ?? []) as $i) {
+			if(!is_array($i))
+				continue;
 			$start = strtotime((string) ($i['physicalTimeInterval']['startTime'] ?? ''));
 			$end = strtotime((string) ($i['physicalTimeInterval']['endTime'] ?? ''));
 			if($start !== false)
 				$from = $from === null ? $start * 1000 : min($from, $start * 1000);
 			if($end !== false)
 				$to = $to === null ? $end * 1000 : max($to, $end * 1000);
+			$ls = (string) ($i['civilIso8601TimeInterval']['startTime'] ?? '');
+			$le = (string) ($i['civilIso8601TimeInterval']['endTime'] ?? '');
+			if($ls !== '' && ($localFrom === null || $ls < $localFrom)) // ISO 8601 strings sort chronologically
+				$localFrom = $ls;
+			if($le !== '' && ($localTo === null || $le > $localTo))
+				$localTo = $le;
 		}
-		return $from === null ? null : [$from, $to];
+		if($from === null && $to === null && $localFrom === null && $localTo === null)
+			return null;
+		return ['from' => $from, 'to' => $to, 'localFrom' => $localFrom, 'localTo' => $localTo];
 	}
 
 	// --- signature ---------------------------------------------------------------
