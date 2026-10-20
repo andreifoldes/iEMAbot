@@ -78,10 +78,11 @@ describe('answersText', () => {
     ].join('\n'));
   });
 
-  it('leaves out questions without an answer (skipped or hidden by show_if)', () => {
+  it('leaves out questions without an answer (skipped or hidden by show_if), but marks a skipped task', () => {
     const partial = { conf_enjoyment: '4', kss: '6: Some signs of sleepiness' };
     const text = answersText(questions, partial, null);
-    assert.equal(text, 'Your answers\n• Conference enjoyment: 4/5\n• Sleepiness (KSS): 6: Some signs of sleepiness');
+    assert.equal(text, 'Your answers\n• Conference enjoyment: 4/5\n• Sleepiness (KSS): 6: Some signs of sleepiness'
+      + '\n• Reaction-time game: skipped');
   });
 
   it('says "completed" when the game ran but gave no usable trials', () => {

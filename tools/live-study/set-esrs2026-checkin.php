@@ -44,8 +44,8 @@ const TITLE = 'ESRS 2026 mini check-in';
 const DESCRIPTION = '<p>Welcome to the ESRS 2026 mini check-in, a playful demo that goes with our poster.</p>'
     . '<p>It takes about 5 minutes: how you are enjoying the conference, a few quick mood questions,'
     . ' how sleepy you feel, and a short reaction-time game. You get a little snapshot of yourself at the end.</p>';
-const CONSENT = "It is a fully anonymous demo. Nothing you answer is saved: your answers and task results stay on"
-    . " your phone and are not sent anywhere, so there is nothing to delete afterwards.\n\n"
+const CONSENT = "It is a one-off, fully anonymous demo. Nothing you answer is saved: your answers and task results"
+    . " stay on your phone and are not sent anywhere.\n\n"
     . 'Do you consent to take part in this anonymous demo?';
 const INTRO = 'Conference';
 const PANAS_INTRO = 'Next, six quick questions about how you feel right now. For each one, tap how strongly it'

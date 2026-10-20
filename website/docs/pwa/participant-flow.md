@@ -107,7 +107,8 @@ these studies.
 
 ## Consent, name and join time
 
-The study description (HTML) and consent text are shown, then *I consent* / *I do not consent*. The display
+The study description (HTML) and consent text are shown, then *I consent* / *I do not consent*. A generic
+*Welcome to <title>.* line comes first, unless the description itself opens with "Welcome". The display
 name is cosmetic; the participant ID is assigned automatically. **The consent time is the enrolment anchor**
 (`esmira_joined_*`, event `joined`), from which `durationStartingAfterDays` and similar fields count.
 
@@ -132,13 +133,14 @@ the Telegram bot's esrs2026 study:
 2. **Your answers**: the participant's own answers in question order, with short labels for a few items, `/5` on
    scales and, for the reaction-time game, a line such as *17 taps, average 555 ms, 7 lapses* (false starts are
    not taps). Like the bot, only questions that have an answer appear, so one hidden by its `show_if`
-   (`relevance`) or skipped is left out.
+   (`relevance`) or skipped is left out; a skipped task is listed as *skipped*.
 3. **Thank-you**.
 
 It is computed in the browser by `lib/snapshot.ts`.
 
-The thank-you ends the session: the app does not offer another questionnaire or show the list. Reopening the app
-returns to the list.
+The thank-you ends the session: the app does not offer another questionnaire or show the list. When exactly one
+questionnaire is open, such a study also skips the list on the way in: after consent (or on reopening the app) it
+says *Let's go!* and starts the check-in, as the bot does after `/start`.
 
 ## Local-only studies
 

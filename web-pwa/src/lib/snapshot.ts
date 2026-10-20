@@ -24,7 +24,7 @@ const LABELS: Record<string, string> = {
 };
 
 const THANK_YOU = 'Thank you so much for trying out iEMAbot at ESRS 2026! Enjoy the rest of the conference, '
-  + 'and come and say hello at our poster. If you fancy another go, just open the check-in again.';
+  + 'and come and say hello at our poster. If you fancy another go, just reopen this page.';
 const LOCAL_ONLY_NOTE = 'This chat is the only copy: the app sent nothing to the server.';
 
 /** Leading number of an answer such as "4" or "7: Sleepy, but no effort to keep awake". */
@@ -84,7 +84,10 @@ export function pvtSummary(trials: unknown): string | null {
 
 const plain = (html: string): string => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** "Your answers": the participant's own answers in question order, unanswered questions left out. */
+/**
+ * "Your answers": the participant's own answers in question order. Unanswered questions are left out,
+ * except a task, which says "skipped" like the bot (a finished check-in has reached every task).
+ */
 export function answersText(
   questions: readonly Pick<PreloadedQuestion, 'id' | 'text' | 'type' | 'title' | 'scale_max'>[],
   answers: Readonly<Record<string, string>>,
@@ -93,11 +96,11 @@ export function answersText(
   const lines = ['Your answers'];
   for (const q of questions) {
     const value = answers[q.id];
-    if (value === undefined) continue;
     if (q.type === 'cognitive') {
-      lines.push(`• ${plain(q.title || q.text) || 'Task'}: ${pvt ?? 'completed'}`);
+      lines.push(`• ${plain(q.title || q.text) || 'Task'}: ${value === undefined ? 'skipped' : pvt ?? 'completed'}`);
       continue;
     }
+    if (value === undefined) continue;
     const suffix = q.type === 'likert' ? `/${q.scale_max ?? 5}` : '';
     lines.push(`• ${LABELS[q.id] ?? plain(q.text)}: ${value}${suffix}`);
   }

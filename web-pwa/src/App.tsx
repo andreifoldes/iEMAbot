@@ -19,7 +19,7 @@ import {
 import { cn, splitQuestionHtml } from './lib/utils';
 import { OfflineSurveyEngine } from './lib/surveyEngine';
 import type { PendingSpecify } from './lib/surveyEngine';
-import { adaptQuestionnaire } from './lib/esmiraAdapter';
+import { adaptQuestionnaire, headerText } from './lib/esmiraAdapter';
 import {
   buildEsmiraResponses, fetchStudy, installSubmitQueueFlusher, submitQuestionnaire,
   submitCognitiveTrials, serverRootUrl, sendParticipantMessage, loadUploadProtocol,
@@ -248,6 +248,8 @@ export default function App() {
   // Paced messages (webPacedMessages): from message `from` on, only `shown` messages are on screen
   // while a batch of bubbles is revealed one by one; null = show every message. See lib/pacing.ts.
   const [pace, setPace] = useState<{ from: string; shown: number } | null>(null);
+  // Questionnaire to open as soon as the list phase has rendered (see enterList); null = none.
+  const [autoStartId, setAutoStartId] = useState<number | null>(null);
   const paceStart = pace ? messages.findIndex((m) => m.id === pace.from) : -1;
   const visibleCount = paceStart >= 0 ? Math.min(messages.length, paceStart + pace!.shown) : messages.length;
   const pacing = visibleCount < messages.length;
@@ -388,8 +390,15 @@ export default function App() {
     // questionnaires are suppressed even for participants who joined before it existed.
     void backfillCompletions(s.id, uid, loadCompletions(s.id, uid));
     const visible = s.questionnaires.filter((q) => q.title !== TRIALS_QN_TITLE);
-    const { message } = summarize(visible, joined, now, loadCompletions(s.id, uid));
-    pushBot(lead ? `${lead} ${message}` : message);
+    const completions = loadCompletions(s.id, uid);
+    const open = visible.filter((q) => computeAvailability(q, joined, now, completions).state === 'available');
+    // A one-questionnaire check-in with an end snapshot (esrs2026) starts straight away, like the
+    // Telegram bot, instead of offering a list with a single card.
+    const autoStart = !!s.webSnapshot && open.length === 1;
+    const { message } = summarize(visible, joined, now, completions);
+    const greeting = autoStart ? "Let's go!" : message;
+    pushBot(lead ? `${lead} ${greeting}` : greeting);
+    if (autoStart) setAutoStartId(open[0].internalId);
     setPhase('list');
   }, [pushBot]);
 
@@ -544,14 +553,17 @@ export default function App() {
         }
         const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
         setParticipant(savedName);
-        const welcomeId = pushBot(`Welcome to ${study.title}.`);
-        // A first visit to a paced study sees welcome, description and consent appear one by one
-        // (set in the same batch as the pushes below, so nothing flashes up early).
-        if (study.webPacedMessages && study.informedConsentForm
-          && localStorage.getItem(`esmira_consent_${study.id}`) !== '1') setPace({ from: welcomeId, shown: 1 });
+        // A description that greets the participant itself replaces the generic welcome line.
+        const welcomeId = /^welcome\b/i.test(headerText(study.studyDescription))
+          ? null : pushBot(`Welcome to ${study.title}.`);
         // studyDescription is rich text (HTML) in ESMira; render it formatted.
         // informedConsentForm is a plain-text field — keep it plain (line breaks preserved).
-        if (study.studyDescription) pushBot(study.studyDescription, true);
+        const descriptionId = study.studyDescription ? pushBot(study.studyDescription, true) : null;
+        // A first visit to a paced study sees welcome, description and consent appear one by one
+        // (set in the same batch as the pushes, so nothing flashes up early).
+        const firstId = welcomeId ?? descriptionId;
+        if (firstId && study.webPacedMessages && study.informedConsentForm
+          && localStorage.getItem(`esmira_consent_${study.id}`) !== '1') setPace({ from: firstId, shown: 1 });
         const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
         // Resolve enrollment for an already-consented participant before entering the study
         // (new participants are handled at consent in onConsent). Adopt the SERVER's anchor
@@ -1103,7 +1115,7 @@ export default function App() {
   };
 
   // ── Start a questionnaire ────────────────────────────────────
-  const startQuestionnaire = (internalId: number, practice = false) => {
+  const startQuestionnaire = (internalId: number, practice = false, auto = false) => {
     if (!study) return;
     const q = study.questionnaires.find((x) => x.internalId === internalId);
     if (!q) return;
@@ -1139,7 +1151,9 @@ export default function App() {
     keystrokeTextsRef.current = resume ? { ...resume.keystrokeTexts } : {};
     keystrokeModesRef.current = resume ? { ...resume.keystrokeModes } : {};
     pvtLinesRef.current = {};
-    pushUser(q.title);
+    // A participant's tap shows as their bubble; an automatic start labels the check-in instead.
+    if (auto) pushSection(q.title);
+    else pushUser(q.title);
     if (resume) {
       clearPaused(study.id, userId);
       // Show what was answered before the pause, then carry on from the saved position.
@@ -1163,6 +1177,15 @@ export default function App() {
     setCurrentQuestion(engine.getCurrentQuestion());
     setProgress(engine.getProgress());
   };
+
+  // Open the questionnaire enterList picked once the list phase has rendered, so the start sees the
+  // freshly set user id, enrollment and availability.
+  useEffect(() => {
+    if (autoStartId == null || phase !== 'list' || pacing) return;
+    setAutoStartId(null);
+    startQuestionnaire(autoStartId, false, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStartId, phase, pacing]);
 
   // ── Respond to current question ──────────────────────────────
   const handleRespond = (questionId: string, value: string) => {
@@ -1966,7 +1989,7 @@ export default function App() {
         })()}
 
         {/* Questionnaire list */}
-        {phase === 'list' && study && !pacing && (() => {
+        {phase === 'list' && study && !pacing && autoStartId == null && (() => {
           // Show what the participant can act on now: the currently-available
           // questionnaires, or — when nothing is open yet — every questionnaire that
           // still has a future opening, so e.g. a Morning survey whose window already
