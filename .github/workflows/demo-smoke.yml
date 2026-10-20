@@ -1,0 +1,46 @@
+name: Container demo smoke test
+
+# Builds the fork's Docker image, starts it with the demo compose file, creates the admin account and demo study
+# over the real HTTP API, then runs the curl smoke test AND a headless-browser test of both front-ends
+# (participant PWA + researcher dashboard). Fully self-contained: no VPN, server or secrets needed.
+# See website/docs/deployment/demo-and-verification.md.
+#
+# Manual only: start it from the Actions tab (Run workflow). It builds dist/ inside the runner and never commits,
+# so it cannot trigger an auto-tag.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: demo-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install browser test dependencies
+        run: |
+          python3 -m pip install --user playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Build, start, bootstrap and smoke-test the demo
+        env:
+          # Fail (instead of skipping) if the browser test cannot run.
+          REQUIRE_UI: '1'
+        run: scripts/demo/demo-up.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.demo.yml -p esmira-demo logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: scripts/demo/demo-up.sh --down

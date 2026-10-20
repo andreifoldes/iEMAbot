@@ -7,6 +7,12 @@ function setResponseTypeValues(input: Input, variables: string[]): void {
 	switch (input.responseType.get()) {
 		case "text":
 			return
+		case "record_keystrokes":
+			// Main column = keystroke event-log CSV file; siblings = typed transcript + capture mode.
+			variables.push(name)
+			variables.push(name + "~text")
+			variables.push(name + "~capture_mode")
+			return
 		case "app_usage":
 			variables.push(name + "~usageTimeYesterday")
 			variables.push(name + "~usageCountYesterday")

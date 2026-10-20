@@ -1,0 +1,11 @@
+# Served from /pwa/. Help the PWA update promptly and serve the manifest
+# with the right MIME type. Copied verbatim into dist/pwa/ by Vite.
+AddType application/manifest+json .webmanifest
+
+# The service worker and manifest must not be cached by the browser, or updates
+# can lag a full cache lifetime behind a new deploy.
+<FilesMatch "(sw\.js|manifest\.webmanifest)$">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </IfModule>
+</FilesMatch>

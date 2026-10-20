@@ -1,0 +1,22 @@
+{
+  "_doc": "Shared PHP/TS parity cases for item relevance (RelevanceEvaluator.php vs esmiraAdapter.parseRelevance + surveyEngine.evaluateShowIf). parsed=null means the expression is unsupported and the item always shows.",
+  "parse": [
+    { "relevance": "mood == 3", "parsed": { "question_id": "mood", "operator": "equals", "value": "3" } },
+    { "relevance": "  place != \"Home\" ", "parsed": { "question_id": "place", "operator": "not_equals", "value": "Home" } },
+    { "relevance": "sleep_q >= '4'", "parsed": { "question_id": "sleep_q", "operator": "gte", "value": "4" } },
+    { "relevance": "x == \"\"", "parsed": { "question_id": "x", "operator": "equals", "value": "" } },
+    { "relevance": "a == 1 && b == 2", "parsed": null },
+    { "relevance": "getAnswer('x') == 1", "parsed": null },
+    { "relevance": "", "parsed": null }
+  ],
+  "holds": [
+    { "relevance": "mood == 3", "responses": { "mood": "3" }, "expected": true },
+    { "relevance": "mood == 3", "responses": { "mood": "4" }, "expected": false },
+    { "relevance": "mood == 3", "responses": {}, "expected": false },
+    { "relevance": "place != \"Home\"", "responses": { "place": "Work" }, "expected": true },
+    { "relevance": "place != \"Home\"", "responses": {}, "expected": false },
+    { "relevance": "drinks >= 2", "responses": { "drinks": "5+" }, "expected": true },
+    { "relevance": "drinks >= 2", "responses": { "drinks": "1" }, "expected": false },
+    { "relevance": "drinks >= 2", "responses": { "drinks": "none" }, "expected": false }
+  ]
+}

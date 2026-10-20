@@ -1,0 +1,90 @@
+name: Documentation site (GitHub Pages)
+
+# Builds the Docusaurus site in website/ and publishes it to GitHub Pages:
+#   https://andreifoldes.github.io/iEMAbot/
+#
+# - Pull requests and pushes that touch website/ build the site (broken links
+#   and anchors fail the build) and scan the BUILT HTML for private details.
+# - Only pushes to main (and manual runs on main) deploy.
+#
+# One-off repository setting: Settings > Pages > Source = "GitHub Actions"
+# (or `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`).
+#
+# Deliberately independent of auto_release.yml / update_parent.yml: it only
+# reads website/ and scripts/security/, never touches dist/ or package.json.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'scripts/security/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'scripts/security/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install
+        working-directory: website
+        run: npm ci
+
+      - name: Type check
+        working-directory: website
+        run: npm run typecheck
+
+      - name: Build (fails on broken links or anchors)
+        working-directory: website
+        run: npm run build
+
+      - name: Scan built site for private details
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+        run: node scripts/security/scan-private-details.mjs --dir website/build
+
+      - uses: actions/configure-pages@v6
+        if: github.event_name != 'pull_request'
+
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          path: website/build
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # Never cancel a deployment half-way: queue instead.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

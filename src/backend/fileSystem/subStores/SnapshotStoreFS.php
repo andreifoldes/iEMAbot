@@ -7,6 +7,7 @@ use backend\exceptions\PageFlowException;
 use backend\fileSystem\PathsFS;
 use backend\FileSystemBasics;
 use backend\Paths;
+use backend\sqlite\CollectedDataDb;
 use backend\subStores\SnapshotStore;
 use Iterator;
 use RecursiveCallbackFilterIterator;
@@ -46,6 +47,13 @@ class SnapshotStoreFS implements SnapshotStore {
 			$relativePath = substr($filePath, $pathDataStringLength);
 			$targetPath = PathsFS::FILENAME_DATA .'/' . $relativePath;
 			
+			// The live SQLite files (database, -wal, -shm) change underneath a plain copy; a consistent
+			// copy is added after the loop instead.
+			if(strpos($relativePath, CollectedDataDb::FILENAME) === 0) {
+				$reportProgress(++$fileNum, $totalFiles);
+				continue;
+			}
+			
 			if(!file_exists($filePath)) {
 				throw new CriticalException("$targetPath does not exist, but it should!");
 			}
@@ -60,6 +68,17 @@ class SnapshotStoreFS implements SnapshotStore {
 			}
 			
 			$reportProgress(++$fileNum, $totalFiles);
+		}
+		
+		// The caller removes this staging file after closing the zip (ZipArchive reads it on close).
+		try {
+			$databaseCopy = CollectedDataDb::createSnapshotCopy();
+		}
+		catch(Throwable $e) {
+			throw new CriticalException('Could not copy the SQLite database into the snapshot: ' . $e->getMessage());
+		}
+		if($databaseCopy !== null && !$zip->addFile($databaseCopy, PathsFS::FILENAME_DATA . '/' . CollectedDataDb::FILENAME)) {
+			throw new CriticalException('Could not add the SQLite database to snapshot zip.');
 		}
 	}
 	

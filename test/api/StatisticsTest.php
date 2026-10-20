@@ -51,13 +51,28 @@ class StatisticsTest extends BaseApiTestSetup {
 	}
 	
 	function test() {
+		$this->setGet(['id' => 123, 'access_key' => 'key']);
+		$this->accessKeys = ['key'];
+		require DIR_BASE .'/api/statistics.php';
+		$this->expectOutputString(JsonOutput::successObj($this->statisticsContent));
+	}
+	
+	function test_without_accessKeys_as_visitor() {
 		$this->setGet(['id' => 123]);
+		require DIR_BASE .'/api/statistics.php';
+		$this->expectOutputString(JsonOutput::error('This study has no access key, so its statistics are only available to logged-in researchers.'));
+	}
+	
+	function test_without_accessKeys_as_researcher() {
+		$this->setGet(['id' => 123]);
+		$this->setSession(['is_loggedIn' => true, 'account' => 'researcher']);
 		require DIR_BASE .'/api/statistics.php';
 		$this->expectOutputString(JsonOutput::successObj($this->statisticsContent));
 	}
 	
 	function test_with_error_in_studyStatisticsStore() {
-		$this->setGet(['id' => 123]);
+		$this->setGet(['id' => 123, 'access_key' => 'key']);
+		$this->accessKeys = ['key'];
 		$this->studyStatisticsStoreError = true;
 		require DIR_BASE .'/api/statistics.php';
 		$this->expectOutputString(JsonOutput::error('StudyStatisticsStore error'));

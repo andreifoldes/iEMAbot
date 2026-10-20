@@ -1,0 +1,68 @@
+{
+  "_": {
+    "id": 4242,
+    "version": 0,
+    "subVersion": 0,
+    "lang": "",
+    "published": true,
+    "publishedWeb": true,
+    "publishedAndroid": true,
+    "publishedIOS": true,
+    "studyOver": false,
+    "sendMessagesAllowed": true,
+    "useFallback": false,
+    "defaultLang": "en",
+    "langCodes": [
+      "en"
+    ],
+    "accessKeys": [
+      "demo"
+    ],
+    "title": "ESMira demo study",
+    "studyDescription": "A two-question demo study that ships with the Docker demo setup.",
+    "informedConsentForm": "This is a demo study. No real data is collected.",
+    "questionnaires": [
+      {
+        "internalId": 424201,
+        "title": "Daily check-in",
+        "publishedWeb": true,
+        "completableOnce": false,
+        "pages": [
+          {
+            "header": "How are you today?",
+            "inputs": [
+              {
+                "name": "mood",
+                "responseType": "likert",
+                "likertSteps": 5,
+                "required": true,
+                "text": "How is your mood right now?"
+              },
+              {
+                "name": "note",
+                "responseType": "text_input",
+                "required": false,
+                "text": "Anything you would like to add?"
+              }
+            ]
+          }
+        ],
+        "actionTriggers": [],
+        "sumScores": [],
+        "virtualInputs": []
+      }
+    ],
+    "publicStatistics": {
+      "charts": []
+    },
+    "personalStatistics": {
+      "charts": []
+    },
+    "eventUploadSettings": {
+      "actions_executed": true,
+      "invitation": true,
+      "schedule_changed": true
+    },
+    "pluginData": {}
+  }
+}

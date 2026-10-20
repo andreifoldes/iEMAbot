@@ -8,9 +8,11 @@ use backend\exceptions\CriticalException;
 use backend\DataSetCache;
 use backend\DataSetCacheContainer;
 use backend\Paths;
+use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\fileSystem\loader\StatisticsNewDataSetEntryLoader;
 use backend\FileUploader;
+use backend\sqlite\CollectedDataDb;
 use backend\subStores\ResponsesStore;
 use ZipArchive;
 
@@ -20,15 +22,16 @@ class ResponsesStoreFS implements ResponsesStore {
 			$errorCallback($datasetId, $msg);
 		}
 	}
-	private function writeDataSetFile(string $path, string $text, DataSetCacheContainer $entry, callable $successCallback, callable $errorCallback) {
+	private function writeDataSetFile(string $path, string $text, DataSetCacheContainer $entry, callable $successCallback, callable $errorCallback): bool {
 		if (file_put_contents($path, $text, FILE_APPEND | LOCK_EX)) {
 			foreach ($entry->ids as $datasetId) {
 				$successCallback($datasetId);
 			}
-		} else {
-			Main::report("Could not write to file '$path'. Sending error response to app.");
-			$this->fillDatasetErrors($entry, 'Internal Server Error: Saving failed', $errorCallback);
+			return true;
 		}
+		Main::report("Could not write to file '$path'. Sending error response to app.");
+		$this->fillDatasetErrors($entry, 'Internal Server Error: Saving failed', $errorCallback);
+		return false;
 	}
 	private function writeCsv(
 		string $path,
@@ -36,7 +39,10 @@ class ResponsesStoreFS implements ResponsesStore {
 		DataSetCacheContainer $entry,
 		string $csvSeparator,
 		callable $successCallback,
-		callable $errorCallback
+		callable $errorCallback,
+		int $studyId,
+		string $kind,
+		?int $questionnaireId
 	) {
 		if (!file_exists($path)) {
 			$this->fillDatasetErrors($entry, $noPathMessage, $errorCallback);
@@ -48,15 +54,21 @@ class ResponsesStoreFS implements ResponsesStore {
 			$writeString .= "\n" . Main::arrayToCSV($data, $csvSeparator);
 		}
 
-		$this->writeDataSetFile($path, $writeString, $entry, $successCallback, $errorCallback);
+		if ($this->writeDataSetFile($path, $writeString, $entry, $successCallback, $errorCallback)) {
+			// Mirror into the SQLite store (best-effort, never affects the acknowledgement above).
+			CollectedDataDb::addResponses($studyId, $kind, $questionnaireId, $entry->data);
+		}
 	}
 
 	public function saveWebAccessDataSet(int $studyId, int $timestamp, string $pageName, string $referer, string $userAgent): bool {
-		return file_put_contents(
+		$written = file_put_contents(
 			PathsFS::fileResponses($studyId, PathsFS::FILENAME_WEB_ACCESS),
 			"\n\"" . $timestamp . "\";\"$pageName\";\"$referer\";\"$userAgent\"",
 			FILE_APPEND | LOCK_EX
 		) !== false;
+		if ($written)
+			CollectedDataDb::addWebAccess($studyId, $timestamp, $pageName, $referer, $userAgent);
+		return $written;
 	}
 	public function saveDataSetCache(string $userId, DataSetCache $cache, callable $successProgressCallback, callable $errorProgressCallback) {
 		foreach ($cache->getStatisticsCache() as $studyId => $entry) {
@@ -79,7 +91,10 @@ class ResponsesStoreFS implements ResponsesStore {
 					$entry,
 					$csvSeparator,
 					$successProgressCallback,
-					$errorProgressCallback
+					$errorProgressCallback,
+					(int) $studyId,
+					CollectedDataDb::KIND_QUESTIONNAIRE,
+					(int) $questionnaireId
 				);
 			}
 		}
@@ -91,7 +106,10 @@ class ResponsesStoreFS implements ResponsesStore {
 				$entry,
 				$csvSeparator,
 				$successProgressCallback,
-				$errorProgressCallback
+				$errorProgressCallback,
+				(int) $studyId,
+				CollectedDataDb::KIND_EVENT,
+				null
 			);
 		}
 
@@ -115,8 +133,15 @@ class ResponsesStoreFS implements ResponsesStore {
 		if (file_exists($targetPath))
 			throw new CriticalException('File already exists');
 
+		// Ensure the media subfolder exists. Images/audio are created at study creation,
+		// but the keystrokes folder was added later, so studies created before it won't
+		// have one yet; createFolder() is a no-op when the folder already exists.
+		FileSystemBasics::createFolder(dirname($targetPath));
+
 		if (!$fileUploader->upload($targetPath) || !unlink($waitingPath))
 			throw new CriticalException('Uploading failed');
+
+		CollectedDataDb::addMedia($studyId, $userId, $identifier, $targetPath);
 
 		$mediaZipPath = Paths::fileMediaZip($studyId);
 		if (file_exists($mediaZipPath))
@@ -152,9 +177,12 @@ class ResponsesStoreFS implements ResponsesStore {
 		$zip->open($pathZip, ZIPARCHIVE::CREATE);
 		$folderImages = Paths::folderImages($studyId);
 		$folderAudio = Paths::folderAudio($studyId);
+		$folderKeystrokes = Paths::folderKeystrokes($studyId);
 		$countImages = count(scandir($folderImages)) - 2;
 		$countAudio = count(scandir($folderAudio)) - 2;
-		$countTotal = $countImages + $countAudio;
+		// Added after some studies were created; the folder may not exist yet.
+		$countKeystrokes = is_dir($folderKeystrokes) ? count(scandir($folderKeystrokes)) - 2 : 0;
+		$countTotal = $countImages + $countAudio + $countKeystrokes;
 		$currentCount = 0;
 
 		$onProgressCallback = function () use ($countTotal, $flushProgress, &$currentCount): void {
@@ -178,7 +206,17 @@ class ResponsesStoreFS implements ResponsesStore {
 				return Paths::publicFileAudioFromMediaFilename($fileName);
 			}
 		);
-		
+		if(is_dir($folderKeystrokes)) {
+			$this->fillMediaFolder(
+				$zip,
+				$folderKeystrokes,
+				function ($fileName) use ($onProgressCallback) {
+					$onProgressCallback();
+					return Paths::publicFileKeystrokesFromMediaFilename($fileName);
+				}
+			);
+		}
+
 		$zip->close();
 	}
 	public function outputResponsesFile(int $studyId, string $identifier) {
@@ -202,10 +240,23 @@ class ResponsesStoreFS implements ResponsesStore {
 		readfile($path);
 	}
 	public function outputImageFromResponses(int $studyId, string $userId, int $entryId, string $key) {
-		$this->outputMediaFromResponses(Paths::fileImageFromData($studyId, $userId, $entryId, $key), 'image/png');
+		$path = Paths::fileImageFromData($studyId, $userId, $entryId, $key);
+		$this->outputMediaFromResponses($path, self::detectMime($path, 'image/', 'image/png'));
 	}
 	public function outputAudioFromResponses(int $studyId, string $userId, int $entryId, string $key) {
-		$this->outputMediaFromResponses(Paths::fileAudioFromData($studyId, $userId, $entryId, $key), 'video/3gpp');
+		$path = Paths::fileAudioFromData($studyId, $userId, $entryId, $key);
+		$this->outputMediaFromResponses($path, self::detectMime($path, '', 'video/3gpp'));
+	}
+	/**
+	 * The stored file's real type, so recordings from other sources (web: webm, Telegram
+	 * voice notes: ogg/opus, JPEG photos) play back. Falls back to the historical type of the
+	 * native apps when detection fails or yields an unexpected family.
+	 */
+	private static function detectMime(string $path, string $family, string $fallback): string {
+		$mime = file_exists($path) && function_exists('mime_content_type') ? (string) @mime_content_type($path) : '';
+		if($mime === '' || $mime === 'application/octet-stream' || ($family !== '' && strpos($mime, $family) !== 0))
+			return $fallback;
+		return $mime;
 	}
 	public function getResponseFilesList(int $studyId): array {
 		$list = [];

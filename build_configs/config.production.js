@@ -43,5 +43,27 @@ module.exports = merge(require('./config.base.js'), {
 				}
 			}
 		}),
+		new FaviconsWebpackPlugin({
+			logo: path.resolve(SRC, 'frontend', 'imgs', 'iemabot_logo.svg'),
+			prefix: 'assets/iemabot/',
+			inject: false,
+			cache: true,
+			favicons: {
+				appName: 'iEMAbot',
+				appShortName: 'iEMAbot',
+				developerURL: null,
+				background: '#ffffff',
+				theme_color: '#00471c',
+				display: 'standalone',
+				icons: {
+					android: true,
+					appleIcon: true,
+					appleStartup: false,
+					favicons: false,
+					windows: false,
+					yandex: false,
+				}
+			}
+		}),
 	]
 })

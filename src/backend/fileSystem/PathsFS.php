@@ -124,6 +124,145 @@ class PathsFS {
 	static function folderUserData(int $studyId): string {
 		return self::folderStudies() . "$studyId/.userdata/";
 	}
+
+	static function folderPushSubscriptions(int $studyId): string {
+		return self::folderStudies() . "$studyId/.push_subscriptions/";
+	}
+
+	static function filePushSubscription(int $studyId, string $userId): string {
+		return self::folderPushSubscriptions($studyId) . Paths::makeUrlFriendly($userId);
+	}
+
+	static function filePushState(int $studyId, string $userId): string {
+		return self::folderPushSubscriptions($studyId) . Paths::makeUrlFriendly($userId) . '.state';
+	}
+
+	/** Append-only JSONL of push funnel events (sent/failed/received/clicked) for a study. */
+	static function filePushEvents(int $studyId): string {
+		return self::folderStudies() . "$studyId/.push_events";
+	}
+	/** Global sender heartbeat ({lastRunMs, studies, queued}); rewritten every cron run. */
+	static function filePushHeartbeat(): string {
+		return self::folderData() . '.push_heartbeat.json';
+	}
+	/** Per-participant client telemetry (installed-as-PWA + device class); latest wins. */
+	static function folderClientInfo(int $studyId): string {
+		return self::folderStudies() . "$studyId/.client_info/";
+	}
+	static function fileClientInfo(int $studyId, string $userId): string {
+		return self::folderClientInfo($studyId) . Paths::makeUrlFriendly($userId);
+	}
+
+	// --- Wearables (Withings / Google Health) data sharing. Everything lives under
+	// the study folder so it is captured by snapshots/backups, mirroring the push
+	// subscription layout above. `provider` is a short ascii slug (withings/googlehealth).
+
+	static function folderWearablesTokens(int $studyId): string {
+		return self::folderStudies() . "$studyId/.wearables_tokens/";
+	}
+	/** Encrypted per-participant OAuth token blob, one file per (participant, provider). */
+	static function fileWearablesToken(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesTokens($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider);
+	}
+
+	static function folderWearablesData(int $studyId): string {
+		return self::folderStudies() . "$studyId/.wearables_data/";
+	}
+	/** Append-only CSV of fetched data points, one file per (participant, provider). */
+	static function fileWearablesData(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesData($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.csv';
+	}
+	/** Per-(participant, provider) sync cursor (last fetched instant). */
+	static function fileWearablesSyncState(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesData($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.state';
+	}
+
+	/** Marker: the provider rejected this participant's credentials, so they must link the device again. */
+	static function fileWearablesRevoked(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesData($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.revoked';
+	}
+
+	/** Webhook-derived sensor events ("new sleep data arrived"), JSONL, one file per participant. */
+	static function folderWearablesEvents(int $studyId): string {
+		return self::folderStudies() . "$studyId/.wearables_events/";
+	}
+	static function fileWearablesEvents(int $studyId, string $userId): string {
+		return self::folderWearablesEvents($studyId) . Paths::makeUrlFriendly($userId) . '.jsonl';
+	}
+
+	/**
+	 * Permanent per-participant record of every webhook notification ("new sleep data arrived"), kept for
+	 * research whether or not a trigger used it. CSV, one file per (participant, provider). Not inside
+	 * .wearables_data, whose *.csv files are imported as measurements.
+	 */
+	static function folderWearablesEventArchive(int $studyId): string {
+		return self::folderStudies() . "$studyId/.wearables_event_archive/";
+	}
+	static function fileWearablesEventArchive(int $studyId, string $userId, string $provider): string {
+		return self::folderWearablesEventArchive($studyId) . Paths::makeUrlFriendly($userId) . '.' . Paths::makeSafe($provider) . '.events.csv';
+	}
+
+	/** Latest answers of the items a sensor-trigger fallback reads (e.g. habitual wake time), JSON, one file per participant. */
+	static function folderParticipantVariables(int $studyId): string {
+		return self::folderStudies() . "$studyId/.participant_variables/";
+	}
+	static function fileParticipantVariables(int $studyId, string $userId): string {
+		return self::folderParticipantVariables($studyId) . Paths::makeUrlFriendly($userId) . '.json';
+	}
+
+	// --- Messaging channels (Telegram; later WhatsApp). Participant bindings and their
+	// conversation state live under the study folder (captured by snapshots/backups); the
+	// chat → participant index and pre-enrolment state are global because an incoming
+	// message carries only the chat address. Chat addresses are never stored in clear:
+	// file names use an HMAC and binding files hold them encrypted (channels/SecretBox).
+
+	static function folderChannelBindings(int $studyId): string {
+		return self::folderStudies() . "$studyId/.channel_bindings/";
+	}
+	/** Binding of one participant to a chat ({channel, chatRef (encrypted), lang, tz, ...}). */
+	static function fileChannelBinding(int $studyId, string $userId): string {
+		return self::folderChannelBindings($studyId) . Paths::makeUrlFriendly($userId) . '.json';
+	}
+	/** Conversation + schedule state of one bound participant (locked while handling an update). */
+	static function fileChannelState(int $studyId, string $userId): string {
+		return self::folderChannelBindings($studyId) . Paths::makeUrlFriendly($userId) . '.state';
+	}
+	static function folderChannelsRoot(): string {
+		return self::folderData() . '.channels/';
+	}
+	static function folderChannel(string $channel): string {
+		return self::folderChannelsRoot() . Paths::makeSafe($channel) . '/';
+	}
+	/** chat HMAC → {studyId, userId} of the active binding. */
+	static function fileChannelIndex(string $channel, string $chatHash): string {
+		return self::folderChannel($channel) . 'index/' . Paths::makeSafe($chatHash) . '.json';
+	}
+	/** Enrolment progress of a chat that has not joined a study yet. */
+	static function fileChannelEnrolment(string $channel, string $chatHash): string {
+		return self::folderChannel($channel) . 'enrol/' . Paths::makeSafe($chatHash) . '.json';
+	}
+	/** Transport state of a channel (e.g. Telegram getUpdates offset, processed update ids). */
+	static function fileChannelTransport(string $channel): string {
+		return self::folderChannel($channel) . 'transport.json';
+	}
+	/** Short invite codes → {studyId, accessKey, pid?, expires}. */
+	static function fileChannelInvite(string $code): string {
+		return self::folderChannelsRoot() . 'invites/' . Paths::makeSafe($code) . '.json';
+	}
+	/** Global dispatcher heartbeat ({lastRunMs, bindings, started, sent}). */
+	static function fileChannelsHeartbeat(): string {
+		return self::folderChannelsRoot() . 'heartbeat.json';
+	}
+
+	// OAuth CSRF states are global (the provider callback carries only `state`, not a
+	// study id); the state file content records which study/participant it belongs to.
+	static function folderWearablesOAuthStates(): string {
+		return self::folderData() . '.wearables_states/';
+	}
+	/** Single-use, short-lived CSRF state created when a participant starts a connect flow. */
+	static function fileWearablesOAuthState(string $state): string {
+		return self::folderWearablesOAuthStates() . Paths::makeSafe($state);
+	}
 	
 	static function folderRewardCodes(int $studyId): string {
 		return self::folderStudies() . "$studyId/.reward_codes/";

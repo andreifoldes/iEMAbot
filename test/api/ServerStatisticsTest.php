@@ -24,8 +24,14 @@ class ServerStatisticsTest extends BaseApiTestSetup {
 	}
 	
 	function test() {
+		$this->setSession(['is_loggedIn' => true, 'account' => 'researcher']);
 		require DIR_BASE .'/api/server_statistics.php';
 		$this->expectOutputString(JsonOutput::successString($this->content));
+	}
+	
+	function test_without_login() {
+		require DIR_BASE .'/api/server_statistics.php';
+		$this->expectOutputString(JsonOutput::error('Server statistics are only available to logged-in researchers.'));
 	}
 	
 	function test_without_ready() {

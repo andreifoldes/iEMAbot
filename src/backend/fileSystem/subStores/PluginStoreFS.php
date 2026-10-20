@@ -43,25 +43,31 @@ class PluginStoreFS implements PluginStore {
 	 * @param callable $createData A callable function that generates the required data for the api endpoint. This data will be passed to the plugin's helper.
 	 */
 	private function handleApiEndpoint(string $apiName, callable $createData): void {
-		function runPlugin(string $apiName, string $scriptPath, PluginHelper $helper) {
-			try {
-				if(file_exists($scriptPath)) {
-					require $scriptPath;
-				}
-			}
-			catch(Throwable $e) {
-				$helper->reportError($e, "Error in $apiName");
-				if(!$helper->handleApiOverrideErrorsGracefully) {
-					throw $e;
-				}
-			}
-		};
-		
 		$this->forEachPlugin(function($pluginId) use ($apiName, $createData) {
 			$helper = new PluginHelper($pluginId, $createData);
 			$apiPath = PathsFS::filePluginApiExtension($pluginId, $apiName);
-			runPlugin($apiName, $apiPath, $helper);
+			self::runPlugin($apiName, $apiPath, $helper);
 		});
+	}
+	
+	/**
+	 * Runs one plugin script with only $apiName and $helper in scope.
+	 * A static method rather than a function declared inside handleApiEndpoint(): that
+	 * declaration fatally failed ("Cannot redeclare") the second time a long-running process
+	 * (e.g. the chat-channel poller) saved a dataset.
+	 */
+	private static function runPlugin(string $apiName, string $scriptPath, PluginHelper $helper): void {
+		try {
+			if(file_exists($scriptPath)) {
+				require $scriptPath;
+			}
+		}
+		catch(Throwable $e) {
+			$helper->reportError($e, "Error in $apiName");
+			if(!$helper->handleApiOverrideErrorsGracefully) {
+				throw $e;
+			}
+		}
 	}
 	
 	/**

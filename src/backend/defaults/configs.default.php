@@ -21,7 +21,13 @@ return [
 	
 	'csv_delimiter' => ';',
 	
+	// Everything collected from participants is also written to a SQLite database in the data folder (esmira_data/iemabot.sqlite):
+	'sqlite_enabled' => true,
+	'sqlite_media_content_max_bytes' => 16000000, //files larger than this keep only metadata + checksum in the database (the file stays on disk)
+	'sqlite_store_media_content' => true, //also keep a copy of uploaded images/audio/keystroke logs as BLOBs. The files stay on disk either way; set to false to keep only metadata and a checksum in the database
+	
 	'serverName' => ['en' => ''], //_ is the default language. All alternative languages need to be added via language-code (langCodes needs to be updates as well)
 	'defaultLang' => 'en',
-	'langCodes' => ['en'] //will be used for privacyPolicy, legal and servername. The optional languages of the UI are hardcoded and will not be influenced by this value
+	'langCodes' => ['en'], //will be used for privacyPolicy, legal and servername. The optional languages of the UI are hardcoded and will not be influenced by this value
+	'webOnlyMode' => false //when true, iOS/Android-only features are greyed out in the admin (web PWA only deployment)
 ];

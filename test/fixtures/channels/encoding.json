@@ -1,0 +1,48 @@
+{
+  "_doc": "Shared PHP/TS parity cases for the dataset `responses` columns (AnswerEncoder.php vs esmiraApi.buildEsmiraResponses). answers: name => value; multi answers are option index lists; other => free text of an other-specify choice. expected omits formDuration/pageDurations/model.",
+  "cases": [
+    {
+      "name": "basic types, other-specify, multi, skipped and info items",
+      "questionnaire": {
+        "internalId": 11, "title": "Check-in",
+        "pages": [
+          { "inputs": [
+            { "name": "intro", "responseType": "text", "text": "<p>Hello</p>" },
+            { "name": "mood", "responseType": "likert", "likertSteps": 5 },
+            { "name": "alone", "responseType": "binary" },
+            { "name": "where", "responseType": "list_single", "listChoices": ["Home", "Work", "Something else"], "other": true },
+            { "name": "with", "responseType": "list_multiple", "listChoices": ["Partner", "Friends", "Colleagues"] },
+            { "name": "note", "responseType": "text_input" },
+            { "name": "skipped_item", "responseType": "number" },
+            { "name": "bed", "responseType": "time" },
+            { "name": "slept", "responseType": "time", "text": "How long did you sleep?" },
+            { "name": "day", "responseType": "date" }
+          ] }
+        ]
+      },
+      "answers": {
+        "mood": "4", "alone": "1", "where": "Something else", "with": [0, 2], "note": "fine",
+        "bed": "23:30", "slept": "450", "day": "2026-03-14"
+      },
+      "other": { "where": "Gym" },
+      "expected": {
+        "mood": "4", "alone": "1", "where": "Something else", "where~other": "Gym",
+        "with~1": true, "with~2": false, "with~3": true,
+        "note": "fine", "bed": "23:30", "slept": "450", "day": "2026-03-14"
+      }
+    },
+    {
+      "name": "multi answered with nothing selected; other-specify without text",
+      "questionnaire": {
+        "internalId": 12, "title": "Q",
+        "pages": [ { "inputs": [
+          { "name": "with", "responseType": "list_multiple", "listChoices": ["A", "B"] },
+          { "name": "where", "responseType": "list_single", "listChoices": ["Home", "Other"], "other": true }
+        ] } ]
+      },
+      "answers": { "with": [], "where": "Home" },
+      "other": {},
+      "expected": { "with~1": false, "with~2": false, "where": "Home", "where~other": "" }
+    }
+  ]
+}

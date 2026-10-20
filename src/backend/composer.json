@@ -1,0 +1,11 @@
+{
+    "name": "esmira/backend",
+    "description": "ESMira backend PHP dependencies (web push).",
+    "require": {
+        "php": ">=8.1",
+        "minishlink/web-push": "^9.0"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

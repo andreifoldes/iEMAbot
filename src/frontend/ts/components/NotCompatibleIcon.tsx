@@ -3,15 +3,17 @@ import {Lang} from "../singletons/Lang";
 import androidSvg from "../../imgs/devices/android.svg?raw"
 import iosSvg from "../../imgs/devices/ios.svg?raw"
 import webSvg from "../../imgs/devices/web.svg?raw"
+import telegramSvg from "../../imgs/devices/telegram.svg?raw"
 import {closeDropdown, openDropdown} from "./DropdownMenu";
 
 
-export type PossibleDevices = "Android" | "iOS" | "Web"
+export type PossibleDevices = "Android" | "iOS" | "Web" | "Telegram"
 
 const imageRecord: Record<PossibleDevices, string> = {
 	Android: androidSvg,
 	iOS: iosSvg,
-	Web: webSvg
+	Web: webSvg,
+	Telegram: telegramSvg
 }
 
 function onPointerEnter(title: string, e: MouseEvent) {
@@ -27,7 +29,8 @@ export function NotCompatibleIcon(... devices: PossibleDevices[]): Vnode<any, an
 	const translationRecord: Record<PossibleDevices, string> = {
 		Android: Lang.get("Android"),
 		iOS: Lang.get("iOS"),
-		Web: Lang.get("web_questionnaire")
+		Web: Lang.get("web_questionnaire"),
+		Telegram: Lang.get("telegram_not_native")
 	}
 	const title = Lang.get("not_compatible_with", devices.map((device) => translationRecord[device]).join(", "))
 	return <div class="notCompatibleIcon" onpointerenter={onPointerEnter.bind(null, title)} onpointerleave={onPointerLeave.bind(null)}>

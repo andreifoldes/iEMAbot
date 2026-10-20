@@ -4,7 +4,7 @@ import {Lang} from "../singletons/Lang";
 import downloadSvg from "../../imgs/icons/download.svg?raw"
 import questionnaireSvg from "../../imgs/icons/questionnaire.svg?raw"
 import backupSvg from "../../imgs/icons/backup.svg?raw"
-import {FILE_ADMIN, FILE_CREATE_MEDIA, FILE_MEDIA, FILE_RESPONSES} from "../constants/urls";
+import {FILE_ADMIN, FILE_CREATE_MEDIA, FILE_MEDIA, FILE_RESPONSES, FILE_WEARABLE_DATA} from "../constants/urls";
 import {Study} from "../data/study/Study";
 import {TitleRow} from "../components/TitleRow";
 import {Requests} from "../singletons/Requests";
@@ -116,6 +116,16 @@ export class Content extends SectionContent {
 						<a class="spacingRight" onclick={this.waitForDownload.bind(this, study)}>
 							{m.trust(downloadSvg)}
 							<span id="mediaZipSpan" class="spacingLeft">media.zip</span>
+						</a>
+					</div>
+				}
+
+				{study.wearablesEnabled.get() &&
+					<div>
+						{TitleRow(Lang.getWithColon("wearable_data_download"))}
+						<a class="spacingRight" href={FILE_WEARABLE_DATA.replace('%1', study.id.get().toString())} download="wearables.zip" title={Lang.get("download")}>
+							{m.trust(downloadSvg)}
+							<span class="spacingLeft">wearables.zip</span>
 						</a>
 					</div>
 				}

@@ -1,0 +1,62 @@
+name: Accessibility audit (participant PWA)
+
+# Automated WCAG 2.2 A/AA gate for the participant PWA. Runs the axe-core +
+# Playwright harness (web-pwa/a11y) against the real production build, driving
+# every question type in light + dark themes. Fully offline (fixture study), so
+# it needs no VPN or live server. Mirrors the hard gate baked into deploy.sh.
+#
+# Runs at release time only (not on every push) to conserve Actions minutes:
+# on a published GitHub release, and on demand via the Actions tab. Day-to-day
+# enforcement is the deploy.sh gate, which runs the same audit on every deploy.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# One run per ref; a newer trigger cancels an in-progress run (avoids stacked
+# Actions minutes on metered private repos).
+concurrency:
+  group: a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the participant PWA
+        working-directory: web-pwa
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install audit harness + Chromium
+        working-directory: web-pwa/a11y
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Unit-test the colour-vision-deficiency checks
+        working-directory: web-pwa/a11y
+        run: npm test
+
+      - name: Run accessibility audit (WCAG 2.2 A/AA + colour-vision deficiency)
+        working-directory: web-pwa/a11y
+        env:
+          # Also save every screen as seen with each deficiency, for human review in the artifact.
+          A11Y_CVD_SHOTS: '1'
+        run: node audit.mjs
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report
+          path: web-pwa/a11y/report/
+          if-no-files-found: ignore

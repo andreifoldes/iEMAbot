@@ -24,6 +24,14 @@ export class Questionnaire extends DataStructure {
 	public durationPeriodDays = this.primitive<number>("durationPeriodDays", 0)
 	public durationStartingAfterDays = this.primitive<number>("durationStartingAfterDays", 0)
 	public completableOnce = this.primitive<boolean>("completableOnce", false)
+	// At most one completion per local calendar day, regardless of how many signals
+	// fire that day (and for passive questionnaires with no signals). Enforced in the
+	// PWA's availability gating; the common "one bundle per day" case.
+	public completableOncePerDay = this.primitive<boolean>("completableOncePerDay", false)
+	// PWA chat flow only: which answered items show a "Change response" affordance.
+	// "previous" = only the last item (t-1), "any" = every prior item, "none" = disabled
+	// (e.g. for cognitive tasks, which must not be re-attempted).
+	public changeResponseMode = this.primitive<string>("changeResponseMode", "previous")
 	public completableOncePerNotification = this.primitive<boolean>("completableOncePerNotification", false)
 	public completableMinutesAfterNotification = this.primitive<number>("completableMinutesAfterNotification", 0)
 	public limitCompletionFrequency = this.primitive<boolean>("limitCompletionFrequency", false)
@@ -31,6 +39,10 @@ export class Questionnaire extends DataStructure {
 	public completableAtSpecificTime = this.primitive<boolean>("completableAtSpecificTime", false)
 	public completableAtSpecificTimeStart = this.primitive<number>("completableAtSpecificTimeStart", -1)
 	public completableAtSpecificTimeEnd = this.primitive<number>("completableAtSpecificTimeEnd", -1)
+	// Web push only: when true, the "availability"/"reminder" notification body tells the
+	// participant by when they must complete this questionnaire ("Complete by HH:MM"),
+	// derived from the completion window end (see PushScheduler.php). Off by default.
+	public notificationIncludeDeadline = this.primitive<boolean>("notificationIncludeDeadline", false)
 	public limitToGroup = this.primitive<number>("limitToGroup", 0)
 	public minDataSetsForReward = this.primitive<number>("minDataSetsForReward", 0)
 	public isBackEnabled = this.primitive<boolean>("isBackEnabled", true)

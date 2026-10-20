@@ -3,26 +3,25 @@ Site elements
 **********/
 
 #header {
-	position:relative;
-	margin: auto;
+	position: relative;
 	text-align: center;
+	padding: 12px 16px 8px;
+	background: #00471c;
+}
+#header a {
+	display: inline-block;
 }
 #header img {
-	height: 50px;
+	height: 52px;
+	width: auto;
+	object-fit: contain;
 }
 #header .title {
-	position: absolute;
-	left: 50%;
-	margin-top: -15px;
-	margin-left: -40px;
-	word-break: keep-all;
-	color: #2b98ca;
-	font-weight: bold;
+	display: none;
 }
 #siteLangChooser {
-	position: absolute;
-	left: 10px;
-	top: 5px;
+	display: inline-flex;
+	align-items: center;
 }
 #siteLangChooser, .langChooserDropdown {
 	font-size: 9pt;
@@ -30,6 +29,7 @@ Site elements
 #siteLangChooser .desc, .langChooserDropdown .desc {
 	padding-left: 5px;
 	padding-right: 5px;
+	color: #3f4946;
 }
 #siteLangChooser .desc {
 	padding-right: 0;
@@ -37,26 +37,46 @@ Site elements
 #siteLangChooser .desc:after {
 	content: "\25BC"
 }
+.langChooserDropdown {
+	background: #ffffff;
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(25,28,30,0.12);
+	overflow: hidden;
+}
 .langChooserDropdown a {
 	text-decoration: none;
+	color: #191c1e;
+}
+
+#siteFooter {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 20px;
+	padding: 7px 16px;
+	background: #eceef1;
+	font-size: 11px;
+	color: #3f4946;
 }
 
 #legalLink {
-	position: absolute;
-	bottom: 0;
-	right: 10px;
-	z-index: 1;
-	font-size: 10pt;
+	font-size: 11px;
+	color: #3f4946;
+	text-decoration: none;
+}
+#legalLink:empty {
+	display: none;
 }
 
 
 
 #sectionBoxWidthSetter {
-	z-index: 1;
-	position: absolute;
-	top: 1px;
-	right: 10px;
-	width: 100px;
+	display: none;
 }
 
 
@@ -90,7 +110,7 @@ sectionsView
 	width: 80%;
 	margin: auto auto 2%;
 	top: 90px;
-	bottom: 0;
+	bottom: 36px;
 	min-height: 200px;
 	overflow: visible;
 	transition: transform 0.3s;
@@ -117,9 +137,9 @@ sectionsView
 	-moz-box-sizing: border-box;
 	vertical-align: top;
 	background-color: white;
-	border: 1px solid #9FE0F7;
-	border-top-width: 0;
-	box-shadow: 3px 3px 5px #0002;
+	border: none;
+	border-radius: 0 0 12px 12px;
+	box-shadow: 0 8px 24px rgba(25,28,30,0.08);
 	transition: opacity 0.3s;
 
 	white-space: normal;
@@ -133,10 +153,10 @@ sectionsView
 	padding-left: 15px;
 }
 #sectionsView > .section .back svg {
-	fill: #dc4e9d;
+	fill: #ffffff;
 }
 #sectionsView > .section .back:hover svg {
-	fill: #ff8fce;
+	fill: rgba(255,255,255,0.65);
 }
 
 #sectionsView > .section .sectionTop {
@@ -144,11 +164,10 @@ sectionsView
 	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
-	background-color: #e6f9ff;
-	border-top: 1px solid #9FE0F7;
-	border-bottom: 1px solid #9FE0F7;
-	box-shadow: 0 3px 3px #0002;
-	transition: background-color 0.3s;
+	background: linear-gradient(135deg, #00471c 0%, #006129 100%);
+	border: none;
+	box-shadow: 0 3px 8px rgba(0,71,28,0.2);
+	transition: background 0.3s;
 }
 
 #sectionsView > .section .sectionTop .back {
@@ -170,7 +189,7 @@ sectionsView
 }
 
 #sectionsView > .section.pointOut .sectionTop {
-	background-color: #cdf0fc;
+	background: linear-gradient(135deg, #006129 0%, #00803a 100%);
 }
 
 
@@ -181,7 +200,8 @@ sectionsView
 	flex: 0 100 auto;
 	font-size: 16pt;
 	font-weight: bold;
-	color: #dc4e9d;
+	color: #ffffff;
+	font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 #sectionsView > .section .sectionTitle > .extra {
 	max-height: 25px;

@@ -7,7 +7,7 @@ import schedulesSvg from "../../imgs/icons/schedules.svg?raw"
 import eventsSvg from "../../imgs/icons/events.svg?raw"
 import warnSvg from "../../imgs/icons/warn.svg?raw";
 import { ActionTrigger } from "../data/study/ActionTrigger";
-import { EventTrigger } from "../data/study/EventTrigger";
+import { CUE_WEARABLE, EventTrigger, FALLBACK_MODE_VARIABLE } from "../data/study/EventTrigger";
 import { Schedule } from "../data/study/Schedule";
 import { DashRow } from "../components/DashRow";
 import { DashElement } from "../components/DashElement";
@@ -92,11 +92,53 @@ export class Content extends SectionContent {
 		this.newSection(`triggerEdit,qId:${questionnaire.internalId.get()},triggerI:${questionnaire.actionTriggers.get().length - 1}`)
 	}
 
+	private addSensorEvent(questionnaire: Questionnaire): void {
+		questionnaire.actionTriggers.push({
+			eventTriggers: [{ cueCode: CUE_WEARABLE }],
+			actions: [{}]
+		})
+		this.newSection(`triggerEdit,qId:${questionnaire.internalId.get()},triggerI:${questionnaire.actionTriggers.get().length - 1}`)
+	}
+
+	private getEventTitle(eventTrigger: EventTrigger): string {
+		if (eventTrigger.cueCode.get() != CUE_WEARABLE)
+			return `${eventTrigger.cueCode.get()}. ${Lang.get('after_x_seconds', eventTrigger.delaySec.get())}`
+		const provider = eventTrigger.wearableProvider.get()
+		const providerLabel = provider == "any" ? Lang.get("sensor_provider_any") : Lang.getDynamic(provider == "googlehealth" ? "googlehealth_experimental" : provider)
+		const fixedTime = timeStampToTimeString(getMidnightMillis(Date.now()) + eventTrigger.fallbackTimeOfDay.get())
+		const variable = eventTrigger.fallbackVariable.get().trim()
+		let fallback = ""
+		if (eventTrigger.fallbackEnabled.get() && eventTrigger.fallbackMode.get() == FALLBACK_MODE_VARIABLE && variable != "") {
+			const offset = eventTrigger.fallbackOffsetMin.get()
+			fallback = ` → ${variable} ${offset < 0 ? "−" : "+"}${Math.abs(offset)} ${Lang.get("minutes")}`
+			if (eventTrigger.fallbackDefaultEnabled.get())
+				fallback += ` (${Lang.get("sensor_fallback_else_short", fixedTime)})`
+		}
+		else if (eventTrigger.fallbackEnabled.get())
+			fallback = ` → ${fixedTime}`
+		return `${providerLabel}: ${Lang.getDynamic(`sensor_event_${eventTrigger.wearableEvent.get()}`)}${fallback}`
+	}
+
 	private getSchedule(actionTrigger: ActionTrigger): Schedule {
 		return actionTrigger.schedules.get()[0]
 	}
 	private getEventTrigger(actionTrigger: ActionTrigger): EventTrigger {
 		return actionTrigger.eventTriggers.get()[0]
+	}
+
+	/**
+	 * A questionnaire is "event-triggered" when it is delivered by event trigger(s) and
+	 * has no schedule. Such questionnaires open when the event fires, so a start-of-day
+	 * bound is meaningless — only an end-of-day completion deadline may be configured.
+	 * A questionnaire that has any schedule (even alongside events) keeps the full range.
+	 */
+	private isEventTriggered(questionnaire: Questionnaire): boolean {
+		const triggers = questionnaire.actionTriggers.get()
+		if (!triggers.length)
+			return false
+		const hasSchedule = triggers.some((t) => t.schedules.get().length > 0)
+		const hasEvent = triggers.some((t) => t.eventTriggers.get().length > 0)
+		return hasEvent && !hasSchedule
 	}
 
 
@@ -170,7 +212,23 @@ export class Content extends SectionContent {
 				DashElement("horizontal",
 					{ content: BtnCustom(m.trust(schedulesSvg), undefined, Lang.get("add_schedule")), onclick: this.addSchedule.bind(this, questionnaire) },
 					{ content: BtnCustom(m.trust(eventsSvg), undefined, Lang.get("add_event")), onclick: this.addEvent.bind(this, questionnaire) },
+					{ content: BtnCustom(m.trust(eventsSvg), undefined, Lang.get("add_sensor_event")), onclick: this.addSensorEvent.bind(this, questionnaire) },
 				),
+			)}
+			{DashRow(
+				DashElement("stretched", {
+					content:
+						<div class="line vAlignCenter">
+							<label class="noDesc">
+								<small>{Lang.get("change_response_mode")}</small>
+								<select {...BindObservable(questionnaire.changeResponseMode)}>
+									<option value="previous">{Lang.get("change_response_previous")}</option>
+									<option value="any">{Lang.get("change_response_any")}</option>
+									<option value="none">{Lang.get("change_response_none")}</option>
+								</select>
+							</label>
+						</div>
+				})
 			)}
 			{(questionnaire.scriptFilter.get() != "" || this.showCodeEditor) && DashRow(
 				DashElement("stretched", {
@@ -211,7 +269,7 @@ export class Content extends SectionContent {
 									this.getScheduleTitle(schedule)
 								)
 								: BtnCustom(m.trust(eventsSvg), undefined,
-									`${eventTrigger.cueCode.get()}. ${Lang.get('after_x_seconds', eventTrigger.delaySec.get())}`
+									this.getEventTitle(eventTrigger)
 								)
 							}
 						</a>
@@ -224,6 +282,7 @@ export class Content extends SectionContent {
 
 	private createFilterEntries(questionnaire: Questionnaire): FilterEntry[] {
 		const study = this.getStudyOrThrow()
+		const eventTriggered = this.isEventTriggered(questionnaire)
 		const list: FilterEntry[] = [
 			{
 				title: questionnaire.durationStart.get() != 0
@@ -284,6 +343,12 @@ export class Content extends SectionContent {
 				disable: () => questionnaire.completableOnce.set(false)
 			},
 			{
+				title: Lang.get("questionnaires_can_only_be_completed_once_per_day"),
+				isActive: () => questionnaire.completableOncePerDay.get(),
+				enable: () => questionnaire.completableOncePerDay.set(true),
+				disable: () => questionnaire.completableOncePerDay.set(false)
+			},
+			{
 				title: questionnaire.completableMinutesAfterNotification.get() != 0
 					? `${Lang.get("questionnaires_can_only_be_completed_per_notification")} (${questionnaire.completableMinutesAfterNotification.get()} ${Lang.get("minutes")})`
 					: Lang.get("questionnaires_can_only_be_completed_per_notification"),
@@ -313,22 +378,40 @@ export class Content extends SectionContent {
 			},
 			{
 				title: questionnaire.completableAtSpecificTime.get()
-					? `${Lang.getWithColon("only_at_specific_time")} ${TimeTransformer.toAttribute(questionnaire.completableAtSpecificTimeStart.get())} - ${TimeTransformer.toAttribute(questionnaire.completableAtSpecificTimeEnd.get())}`
-					: Lang.get("only_at_specific_time"),
+					? (eventTriggered
+						? `${Lang.getWithColon("must_be_completed_by")} ${TimeTransformer.toAttribute(questionnaire.completableAtSpecificTimeEnd.get())}`
+						: `${Lang.getWithColon("only_at_specific_time")} ${TimeTransformer.toAttribute(questionnaire.completableAtSpecificTimeStart.get())} - ${TimeTransformer.toAttribute(questionnaire.completableAtSpecificTimeEnd.get())}`)
+					: (eventTriggered ? Lang.get("must_be_completed_by") : Lang.get("only_at_specific_time")),
 				isActive: () => questionnaire.completableAtSpecificTime.get(),
 				dropdownView:
 					<div class="center">
-						<label>
-							<small>{Lang.getWithColon("from")}</small>
-							<input type="time" {...BindObservable(questionnaire.completableAtSpecificTimeStart, TimeTransformer)} />
-						</label>
+						{!eventTriggered &&
+							<label>
+								<small>{Lang.getWithColon("from")}</small>
+								<input type="time" {...BindObservable(questionnaire.completableAtSpecificTimeStart, TimeTransformer)} />
+							</label>
+						}
 						<label>
 							<small>{Lang.getWithColon("until")}</small>
 							<input type="time" {...BindObservable(questionnaire.completableAtSpecificTimeEnd, TimeTransformer)} />
 						</label>
+						{eventTriggered &&
+							<div><small>{Lang.get("info_event_triggered_end_only")}</small></div>
+						}
 					</div>,
-				enable: () => questionnaire.completableAtSpecificTime.set(true),
+				enable: () => {
+					questionnaire.completableAtSpecificTime.set(true)
+					// Event-triggered questionnaires get an end-only deadline; keep start "open".
+					if (eventTriggered)
+						questionnaire.completableAtSpecificTimeStart.set(-1)
+				},
 				disable: () => questionnaire.completableAtSpecificTime.set(false)
+			},
+			{
+				title: Lang.get("notification_include_deadline"),
+				isActive: () => questionnaire.notificationIncludeDeadline.get(),
+				enable: () => questionnaire.notificationIncludeDeadline.set(true),
+				disable: () => questionnaire.notificationIncludeDeadline.set(false)
 			},
 			{
 				title: Lang.get("script_filter"),

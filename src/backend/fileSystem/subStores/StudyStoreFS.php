@@ -15,6 +15,7 @@ use backend\ResponsesIndex;
 use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\StudyAccessIndexStore;
 use backend\subStores\StudyStore;
+use backend\sqlite\CollectedDataDb;
 use stdClass;
 
 require_once DIR_BASE . 'backend/responseFileKeys.php';
@@ -70,6 +71,7 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 		FileSystemBasics::createFolder(PathsFS::folderPendingUploads($studyId));
 		FileSystemBasics::createFolder(Paths::folderImages($studyId));
 		FileSystemBasics::createFolder(Paths::folderAudio($studyId));
+		FileSystemBasics::createFolder(Paths::folderKeystrokes($studyId));
 		FileSystemBasics::createFolder(PathsFS::folderResponses($studyId));
 		FileSystemBasics::createFolder(PathsFS::folderResponsesIndex($studyId));
 		FileSystemBasics::createFolder(PathsFS::folderMessagesArchive($studyId));
@@ -306,11 +308,18 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 
 	public function emptyStudy(int $studyId, array $questionnaireKeys)
 	{
+		CollectedDataDb::deleteStudyData($studyId, false);
 		FileSystemBasics::emptyFolder(PathsFS::folderResponses($studyId));
 		FileSystemBasics::emptyFolder(PathsFS::folderStatistics($studyId));
 		FileSystemBasics::emptyFolder(Paths::folderImages($studyId));
 		FileSystemBasics::emptyFolder(Paths::folderAudio($studyId));
+		if(is_dir(Paths::folderKeystrokes($studyId))) // added after some studies were created; may not exist yet
+			FileSystemBasics::emptyFolder(Paths::folderKeystrokes($studyId));
 		FileSystemBasics::emptyFolder(PathsFS::folderPendingUploads($studyId));
+		if(is_dir(PathsFS::folderParticipantVariables($studyId))) // copies of answers (sensor-trigger fallbacks); created on demand
+			FileSystemBasics::emptyFolder(PathsFS::folderParticipantVariables($studyId));
+		// Again after the files are gone: an upload that raced the reset must not leave rows behind.
+		CollectedDataDb::deleteStudyData($studyId, false);
 
 		$mediaZip = Paths::fileMediaZip($studyId);
 		if (file_exists($mediaZip))
@@ -382,6 +391,7 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 		$study = $this->getStudyConfig($studyId);
 
 		BaseStudyStoreFS::delete($studyId);
+		CollectedDataDb::deleteStudyData($studyId, true);
 
 		$this->removeStudyFromPermissions($studyId);
 

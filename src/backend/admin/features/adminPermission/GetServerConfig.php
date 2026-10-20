@@ -24,6 +24,7 @@ class GetServerConfig extends HasAdminPermission {
 		return [
 			'langCodes' => $langCodes,
 			'defaultLang' => Configs::get('defaultLang'),
+			'webOnlyMode' => (bool) Configs::get('webOnlyMode'),
 			'translationData' => $translationData
 		];
 	}

@@ -21,14 +21,16 @@ export type InputResponseType =
 	"number" |
 	"photo" |
 	"record_audio" |
+	"record_keystrokes" |
 	"share" |
 	"text" |
 	"text_input" |
 	"time" |
 	"va_scale" |
-	"video"
+	"video" |
+	"webapp"
 
-export type InputMediaTypes = "image" | "audio"
+export type InputMediaTypes = "image" | "audio" | "keystrokes"
 
 export class Input extends DataStructure {
 	public responseType = this.primitive<InputResponseType>("responseType", "text_input")
@@ -45,6 +47,12 @@ export class Input extends DataStructure {
 	public playSound = this.primitive<boolean>("playSound", false)
 	public showValue = this.primitive<boolean>("showValue", false)
 	public maxValue = this.primitive<number>("maxValue", 0)
+	// Web/PWA client only. "record_audio": max recording length in seconds (0 = default 300).
+	// Registered here so designer saves round-trip the value even without a UI option.
+	public maxLength = this.primitive<number>("maxLength", 0)
+	// Web/PWA client only. "record_keystrokes": soft minimum typed length in characters —
+	// folded into the writing nudge, never blocks saving (0 = no length target).
+	public minLength = this.primitive<number>("minLength", 0)
 	public resolution = this.primitive<number>("resolution", 0)
 	public quality = this.primitive<number>("quality", 100)
 	public relevance = this.primitive<string>("relevance", "")
@@ -56,7 +64,21 @@ export class Input extends DataStructure {
 
 	public defaultValue = this.translatable("defaultValue", "")
 	public text = this.translatable("text", "")
+	// Optional explanatory text shown beneath the main question, de-emphasised (smaller,
+	// regular weight, muted) so it reads as a helper rather than part of the question.
+	// Web/PWA client only — native apps ignore it. Empty for every item by default.
+	public description = this.translatable("description", "")
+	// Accessibility content supplied by the researcher (web/PWA client only; native apps
+	// ignore it). imageAlt: text alternative for an "image" input. screenReaderLabel:
+	// announced by screen readers in place of the question text, e.g. to describe a scale
+	// or slider. spokenText: read aloud by a "Listen" button on the question.
+	public imageAlt = this.translatable("imageAlt", "")
+	public screenReaderLabel = this.translatable("screenReaderLabel", "")
+	public spokenText = this.translatable("spokenText", "")
 	public url = this.translatable("url", "")
+	// "webapp" type: instructions shown on the launch card (the item `text` is the title,
+	// `url` is the launch URL). Empty for every other input type.
+	public webappDescription = this.translatable("webappDescription", "")
 	public leftSideLabel = this.translatable("leftSideLabel", "")
 	public rightSideLabel = this.translatable("rightSideLabel", "")
 	public listChoices = this.translatableArray("listChoices")
@@ -71,6 +93,8 @@ export class Input extends DataStructure {
 				return "image";
 			case "record_audio":
 				return "audio";
+			case "record_keystrokes":
+				return "keystrokes";
 			default:
 				return null;
 		}

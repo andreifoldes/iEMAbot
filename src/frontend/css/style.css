@@ -65,6 +65,15 @@ body.minimal > #sectionsView > .section:last-child {
 	padding-bottom: 0;
 }
 
+/* Study invite pages carry their own branded hero card, so the global site
+   header is redundant. Sections toggle this class on <body> (see studyOverview). */
+body.hideSiteHeader > #header {
+	display: none;
+}
+body.hideSiteHeader #sectionsView {
+	top: 0;
+}
+
 
 /**********
 Tags

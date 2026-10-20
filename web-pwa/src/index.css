@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+/* Drive `dark:` utilities from a `.dark` ancestor class (not prefers-color-scheme). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: var(--sys-primary);
+  --color-primary-container: var(--sys-primary-container);
+  --color-on-primary: var(--sys-on-primary);
+
+  --color-secondary: var(--sys-secondary);
+  --color-secondary-container: var(--sys-secondary-container);
+  --color-on-secondary-container: var(--sys-on-secondary-container);
+
+  --color-surface: var(--sys-surface);
+  --color-surface-container: var(--sys-surface-container);
+  --color-surface-container-low: var(--sys-surface-container-low);
+  --color-surface-container-high: var(--sys-surface-container-high);
+  --color-surface-container-highest: var(--sys-surface-container-highest);
+  --color-surface-container-lowest: var(--sys-surface-container-lowest);
+
+  --color-on-surface: var(--sys-on-surface);
+  --color-on-surface-variant: var(--sys-on-surface-variant);
+  --color-outline: var(--sys-outline);
+  --color-outline-variant: var(--sys-outline-variant);
+}
+
+@layer base {
+  :root {
+    --sys-primary: #00471c;
+    --sys-primary-container: #006129;
+    --sys-on-primary: #ffffff;
+
+    --sys-secondary: #1c695f;
+    --sys-secondary-container: #a5ede0;
+    --sys-on-secondary-container: #226e63;
+
+    --sys-surface: #f7f9fc;
+    --sys-surface-container: #eceef1;
+    --sys-surface-container-low: #f2f4f7;
+    --sys-surface-container-high: #e6e8eb;
+    --sys-surface-container-highest: #e0e3e6;
+    --sys-surface-container-lowest: #ffffff;
+
+    --sys-on-surface: #191c1e;
+    --sys-on-surface-variant: #3f4946;
+    --sys-outline: #6f7976;
+    --sys-outline-variant: #bec9c5;
+  }
+
+  .dark {
+    --sys-primary: #80d59e;
+    --sys-primary-container: #005222;
+    --sys-on-primary: #003815;
+
+    --sys-secondary: #89d1c4;
+    --sys-secondary-container: #005047;
+    --sys-on-secondary-container: #a5ede0;
+
+    --sys-surface: #191c1e;
+    --sys-surface-container: #1e2123;
+    --sys-surface-container-low: #191c1e;
+    --sys-surface-container-high: #282b2d;
+    --sys-surface-container-highest: #333638;
+    --sys-surface-container-lowest: #0f1113;
+
+    --sys-on-surface: #e1e3e4;
+    --sys-on-surface-variant: #bfc8c4;
+    --sys-outline: #89938f;
+    --sys-outline-variant: #3f4946;
+  }
+
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+  }
+}
+
+.high-contrast {
+  --sys-primary: #000000;
+  --sys-primary-container: #000000;
+  --sys-on-primary: #ffffff;
+
+  --sys-secondary: #000000;
+  --sys-secondary-container: #000000;
+  --sys-on-secondary-container: #ffffff;
+
+  --sys-surface: #ffffff;
+  --sys-surface-container: #ffffff;
+  --sys-surface-container-low: #ffffff;
+  --sys-surface-container-high: #ffffff;
+  --sys-surface-container-highest: #ffffff;
+  --sys-surface-container-lowest: #ffffff;
+
+  --sys-on-surface: #000000;
+  --sys-on-surface-variant: #000000;
+  --sys-outline: #000000;
+  --sys-outline-variant: #000000;
+}
+
+.high-contrast.dark {
+  --sys-primary: #ffffff;
+  --sys-primary-container: #ffffff;
+  --sys-on-primary: #000000;
+
+  --sys-secondary: #ffffff;
+  --sys-secondary-container: #ffffff;
+  --sys-on-secondary-container: #000000;
+
+  --sys-surface: #000000;
+  --sys-surface-container: #000000;
+  --sys-surface-container-low: #000000;
+  --sys-surface-container-high: #000000;
+  --sys-surface-container-highest: #000000;
+  --sys-surface-container-lowest: #000000;
+
+  --sys-on-surface: #ffffff;
+  --sys-on-surface-variant: #ffffff;
+  --sys-outline: #ffffff;
+  --sys-outline-variant: #ffffff;
+}
+
+.high-contrast .chat-wallpaper {
+  background-image: none !important;
+  background-color: var(--sys-surface) !important;
+}
+
+.high-contrast .message-shadow {
+  box-shadow: none !important;
+  border: 2px solid var(--sys-on-surface) !important;
+}
+
+.high-contrast header {
+  background-color: var(--sys-surface) !important;
+  color: var(--sys-on-surface) !important;
+  border-bottom: 2px solid var(--sys-on-surface);
+}
+
+.high-contrast footer {
+  background-color: var(--sys-surface) !important;
+  border-top: 2px solid var(--sys-on-surface) !important;
+}
+
+.high-contrast button {
+  border: 1px solid var(--sys-on-surface);
+}
+
+.high-contrast .bg-\[\#075E54\] {
+  background-color: var(--sys-surface) !important;
+  color: var(--sys-on-surface) !important;
+}
+
+.chat-wallpaper {
+  background-color: var(--sys-surface-container-low);
+  background-image: radial-gradient(var(--sys-outline-variant) 0.5px, transparent 0.5px);
+  background-size: 20px 20px;
+  background-blend-mode: overlay;
+}
+
+.message-shadow {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom thick scrollbar */
+.thick-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+.thick-scrollbar::-webkit-scrollbar-track {
+  background: var(--sys-surface-container);
+  border-radius: 10px;
+}
+.thick-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--sys-outline);
+  border-radius: 10px;
+  border: 3px solid var(--sys-surface-container);
+}
+.thick-scrollbar {
+  scrollbar-width: auto;
+  scrollbar-color: var(--sys-outline) var(--sys-surface-container);
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--sys-outline-variant);
+  border-radius: 10px;
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sys-outline-variant) transparent;
+}
+
+/* Keyboard focus indicator (WCAG 2.4.7, 2.4.11, 1.4.11). Many controls opt out of the
+   browser default with Tailwind's `focus:outline-none`; this rule restores a thick,
+   high-contrast ring for keyboard users only and wins over those utilities. The ring
+   colour is the theme's primary, which meets 3:1 against the surfaces in every theme. */
+:where(button, a[href], summary, [role="button"], [role="checkbox"], [role="radio"], [tabindex]):focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--sys-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Honour the OS "reduce motion" setting for CSS-driven motion (Tailwind
+   transition, animation and scale utilities). The in-app "Reduce motion"
+   toggle only gates the framer-motion animations, so this covers everything
+   else and applies before the participant reaches Settings. (WCAG 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Rich text (ESMira `text` items, incl. cognitive link-outs) */
+.esmira-rich a {
+  color: var(--sys-primary);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.esmira-rich b,
+.esmira-rich strong {
+  font-weight: 700;
+}
+.esmira-rich br {
+  display: block;
+  content: "";
+  margin-top: 0.4rem;
+}
+/* Embedded images open in the zoomable lightbox (delegated handler in App). */
+.esmira-rich img {
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Reflow for very short viewports (400 % zoom on a phone is about 320 x 256 CSS px,
+   WCAG 1.4.10): the header and footer stop reserving space and the whole page scrolls
+   as one document instead of leaving a sliver for the conversation. */
+@media (max-height: 30rem) {
+  .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .app-shell > main {
+    flex: none;
+    overflow: visible;
+  }
+}

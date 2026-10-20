@@ -22,6 +22,20 @@ class JsonOutput
 		return '{"success":true,"serverVersion":' . Main::SERVER_VERSION . ',"dataset":' . $s . '}';
 	}
 
+	/**
+	 * Like successString(), but injects extra top-level fields (e.g. vapidPublicKey)
+	 * alongside the dataset. Keys/values are JSON-encoded individually so the
+	 * dataset can stay a pre-serialized string.
+	 */
+	static function successStringWithExtra(string $s, array $extra = []): string
+	{
+		self::doHeaders();
+		$extraJson = '';
+		foreach($extra as $key => $value)
+			$extraJson .= ',' . json_encode($key) . ':' . json_encode($value);
+		return '{"success":true,"serverVersion":' . Main::SERVER_VERSION . ',"dataset":' . $s . $extraJson . '}';
+	}
+
 	static function successObj(/*mixed*/$obj = true): string
 	{
 		self::doHeaders();

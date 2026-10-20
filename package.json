@@ -1,6 +1,6 @@
 {
 	"name": "web",
-	"version": "3.6.2",
+	"version": "3.6.35",
 	"description": "This is the web server module for ESMira",
 	"keywords": [
 		"open-source",
@@ -63,6 +63,7 @@
 		"qrcode-generator": "^1.4.4",
 		"semver": "^7.7.3",
 		"style-loader": "^3.3.1",
+		"trianglify": "^4.1.1",
 		"vanilla-jsoneditor": "^0.18.12",
 		"webpack-merge": "^5.8.0"
 	},
@@ -70,6 +71,7 @@
 		"@types/mithril": "^2.0.13",
 		"@types/semver": "^7.7.1",
 		"generate-file-webpack-plugin": "^1.0.1",
+		"shadcn": "^4.13.0",
 		"ts-loader": "^9.3.0",
 		"typescript": "^4.6.4",
 		"webpack": "^5.75.0",
@@ -78,6 +80,11 @@
 	"scripts": {
 		"dev": "webpack --config build_configs/config.development.js",
 		"prod": "webpack --config build_configs/config.production.js",
-		"create_structure_index": "node build_configs/create_structure_index.mjs"
+		"create_structure_index": "node build_configs/create_structure_index.mjs",
+		"build:pwa": "cd web-pwa && npm ci && npm run build",
+		"build:all": "npm run prod && npm run build:pwa",
+		"a11y:setup": "npm --prefix web-pwa/a11y install",
+		"a11y": "node web-pwa/a11y/audit.mjs",
+		"a11y:test": "npm --prefix web-pwa/a11y test"
 	}
 }

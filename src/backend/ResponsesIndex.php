@@ -68,6 +68,16 @@ class ResponsesIndex {
                 $this->addName($name);
                 $this->types[$name] = 'audio';
                 break;
+            case 'record_keystrokes':
+                // Voice-memo skip fallback: a text answer whose keystroke *dynamics*
+                // are logged (content-free). Main column holds the classed event-log CSV
+                // file (uploaded like audio); the typed answer text and the capture mode
+                // travel in sibling columns.
+                $this->addName($name);
+                $this->types[$name] = 'keystrokes';
+                $this->addName("$name~text");
+                $this->addName("$name~capture_mode");
+                break;
             case 'noise_level':
                 $this->addName($name);
                 $this->addName("$name~min");

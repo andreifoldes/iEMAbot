@@ -9,6 +9,7 @@ use backend\exceptions\PageFlowException;
 use backend\FileSystemBasics;
 use backend\Paths;
 use backend\SSE;
+use backend\sqlite\CollectedDataDb;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Throwable;
@@ -128,6 +129,7 @@ class CreateSnapshot extends HasAdminPermission {
 		}
 		catch(Throwable $e) {
 			$zip->close();
+			CollectedDataDb::removeSnapshotCopy();
 			if(file_exists($pathZip)) {
 				unlink($pathZip);
 			}
@@ -135,7 +137,9 @@ class CreateSnapshot extends HasAdminPermission {
 			return;
 		}
 		
-		if(!$zip->close()) {
+		$closed = $zip->close();
+		CollectedDataDb::removeSnapshotCopy();
+		if(!$closed) {
 			$this->sse->flushFailed('Unable to close zip file');
 			return;
 		}
