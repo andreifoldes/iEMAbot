@@ -203,6 +203,34 @@ while the app is open.
 | Signal windows | From `actionTriggers.schedules` (`dailyRepeatRate`, `weekdays`, `dayOfMonth`, `skipFirstInLoop`, `startDayOne`); a window stays open until end of day unless a timeout is set |
 | Passive | No signals: gated only by the duration fields |
 
+## Connecting a wearable {/* #wearables */}
+
+Shown only when the study has wearables enabled **and** the server has credentials for at least one of the study's
+providers (Withings, Google Health). Otherwise nothing wearable-related appears. See
+[Wearables](../backend/wearables.md) for the server side.
+
+- **Where.** A *Wearables* tile on the home grid, and *Connect wearables* in Settings. Both open the same panel. It needs
+  a participant ID, like notifications.
+- **Provider list.** One row per offered provider, with a status line and one action:
+
+  | State | Status line | Action |
+  | --- | --- | --- |
+  | Not connected | "Not connected" | **Connect** |
+  | Connected | "Connected · last sync *date*", or "Connected · no data yet" | **Disconnect** |
+  | Link rejected by the provider | "Connection expired · please reconnect so your data keeps syncing" (amber) | **Connect** (reconnect) |
+
+- **Connecting.** *Connect* leaves the app for the provider's sign-in page (a full-page navigation, because providers
+  refuse to be framed). The server then redirects back to the app, which shows a toast, "*Provider* connected" or
+  "*Provider* connection failed", for about five seconds and refreshes the list.
+- **Disconnecting.** *Disconnect* removes the server's stored token, data and sync cursor for that provider. It does not
+  revoke access at the provider, so a participant who wants that must also do it in the provider's own settings.
+- **Reconnecting.** A link stops working if access is revoked at the provider, or if the same provider account is linked
+  under a second participant ID. The app then shows the amber state above, and linking again restores syncing; days
+  missed in between are fetched afterwards, within the server's catch-up cap.
+- **Details panel.** The *Details* screen lists the connected wearables as well.
+- **What the participant is told.** The panel says data is collected periodically by the research server while the
+  wearable stays connected, and that they can disconnect at any time.
+
 ## Settings and other screens
 
 | Screen | Content |

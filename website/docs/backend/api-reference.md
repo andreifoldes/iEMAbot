@@ -29,7 +29,7 @@ clients keep working.
 | `client_info.php` | POST | Record installed-vs-browser and device class. | **fork** |
 | `wearables_connect.php` | POST | Start OAuth; returns `authUrl`. | **fork** |
 | `wearables_oauth.php` | GET | OAuth redirect target; exchanges the code. | **fork** |
-| `wearables_status.php` | POST | Connected providers and last sync. | **fork** |
+| `wearables_status.php` | POST | Connected providers, last sync and `needsReconnect` (provider rejected the link). | **fork** |
 | `wearables_disconnect.php` | POST | Delete token, data and cursor for a provider. | **fork** |
 
 The remaining upstream participant endpoints are `access.php`, `app_install_instructions.php`,

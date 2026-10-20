@@ -49,6 +49,87 @@ php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> 
 There is **no environment-variable support** for these keys. The researcher panel shows the exact redirect
 URI to register with each provider.
 
+## Setting up provider apps {/* #provider-setup */}
+
+Each provider needs its own developer application, registered once per server. Withings and Google Health differ in where
+the app lives, what has to be registered besides the redirect URI, and how webhooks are subscribed (see
+[Webhooks](#webhooks-and-sensor-triggers)). Fitbit is no longer a provider; its data comes through Google Health.
+
+**Steps common to every provider**
+
+1. Run `php cli/wearables_setup.php genkey` once, before the first provider, to create the token-encryption key.
+2. Decide the **redirect URI**: `https://<your-server>/<path>/api/wearables_oauth.php`. The provider compares it with
+   the one ESMira sends **character for character**, so register exactly the string the researcher panel shows.
+3. Behind a reverse proxy or Docker the automatically derived URL is often wrong (plain `http`, or without the path
+   prefix), and the provider answers with a redirect-URI mismatch. Pass the public URL explicitly as the last argument of
+   the CLI call (it is stored as `wearables_redirect_uri`). If webhooks are used behind such a proxy, also set
+   `wearables_webhook_uri`.
+4. Store the credentials with the CLI, then enable the provider in the study's Wearables panel. The provider appears in
+   the participant app only when the server has credentials for it.
+
+| | **Withings** | **Google Health** |
+| --- | --- | --- |
+| Where the app lives | Withings developer dashboard | A Google Cloud project with the Google Health API enabled for it |
+| Credentials | Client ID and secret | OAuth client of type *Web application*: client ID and secret |
+| Redirect URI field | "Callback URL" of the app | "Authorized redirect URIs" of the OAuth client |
+| Scopes (fixed in code) | `user.info`, `user.metrics`, `user.activity`, `user.sleepevents` | `sleep.readonly`, `activity_and_fitness.readonly`, `health_metrics_and_measurements.readonly` (all under `googlehealth.`) |
+| Consent-screen step | None | Configure the OAuth consent screen and add the scopes; in *Testing* mode only listed test users can link and refresh tokens expire after 7 days, and an unverified app is capped at 100 users |
+| Webhook registration | **None by hand.** The server subscribes each data type for each participant when they link | **Once per server**, by sending a "subscriber" request to Google (`googlehealth-webhook`) |
+| Webhook authenticity | Key in the callback URL, derived from the client secret | Secret in the `Authorization` header plus Google's signature |
+| What the callback URL must be | Reachable by Withings; carries the key, so keep query strings out of access logs | Public HTTPS (TLS 1.2+); Google verifies it during registration |
+| Accounts | One grant per Withings user per app: linking the same account under a second participant ID kills the first link | The participant needs a Google Health profile (a Google account that has their Fitbit or Pixel Watch data) |
+| Tokens | Refresh tokens are single use | 1 h access tokens, refresh token requested with `access_type=offline` |
+
+### Withings {/* #withings-setup */}
+
+1. In the Withings developer dashboard, create an application and set its **Callback URL** to the redirect
+   URI above. The dashboard's "Test" button for the callback may report an HTTP 302; that is expected, because a bare
+   request carries no authorization code.
+2. Store the credentials:
+
+   ```bash
+   php cli/wearables_setup.php withings <client_id> <client_secret> https://<your-server>/<path>/api/wearables_oauth.php
+   ```
+
+3. Nothing else to register. When a participant links, the server calls Withings `notify` once per event type, with a
+   callback of the form `…/api/wearables_webhook.php?provider=withings&k=<key>`. If subscribing fails, linking still
+   succeeds; the failure goes to the server error log and the trigger's time fallback covers the prompt.
+4. **Do not rotate the client secret casually.** The webhook key is derived from it, so existing subscriptions stop working
+   until each participant links again.
+5. Most event types need a specific device (for example *out of bed* needs a Sleep Analyzer or sleep mat). Participants who
+   linked before an event type was added to ESMira have no subscription for it until they re-link.
+
+### Google Health {/* #google-health-setup */}
+
+1. **Project.** Use a Google Cloud project for which Google has enabled the Google Health API (when last checked, Google
+   was not onboarding new projects). Note the project **number**, not the project ID.
+2. **Consent screen and OAuth client.** Configure the consent screen, add the three scopes above, and create an OAuth
+   client of type *Web application* with the redirect URI as an authorized redirect URI. Publish the consent screen before
+   a real study; in *Testing* mode refresh tokens expire after 7 days and only test users can link.
+3. **Store the credentials:**
+
+   ```bash
+   php cli/wearables_setup.php googlehealth <client_id> <client_secret> https://<your-server>/<path>/api/wearables_oauth.php
+   ```
+
+4. **Register the webhook subscriber, once per server.** Run
+
+   ```bash
+   php cli/wearables_setup.php googlehealth-webhook
+   ```
+
+   It creates the webhook secret (a `Bearer …` value stored as `wearables_googlehealth_webhook_secret`) and prints the
+   request to send to `https://health.googleapis.com/v4beta/projects/<PROJECT NUMBER>/subscribers?subscriberId=esmira`,
+   with the subscribed data types and `AUTOMATIC` subscriptions. Send it as a Google identity that holds
+   `health.subscribers.create`. Google calls the endpoint during registration, so it must already be publicly reachable
+   over HTTPS with the secret in the `Authorization` header (Apache with PHP-FPM or CGI needs
+   `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`).
+5. After this, nothing happens at link time: Google starts sending notifications for every participant who has consented.
+   Without step 4, linking and the daily download still work, but sensor triggers fall back to their time fallback.
+
+Without webhook registration, both providers still **link and sync**; only sensor-triggered prompts depend on the steps
+above.
+
 ## OAuth 2.0 flow
 
 ```mermaid
@@ -180,23 +261,14 @@ a type whose scope was not granted (HTTP 403) is skipped.
 - **Authenticity:** Secret in `Authorization` **and** an ECDSA P-256 signature (`GOOGLE-HEALTH-API-SIGNATURE`, Tink prefix) against Google's published keyset
 - **Delivery:** Batches of up to 99; must answer 204 at once; retried for 7 days, so events can repeat (harmless: the cap and ledger absorb them)
 
-Setup:
-
-```bash
-php cli/wearables_setup.php googlehealth <client_id> <client_secret>   # OAuth client from your Google Cloud project
-php cli/wearables_setup.php googlehealth-webhook                        # creates the webhook secret, prints the subscriber request
-```
-
-Send the printed request to `https://health.googleapis.com/v4beta/projects/<PROJECT NUMBER>/subscribers?subscriberId=esmira`
-(project *number*, not id; needs the `health.subscribers.create` permission). The OAuth redirect URI is the same
-`wearables_oauth.php` shown in the researcher panel.
+Setup is described in [Setting up provider apps](#google-health-setup).
 
 What is and is not done:
 
 - Requested scopes: `sleep.readonly`, `activity_and_fitness.readonly`, `health_metrics_and_measurements.readonly`
   (the three Google's webhook page ties to sleep, activity and weight; its scope page gives no per-type mapping).
-- **Measurement data is not downloaded**, so a Google Health participant adds no rows to `wearables.zip`; the
-  hourly sync skips the provider.
+- **Measurement data is downloaded** by the hourly sync, as for the other providers (see the data types above), so a
+  Google Health participant adds rows to `wearables.zip`.
 - Unverified: whether Google's scopes count as sensitive/restricted (affecting app verification, and whether a
   project in *Testing* mode, whose refresh tokens expire, is enough), and the exact notification envelope. The
   parser accepts the plausible shapes. If genuine notifications are rejected with 403, set the server config key
