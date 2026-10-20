@@ -241,6 +241,10 @@ export interface EsmiraStudy {
   /** When true, a cognitive task card offers Start task / Skip task / Remind me later / Skip
    *  check-in (see lib/pausedCheckin.ts) instead of just Start and Skip. Source-edit only. */
   webTaskActions?: boolean;
+  /** When true, the welcome, description and consent bubbles of a first visit, and the closing
+   *  bubbles after a check-in, appear one by one, each after the previous one's reading time
+   *  (see lib/pacing.ts). Source-edit only. */
+  webPacedMessages?: boolean;
   /** When true, the researcher has enabled wearable data sharing. The PWA offers
    *  the intersection of `wearablesProviders` and the server's `wearableProviders`
    *  (those with OAuth credentials configured) as connectable devices. */

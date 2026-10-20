@@ -115,6 +115,13 @@ A researcher can tick **Do not ask participants for a name (web)** in the study 
 field). The name step is then skipped everywhere it would appear (first visit, after consent, after transferring
 a participant ID), and the Details panel shows no username.
 
+With `webPacedMessages` (source-edit only), a first visit shows the welcome, description and consent bubbles one
+after another instead of all at once. Before each bubble a typing indicator stays up for the previous bubble's
+reading time at 238 words per minute (`lib/pacing.ts`), at least 1.2 s and at most 10 s. The consent buttons
+appear with the last bubble. Returning participants, who have already consented, see no pacing. The same pacing
+applies to the closing bubbles after a check-in (the snapshot below, or the thank-you and the offer of another
+questionnaire), and the questionnaire list appears once they are all shown.
+
 ## End-of-questionnaire snapshot
 
 A study with `webSnapshot` set to `esrs2026` (source-edit only) adds three messages after a check-in, mirroring

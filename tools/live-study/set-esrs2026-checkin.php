@@ -9,13 +9,13 @@ declare(strict_types=1);
  *
  * One questionnaire, four pages, no action triggers (the participant opens it whenever they like):
  *   1. conf_enjoyment (likert 1-5), conf_fuel (list_single)
- *   2. I-PANAS-SF items alert/nervous/inspired/upset/active/afraid (likert 1-5)
+ *   2. a short lead-in (panas_intro, info text), then I-PANAS-SF items alert/nervous/inspired/upset/active/afraid (likert 1-5)
  *   3. kss, Karolinska Sleepiness Scale (list_single, 9 options)
  *   4. PVT-BA via the m2c2 webapp input, results shown at the end
  *
  * Question ids, wording and option labels are copied verbatim from the bot so the two exports line up.
- * Like the bot, the pages carry no headings of their own; only the check-in's one-line description
- * opens the first page. The welcome and consent wording follows the bot's. "Nothing you answer is
+ * Only the first page has a header, "Conference" (shown as a small section label); the mood page
+ * opens with a one-line lead-in that the Telegram bot does not have. The welcome and consent wording follows the bot's. "Nothing you answer is
  * saved" is true only with the PWA's webLocalOnly option on (see set-esrs2026-flags.php), which makes
  * the app send nothing to the server; apply the flags and ship a PWA that has it before this wording
  * goes live. The bot's 2-hour deletion window does not apply and is left out.
@@ -44,10 +44,12 @@ const TITLE = 'ESRS 2026 mini check-in';
 const DESCRIPTION = '<p>Welcome to the ESRS 2026 mini check-in, a playful demo that goes with our poster.</p>'
     . '<p>It takes about 5 minutes: how you are enjoying the conference, a few quick mood questions,'
     . ' how sleepy you feel, and a short reaction-time game. You get a little snapshot of yourself at the end.</p>';
-const CONSENT = "It is a fully anonymous demo. Nothing you answer is saved: your answers and game results stay on"
+const CONSENT = "It is a fully anonymous demo. Nothing you answer is saved: your answers and task results stay on"
     . " your phone and are not sent anywhere, so there is nothing to delete afterwards.\n\n"
     . 'Do you consent to take part in this anonymous demo?';
-const INTRO = 'A 5-minute snapshot of how you are doing right now.';
+const INTRO = 'Conference';
+const PANAS_INTRO = 'Next, six quick questions about how you feel right now. For each one, tap how strongly it'
+    . ' applies, from not at all to extremely.';
 
 const LIKERT_LEFT = 'not at all';
 const LIKERT_RIGHT = 'extremely';
@@ -82,7 +84,10 @@ function listSingle(string $name, string $text, array $choices): object
 
 function buildQuestionnaire(): object
 {
-    $mood = [];
+    $mood = [(object)[
+        'responseType' => 'text', 'name' => 'panas_intro', 'text' => PANAS_INTRO,
+        'listChoices' => [], 'subInputs' => [],
+    ]];
     foreach (['alert', 'nervous', 'inspired', 'upset', 'active', 'afraid'] as $item) {
         $mood[] = likert($item, "I feel $item right now.", LIKERT_LEFT, LIKERT_RIGHT);
     }

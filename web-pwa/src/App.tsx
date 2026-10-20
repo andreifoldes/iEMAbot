@@ -52,6 +52,7 @@ import { enrollUrl, invitedParticipantId } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
+import { readingPauseMs } from './lib/pacing';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
 import { saveRecording } from './lib/audioUploads';
@@ -244,6 +245,12 @@ export default function App() {
   const [participant, setParticipant] = useState(''); // display name (username)
   const [userId, setUserId] = useState('');           // stable backend identifier
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  // Paced messages (webPacedMessages): from message `from` on, only `shown` messages are on screen
+  // while a batch of bubbles is revealed one by one; null = show every message. See lib/pacing.ts.
+  const [pace, setPace] = useState<{ from: string; shown: number } | null>(null);
+  const paceStart = pace ? messages.findIndex((m) => m.id === pace.from) : -1;
+  const visibleCount = paceStart >= 0 ? Math.min(messages.length, paceStart + pace!.shown) : messages.length;
+  const pacing = visibleCount < messages.length;
   const [footerValue, setFooterValue] = useState('');
 
   const engineRef = useRef<OfflineSurveyEngine | null>(null);
@@ -341,9 +348,10 @@ export default function App() {
 
   // NB: compute the id OUTSIDE the updater so the updater stays pure (React
   // StrictMode double-invokes updaters, which would otherwise dupe ids/keys).
-  const pushBot = useCallback((content: string, html = false, qid?: string) => {
+  const pushBot = useCallback((content: string, html = false, qid?: string): string => {
     const id = mkId();
     setMessages((prev) => [...prev, { id, sender: 'bot', kind: 'text', content, html, qid }]);
+    return id;
   }, []);
   const pushUser = useCallback((content: string, qid?: string) => {
     const id = mkId();
@@ -536,7 +544,11 @@ export default function App() {
         }
         const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
         setParticipant(savedName);
-        pushBot(`Welcome to ${study.title}.`);
+        const welcomeId = pushBot(`Welcome to ${study.title}.`);
+        // A first visit to a paced study sees welcome, description and consent appear one by one
+        // (set in the same batch as the pushes below, so nothing flashes up early).
+        if (study.webPacedMessages && study.informedConsentForm
+          && localStorage.getItem(`esmira_consent_${study.id}`) !== '1') setPace({ from: welcomeId, shown: 1 });
         // studyDescription is rich text (HTML) in ESMira; render it formatted.
         // informedConsentForm is a plain-text field — keep it plain (line breaks preserved).
         if (study.studyDescription) pushBot(study.studyDescription, true);
@@ -603,7 +615,16 @@ export default function App() {
     } else {
       el.scrollTo({ top: el.scrollHeight, behavior });
     }
-  }, [messages, currentQuestion, phase, reduceMotion]);
+  }, [messages, visibleCount, currentQuestion, phase, reduceMotion]);
+
+  // ── Paced messages: reveal the next bubble once the previous one has had time to be read ──
+  useEffect(() => {
+    if (!pace) return;
+    if (!pacing) { setPace(null); return; }
+    const prev = messages[visibleCount - 1];
+    const t = setTimeout(() => setPace({ ...pace, shown: pace.shown + 1 }), readingPauseMs(prev.content, prev.html));
+    return () => clearTimeout(t);
+  }, [pace, pacing, messages, visibleCount]);
 
   // ── Consent ──────────────────────────────────────────────────
   const onConsent = (agree: boolean) => {
@@ -1421,15 +1442,18 @@ export default function App() {
       study, engine.session.questions, engine.getResponseMap(),
       Object.values(pvtLinesRef.current).find((line): line is string => !!line) ?? null,
     );
+    const closingIds: string[] = [];
     if (study.webLocalOnly) {
       // Nothing was sent, so never claim the responses were recorded.
-      if (!messages) pushBot('✅ Thank you — you are all done. Nothing was sent to the server.');
+      if (!messages) closingIds.push(pushBot('✅ Thank you — you are all done. Nothing was sent to the server.'));
     } else {
-      pushBot(ok
+      closingIds.push(pushBot(ok
         ? '✅ Thank you — your responses have been recorded.'
-        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
+        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.'));
     }
-    messages?.forEach((message) => pushBot(message));
+    messages?.forEach((message) => closingIds.push(pushBot(message)));
+    // Paced studies reveal these closing bubbles (and the offer below) one by one.
+    if (study.webPacedMessages && closingIds.length > 1) setPace({ from: closingIds[0], shown: 1 });
     clearPaused(study.id, userId);
     engineRef.current = null;
     activeQRef.current = null;
@@ -1610,7 +1634,7 @@ export default function App() {
         </div>
 
         <AnimatePresence initial={false}>
-          {messages.map((msg) => msg.kind === 'section' ? (
+          {messages.slice(0, visibleCount).map((msg) => msg.kind === 'section' ? (
             <motion.div key={msg.id}
               initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: reduceMotion ? 0 : 0.3 }} className="flex justify-center my-1">
@@ -1646,6 +1670,18 @@ export default function App() {
             </motion.div>
           ))}
         </AnimatePresence>
+        {/* Paced messages: typing dots until the next bubble; no exit animation, so they never sit above it */}
+        {pacing && (
+          <motion.div aria-hidden="true"
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.2 }}
+            className="self-start px-4 py-4 rounded-2xl rounded-tl-none message-shadow bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 flex gap-1.5">
+            {[0, 150, 300].map((delay) => (
+              <span key={delay} style={{ animationDelay: `${delay}ms` }}
+                className={cn('w-2 h-2 rounded-full bg-on-surface-variant/60', !reduceMotion && 'animate-bounce')} />
+            ))}
+          </motion.div>
+        )}
 
         {/* Error */}
         {phase === 'error' && (
@@ -1806,7 +1842,7 @@ export default function App() {
         )}
 
         {/* Consent actions */}
-        {phase === 'consent' && (
+        {phase === 'consent' && !pacing && (
           <div className="self-start w-[85%] flex gap-3">
             <button onClick={() => onConsent(true)} className="flex-1 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">I consent</button>
             <button onClick={() => onConsent(false)} className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">I do not consent</button>
@@ -1923,7 +1959,7 @@ export default function App() {
         })()}
 
         {/* Questionnaire list */}
-        {phase === 'list' && study && (() => {
+        {phase === 'list' && study && !pacing && (() => {
           // Show what the participant can act on now: the currently-available
           // questionnaires, or — when nothing is open yet — every questionnaire that
           // still has a future opening, so e.g. a Morning survey whose window already

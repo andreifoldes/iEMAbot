@@ -35,6 +35,7 @@ form, FAQ, contact email, reward instructions).
 | `webSkipName` | Skip the "what name would you like to go by?" step; participants are identified only by their study id | Study settings, below the smartphone-only setting |
 | `webLocalOnly` | The web app sends nothing to the server: no answers, join or other events, telemetry, push or PID lock; answers stay on the device | **None**, source-edit only |
 | `webTaskActions` | A task card offers Start task, Skip task, Remind me later (pause on this device) and Skip check-in | **None**, source-edit only |
+| `webPacedMessages` | The welcome, description and consent bubbles of a first visit, and the closing bubbles after a check-in, appear one by one, each after the previous one's reading time | **None**, source-edit only |
 | `webSnapshot` | Show a playful read-out of the participant's own answers after each submission (only `esrs2026` exists, see `web-pwa/src/lib/snapshot.ts`) | **None**, source-edit only |
 | `wearablesEnabled`, `wearablesProviders` | Offer wearable linking, restricted to chosen providers | [Wearables panel](./wearables.md) |
 | `wearablesDataTypes` | Narrow the synced data types | **None**, source-edit only |

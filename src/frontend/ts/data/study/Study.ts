@@ -54,6 +54,9 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// When enabled, a cognitive task card in the PWA offers Start task / Skip task / Remind me later /
 	// Skip check-in. No editor control: set in the study source.
 	public webTaskActions = this.primitive<boolean>("webTaskActions", false)
+	// When enabled, the PWA reveals the opening bubbles of a first visit and the closing bubbles of a
+	// check-in one by one at reading speed (see web-pwa/src/lib/pacing.ts). No editor control: set in the study source.
+	public webPacedMessages = this.primitive<boolean>("webPacedMessages", false)
 	// When enabled, the participant PWA can connect a wearable (Withings/Google Health)
 	// via OAuth and the server polls it for data (see backend/wearables/, api/wearables_*).
 	// wearablesProviders limits which providers are offered; wearablesDataTypes (empty =

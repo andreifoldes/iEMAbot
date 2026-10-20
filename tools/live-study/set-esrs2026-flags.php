@@ -8,6 +8,7 @@ declare(strict_types=1);
  *   - webSnapshot = "esrs2026"  after the check-in the PWA shows a snapshot, "Your answers" and a thank-you
  *   - webLocalOnly = true       the PWA sends nothing to the server: no answers, join/events or telemetry
  *   - webTaskActions = true     the task card offers Start task, Skip task, Remind me later, Skip check-in
+ *   - webPacedMessages = true   welcome/description/consent and the closing snapshot bubbles appear one by one
  * All are read by the PWA (web-pwa/src/App.tsx, lib/*.ts) from the study JSON; webSkipName also has an
  * editor checkbox, the others are source-edit only. Old PWAs ignore them, so ship the PWA first: until
  * then a phone running the old app still uploads. Needs the PWA release that adds webLocalOnly.
@@ -40,9 +41,10 @@ $study->webSkipName = true;
 $study->webSnapshot = 'esrs2026';
 $study->webLocalOnly = true;
 $study->webTaskActions = true;
+$study->webPacedMessages = true;
 $study->new_changes = true;
 $study->subVersion = ($study->subVersion ?? 0) + 1;
-echo "Will set webSkipName, webLocalOnly, webTaskActions = true and webSnapshot = esrs2026; subVersion -> {$study->subVersion}\n";
+echo "Will set webSkipName, webLocalOnly, webTaskActions, webPacedMessages = true and webSnapshot = esrs2026; subVersion -> {$study->subVersion}\n";
 
 if (!$apply) {
     echo "Dry run only — re-run with `apply` to save.\n";
