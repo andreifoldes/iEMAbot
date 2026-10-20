@@ -14,6 +14,7 @@ import { NotCompatibleIcon, PossibleDevices } from "../components/NotCompatibleI
 import { BtnAdd, BtnTrash } from "../components/Buttons";
 import { CodeEditor } from "../components/CodeEditor";
 import { RegexTextInput } from "../components/RegexTextInput";
+import { telegramSupportForType } from "./TelegramCompatibility";
 
 
 const InputCategories = {
@@ -213,7 +214,13 @@ export class InputOptionDesigner {
 			title: Lang.get("input_image"),
 			helpUrl: "https://github.com/KL-Psychological-Methodology/ESMira/wiki/Questionnaire-Items#Image",
 			category: "passive",
-			view: () => [this.urlOption()]
+			view: () => [
+				this.urlOption(),
+				<div class="stretched">
+					{this.inputOptionElement(this.input.imageAlt, Lang.get("input_image_alt"), "big")}
+					<small>{Lang.get("input_image_alt_desc")}</small>
+				</div>
+			]
 		},
 		"likert": {
 			title: Lang.get("input_likert"),
@@ -340,7 +347,17 @@ export class InputOptionDesigner {
 			title: Lang.get("input_record_audio"),
 			helpUrl: "https://github.com/KL-Psychological-Methodology/ESMira/wiki/Questionnaire-Items#Record-audio",
 			category: "media",
-			notCompatible: ["Web"],
+			// Web now supports voice memos via the participant PWA (MediaRecorder →
+			// api/file_uploads.php), so it's no longer flagged as web-incompatible.
+			view: () => [<div>{this.requiredOption()}</div>]
+		},
+		"record_keystrokes": {
+			title: Lang.get("input_record_keystrokes"),
+			helpUrl: "https://github.com/KL-Psychological-Methodology/ESMira/wiki/Questionnaire-Items#Keystroke-text",
+			category: "media",
+			// Text answer whose keystroke *dynamics* (not content) are logged; participant PWA only.
+			// Native apps do not capture keystrokes, so it is flagged incompatible there.
+			notCompatible: ["Android", "iOS"],
 			view: () => [<div>{this.requiredOption()}</div>]
 		},
 		"share": {
@@ -363,6 +380,25 @@ export class InputOptionDesigner {
 			helpUrl: "https://github.com/KL-Psychological-Methodology/ESMira/wiki/Questionnaire-Items#Text-input",
 			category: "classic",
 			view: () => this.onlyRequiredAndDefaultOptions()
+		},
+		"webapp": {
+			title: Lang.get("input_webapp"),
+			helpUrl: "",
+			category: "special",
+			notCompatible: ["Android", "iOS"],
+			view: () => [
+				<div>
+					<label class="fakeLabel line">
+						<small>{Lang.getWithColon("webapp_url")}</small>
+						<input type="url" {...BindObservable(this.input.url)} />
+					</label>
+					<label class="fakeLabel line">
+						<small>{Lang.getWithColon("webapp_description")}</small>
+						<textarea {...BindObservable(this.input.webappDescription)}></textarea>
+					</label>
+					{this.requiredOption()}
+				</div>
+			]
 		},
 		"time": {
 			title: Lang.get("input_time"),
@@ -574,6 +610,23 @@ export class InputOptionDesigner {
 								{RichText(this.input.text)}
 								{ObservableLangChooser(this.study)}
 							</div>
+							<div class="fakeLabel line">
+								<small>{Lang.get("input_description")}{NotCompatibleIcon("Android", "iOS")}</small>
+								{RichText(this.input.description)}
+								{ObservableLangChooser(this.study)}
+							</div>
+							<div class="fakeLabel line">
+								<small>{Lang.get("input_screen_reader_label")}{NotCompatibleIcon("Android", "iOS")}</small>
+								<input type="text" class="big" {...BindObservable(this.input.screenReaderLabel)} />
+								{ObservableLangChooser(this.study)}
+								<small>{Lang.get("input_screen_reader_label_desc")}</small>
+							</div>
+							<div class="fakeLabel line">
+								<small>{Lang.get("input_spoken_text")}{NotCompatibleIcon("Android", "iOS")}</small>
+								<input type="text" class="big" {...BindObservable(this.input.spokenText)} />
+								{ObservableLangChooser(this.study)}
+								<small>{Lang.get("input_spoken_text_desc")}</small>
+							</div>
 						</div>
 				}),
 			...views.map((view) => {
@@ -597,6 +650,12 @@ export class InputOptionDesigner {
 			)
 		)
 	}
+	/** Marks types that are skipped or approximated in a Telegram chat, when the study uses Telegram. */
+	private withTelegramCompatibility(key: InputResponseType, entry: InputEntry, telegramEnabled: boolean): InputEntry {
+		if (!telegramEnabled || telegramSupportForType(key) == "native")
+			return entry
+		return { ...entry, notCompatible: [...(entry.notCompatible ?? []), "Telegram"] }
+	}
 	public createTypesView(
 		categoryView: (title: string, inputViews: Vnode<any, any>[]) => Vnode<any, any>,
 		inputView: (title: InputEntry, isActive: boolean, onclick: () => void) => Vnode<any, any> | null
@@ -604,12 +663,13 @@ export class InputOptionDesigner {
 		const categoryViews: Record<string, Vnode<any, any>[]> = {}
 
 		const selectedType = this.input.responseType.get()
+		const telegramEnabled = this.study.channels.telegram.enabled.get()
 		for (const key of this.sortedInputTypeKeys) {
 			const entry = this.inputTypes[key];
 			if (!categoryViews.hasOwnProperty(entry.category))
 				categoryViews[entry.category] = []
 
-			const view = inputView(entry, key == selectedType, () => { this.input.responseType.set(key) })
+			const view = inputView(this.withTelegramCompatibility(key, entry, telegramEnabled), key == selectedType, () => { this.input.responseType.set(key) })
 			if (view)
 				categoryViews[entry.category].push(view)
 		}

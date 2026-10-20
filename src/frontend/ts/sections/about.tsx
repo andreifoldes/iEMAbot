@@ -9,6 +9,7 @@ import applePng from "../../imgs/apple-store-badge-en.png"
 import {TitleRow} from "../components/TitleRow";
 import {AboutESMiraInterface, AboutESMiraLoader} from "../loader/AboutESMiraLoader";
 import {SectionData} from "../site/SectionData";
+import {ServerInfo} from "../constants/ServerInfo";
 
 export class Content extends SectionContent {
 	private about: AboutESMiraInterface
@@ -33,9 +34,12 @@ export class Content extends SectionContent {
 		return <div>
 			<div class="center horizontalPadding">
 				<p class="justify lineSize">{translations["about_text"]}</p>
-				<a href="https://play.google.com/store/apps/details?id=at.jodlidev.esmira" target="_blank"><img alt="Android" src={googlePng}/></a>
-				&nbsp;
-				<a href="https://apps.apple.com/gb/app/esmira/id1538774594" target="_blank"><img alt="iOS" src={applePng}/></a>
+				{/* The native apps are not part of web-only deployments (ServerInfo.webOnlyMode) */}
+				{!ServerInfo.webOnlyMode && <div>
+					<a href="https://play.google.com/store/apps/details?id=at.jodlidev.esmira" target="_blank"><img alt="Android" src={googlePng}/></a>
+					&nbsp;
+					<a href="https://apps.apple.com/gb/app/esmira/id1538774594" target="_blank"><img alt="iOS" src={applePng}/></a>
+				</div>}
 			</div>
 			
 			<br/>

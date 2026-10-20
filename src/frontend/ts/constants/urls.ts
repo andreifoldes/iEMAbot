@@ -3,7 +3,8 @@ export const URL_ABOUT_ESMIRA_STRUCTURE_JSON = URL_ABOUT_ESMIRA_SOURCE + "struct
 export const URL_ABOUT_ESMIRA_PUBLICATIONS_JSON = URL_ABOUT_ESMIRA_SOURCE + "publications.json"
 export const URL_ABOUT_ESMIRA_PLUGINS_JSON = URL_ABOUT_ESMIRA_SOURCE + "plugins.json"
 export const URL_ABOUT_ESMIRA_JSON = URL_ABOUT_ESMIRA_SOURCE + "langs/%s.json"
-export const URL_RELEASES_LIST = "https://api.github.com/repos/KL-Psychological-Methodology/ESMira-web/releases?per_page=50"
+// iEMAbot's own releases. Do not point this at upstream ESMira: the update would replace iEMAbot with stock ESMira.
+export const URL_RELEASES_LIST = "https://api.github.com/repos/andreifoldes/iEMAbot/releases?per_page=50"
 export const URL_DEV_SERVER = "esmira.kl.ac.at"
 export const URL_BLOG_RSS = "https://kl-psychological-methodology.github.io/ESMira/feed.xml"
 
@@ -12,6 +13,7 @@ export const FILE_ADMIN = 'api/admin.php'
 export const FILE_RESPONSES = FILE_ADMIN + "?type=GetData&study_id=%1&q_id=%2"
 export const FILE_CREATE_MEDIA = FILE_ADMIN + "?type=CreateMediaZip&study_id=%1"
 export const FILE_MEDIA = FILE_ADMIN + "?type=GetMediaZip&study_id=%1"
+export const FILE_WEARABLE_DATA = FILE_ADMIN + "?type=GetWearableDataZip&study_id=%1"
 export const FILE_IMAGE = FILE_ADMIN + "?type=GetMedia&study_id=%1&userId=%2&entryId=%3&key=%4&media_type=image"
 export const FILE_AUDIO = FILE_ADMIN + "?type=GetMedia&study_id=%1&userId=%2&entryId=%3&key=%4&media_type=audio"
 export const FILE_SAVE_ACCESS = 'api/access.php'

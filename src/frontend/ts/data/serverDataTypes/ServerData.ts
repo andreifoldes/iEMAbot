@@ -6,6 +6,8 @@ import {TranslatableRootInterface} from "../../observable/interfaces/Translatabl
 export class ServerData extends DataStructure implements TranslatableRootInterface {
 	public defaultLang = this.primitive<string>("defaultLang", "en")
 	public langCodes = this.primitiveArray<string>("langCodes", [])
+	// When true, iOS/Android-only controls are greyed out across the admin (web PWA only).
+	public webOnlyMode = this.primitive<boolean>("webOnlyMode", false)
 	public siteTranslations = this.object("translationData", SiteTranslations)
 	
 	constructor(data: Record<string, JsonTypes>, newLang = data["defaultLang"] as string, oldServerData?: ServerData) {

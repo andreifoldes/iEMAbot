@@ -14,6 +14,7 @@ use backend\fileSystem\loader\MessagesArchivedLoader;
 use backend\fileSystem\loader\MessagesPendingLoader;
 use backend\fileSystem\loader\MessagesUnreadLoader;
 use backend\Permission;
+use backend\sqlite\CollectedDataDb;
 use backend\subStores\MessagesStore;
 
 class MessagesStoreFS implements MessagesStore {
@@ -183,6 +184,7 @@ class MessagesStoreFS implements MessagesStore {
 		$msg = new Message($from, $content, false, true);
 		$messages[] = $msg;
 		MessagesUnreadLoader::exportFile($studyId, $userId, $messages);
+		CollectedDataDb::addParticipantMessage($studyId, $userId, $from, $content, (int) $msg->sent);
 		return $msg->sent;
 	}
 	public function deleteMessage(int $studyId, string $userId, int $sentTimestamp) {

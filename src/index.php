@@ -67,6 +67,10 @@ else if(isset($_GET['grayscaleDark']))
 else
 	$type = '';
 
+//Telegram channel: only public values (the bot's @username is shown to participants anyway)
+$telegramConfigured = (string) Configs::get('telegram_bot_token') !== '' ? 'true' : 'false';
+$telegramBotUsername = preg_replace('/[^A-Za-z0-9_]/', '', (string) Configs::get('telegram_bot_username'));
+
 $pluginStore = $dataStore->getPluginStore();
 $pluginsEnabled = $pluginStore->isEnabled();
 ?>
@@ -91,11 +95,11 @@ $pluginsEnabled = $pluginStore->isEnabled();
 		}
 	?></script>
 </head>
-<body onload="ESMira.init(<?php echo "'$jsKey','$servername',$serverVersion,'$accessKey','$lang','$type'"; ?>)">
+<body onload="ESMira.init(<?php echo "'$jsKey','$servername',$serverVersion,'$accessKey','$lang','$type'," . (Configs::get('webOnlyMode') ? 'true' : 'false') . ",$telegramConfigured,'$telegramBotUsername'"; ?>)">
 
 <div id="header">
 	<a href="#<?php echo $jsKey; ?>">
-		<img src="frontend/imgs/webHeader.png" alt="ESMira"/>
+		<img src="frontend/imgs/iemabot_logo.svg" alt="iEMAbot"/>
 	</a>
 	<div class="title" id="headerServerName"></div>
 </div>
@@ -120,8 +124,10 @@ $pluginsEnabled = $pluginStore->isEnabled();
 
 <input id="sectionBoxWidthSetter" type="range" min="20" max="100" value="45"/>
 
-<div id="siteLangChooser"></div>
-<a id="legalLink" href="#legal"></a>
+<footer id="siteFooter">
+	<a id="legalLink" href="#legal"></a>
+	<div id="siteLangChooser"></div>
+</footer>
 
 </body>
 </html>

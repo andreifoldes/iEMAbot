@@ -50,6 +50,7 @@ export class CsvData {
 		skipped: Record<string, boolean>
 		image: Record<string, boolean>
 		audio: Record<string, boolean>
+		keystrokes: Record<string, boolean>
 	}
 	
 	private readonly columnDataList: ColumnData[] = []
@@ -79,6 +80,7 @@ export class CsvData {
 			skipped: {},
 			image: {},
 			audio: {},
+			keystrokes: {},
 		}
 		
 		for(let mediaType in specialInputColumns) {

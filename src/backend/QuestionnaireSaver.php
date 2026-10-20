@@ -404,7 +404,15 @@ class QuestionnaireSaver {
         $output = $text;
         if ($required && strlen($text))
             $output .= '*';
-        return "$output<br/>";
+        $output .= '<br/>';
+        // Optional explanatory helper text under the question, de-emphasised via
+        // "smallText" so the question above stays dominant. Rich HTML authored in the
+        // editor, same as $text; only emitted when it holds real content (empty rich
+        // text serialises as "<p></p>" etc.).
+        $description = $input->description ?? '';
+        if (strlen(trim(strip_tags($description))))
+            $output .= "<div class=\"smallText\">$description</div>";
+        return $output;
     }
     
     function binary(stdClass $input, bool $required, string $name, string $value): string {
@@ -500,8 +508,9 @@ class QuestionnaireSaver {
     
     function image(stdClass $input, bool $required, string $name, string $value): string {
         $url = $input->url ?? '';
+        $alt = htmlspecialchars($input->imageAlt ?? '', ENT_QUOTES);
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><img alt=\"\" src=\"$url\" class=\"questionnaireInputImage\"/><input type=\"hidden\" name=\"$name\" value=\"1\"/></div>";
+            ."<div class=\"center\"><img alt=\"$alt\" src=\"$url\" class=\"questionnaireInputImage\"/><input type=\"hidden\" name=\"$name\" value=\"1\"/></div>";
     }
     
     function likert(stdClass $input, bool $required, string $name, string $value): string {

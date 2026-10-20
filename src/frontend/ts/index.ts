@@ -1,12 +1,16 @@
 import {CompatibilityCheck} from "./site/CompatibilityCheck";
 import {Lang} from "./singletons/Lang";
 import {Site} from "./site/Site";
+import {ServerInfo} from "./constants/ServerInfo";
 
 declare const PACKAGE_VERSION: string
 
 let site: Site
 
-export function init(startHash: string, serverName: string, serverVersion: number, serverAccessKey: string, langCode: string, type: string): void {
+export function init(startHash: string, serverName: string, serverVersion: number, serverAccessKey: string, langCode: string, type: string, webOnlyMode = false, telegramConfigured = false, telegramBotUsername = ""): void {
+	ServerInfo.webOnlyMode = webOnlyMode
+	ServerInfo.telegramConfigured = telegramConfigured
+	ServerInfo.telegramBotUsername = telegramBotUsername
 	if(type)
 		document.body.classList.add(type)
 	if(process.env.NODE_ENV !== 'production')

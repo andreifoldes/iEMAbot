@@ -1,0 +1,18 @@
+# Demo stack: builds THIS repo's Dockerfile (unlike docker-compose.yml, which pulls upstream's image).
+# Needs a populated dist/ first: `npm run build:all` (scripts/demo/demo-up.sh does this when dist/ is missing).
+services:
+  esmira:
+    build:
+      context: .
+    image: esmira-fork:demo
+    environment:
+      # The participant PWA calls /esmira/api/*; production gets that from the reverse proxy, the demo has none.
+      ESMIRA_PATH_ALIAS: /esmira
+    ports:
+      - "${DEMO_PORT:-8080}:80"
+    volumes:
+      - demo_data:/var/www/html/esmira_data
+      - demo_config:/var/www/html/backend/config
+volumes:
+  demo_data:
+  demo_config:

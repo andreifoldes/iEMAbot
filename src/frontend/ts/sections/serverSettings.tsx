@@ -22,6 +22,8 @@ import {DashElement} from "../components/DashElement";
 import fallbackSystemSvg from "../../imgs/dashIcons/fallback.svg?raw"
 import pluginsSvg from "../../imgs/dashIcons/plugins.svg?raw"
 import snapshotsSvg from "../../imgs/dashIcons/snapshots.svg?raw"
+import telegramSvg from "../../imgs/dashIcons/telegram.svg?raw"
+import {ServerInfo} from "../constants/ServerInfo";
 
 type ReleaseType = {
 	version: string,
@@ -111,6 +113,9 @@ export class Content extends SectionContent {
 
 			if(!compareSemVersion(this.sectionData.siteData.packageVersion, tagName)) {
 				continue
+			}
+			if(!assets?.length) {
+				continue // nothing to install from
 			}
 
 			let data = { version: tagName, date: new Date(publishedAt), changeLog: body, downloadUrl: assets[0]["browser_download_url"] };
@@ -205,7 +210,15 @@ export class Content extends SectionContent {
 					{ObservableLangChooser(settings)}
 				</label>
 			</div>
-			
+
+			<div class="center spacingTop">
+				<label class="noTitle noDesc">
+					<input type="checkbox" {...BindObservable(settings.webOnlyMode)} />
+					<span>{Lang.get("web_only_mode")}</span>
+					<small>{Lang.get("web_only_mode_info")}</small>
+				</label>
+			</div>
+
 			{DashRow(
 				DashElement(null, {
 					small: true,
@@ -223,6 +236,15 @@ export class Content extends SectionContent {
 					},
 					highlight: this.pluginsNeedsAttention,
 					href: this.getUrl("plugins")
+				}),
+				DashElement(null, {
+					small: true,
+					template: {
+						title: Lang.get("messaging_channels"),
+						icon: m.trust(telegramSvg),
+						msg: ServerInfo.telegramBotUsername ? `@${ServerInfo.telegramBotUsername}` : undefined
+					},
+					href: this.getUrl("messagingChannels")
 				}),
 				(tools?.canIssueFallbackTokens) &&
 				DashElement(null, {

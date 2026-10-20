@@ -11,6 +11,10 @@ on:
   
 jobs:
   update:
+    # Upstream-only: this bumps the submodule pointer in the parent ESMira repo using a
+    # write token that only the upstream maintainers hold. On forks the token is missing,
+    # so checkout fails on every push to main. Skip it there.
+    if: github.repository == 'KL-Psychological-Methodology/ESMira-web'
     runs-on: ubuntu-latest
 
     steps:

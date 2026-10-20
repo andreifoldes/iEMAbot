@@ -12,6 +12,7 @@ import { DashRow } from "../components/DashRow";
 import { DashElement } from "../components/DashElement";
 import { StudyMetadata } from "../loader/StudyLoader";
 import { SectionData } from "../site/SectionData";
+import { ServerInfo } from "../constants/ServerInfo";
 
 export class Content extends SectionContent {
 	private isFrozen: boolean = false
@@ -40,6 +41,14 @@ export class Content extends SectionContent {
 		const [loadFrozen]: boolean[] = await this.sectionData.loader.loadJson(`${FILE_ADMIN}?type=FreezeStudy${sendFrozen ? "&frozen" : ""}&study_id=${study.id.get()}`)
 		this.isFrozen = loadFrozen
 		this.sectionData.loader.info(this.isFrozen ? Lang.get("info_study_frozen") : Lang.get("info_study_unfrozen"))
+	}
+
+	private async resetStudy(study: Study): Promise<void> {
+		if (!safeConfirm(Lang.get("confirm_reset_study", study.title.get())))
+			return
+
+		await this.sectionData.loader.loadJson(`${FILE_ADMIN}?type=EmptyData`, "post", `study_id=${study.id.get()}`)
+		this.sectionData.loader.info(Lang.get("info_successful"))
 	}
 
 	private async deleteStudy(study: Study): Promise<void> {
@@ -92,19 +101,47 @@ export class Content extends SectionContent {
 							</span>
 							<br />
 							<br />
-							<label class="middle noDesc">
+							<label class="middle noDesc" style={ServerInfo.webOnlyMode ? "opacity:0.45" : ""}>
 								<small>{Lang.get('Android')}</small>
-								<input type="checkbox" {...BindObservable(study.publishedAndroid)} />
+								<input type="checkbox" {...BindObservable(study.publishedAndroid)} disabled={ServerInfo.webOnlyMode} />
 							</label>
 							&nbsp;
-							<label class="middle noDesc">
+							<label class="middle noDesc" style={ServerInfo.webOnlyMode ? "opacity:0.45" : ""}>
 								<small>{Lang.get('iOS')}</small>
-								<input type="checkbox" {...BindObservable(study.publishedIOS)} />
+								<input type="checkbox" {...BindObservable(study.publishedIOS)} disabled={ServerInfo.webOnlyMode} />
 							</label>
 							&nbsp;
 							<label class="middle noDesc">
 								<small>{Lang.get('Web')}</small>
 								<input type="checkbox" {...BindObservable(study.publishedWeb)} />
+							</label>
+							&nbsp;
+							<label class="middle noDesc" title={Lang.get('telegram_availability_info')}>
+								<small>{Lang.get('telegram')}</small>
+								<input type="checkbox" {...BindObservable(study.channels.telegram.enabled)} />
+							</label>
+							{ServerInfo.webOnlyMode && <div><small><i>{Lang.get('web_only_disabled_note')}</i></small></div>}
+							{!ServerInfo.telegramConfigured && study.channels.telegram.enabled.get() &&
+								<div><small class="highlight">{Lang.get('telegram_not_set_up_on_server')}</small></div>}
+						</div>
+				}),
+				DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.webPhoneOnly)} disabled={!study.publishedWeb.get()} />
+								<span>{Lang.get('web_phone_only')}</span>
+								<small>{Lang.get('web_phone_only_info')}</small>
+							</label>
+						</div>
+				}),
+				DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.webSkipName)} disabled={!study.publishedWeb.get()} />
+								<span>{Lang.get('web_skip_name')}</span>
+								<small>{Lang.get('web_skip_name_info')}</small>
 							</label>
 						</div>
 				}),
@@ -137,6 +174,16 @@ export class Content extends SectionContent {
 							</label>
 						</div>
 				}),
+				DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.enableTutorialMode)} />
+								<span>{Lang.get('enable_tutorial_mode')}</span>
+								<small>{Lang.get('enable_tutorial_mode_info')}</small>
+							</label>
+						</div>
+				}),
 				this.hasFallbackUrls && DashElement(null, {
 					content:
 						<div>
@@ -163,6 +210,30 @@ export class Content extends SectionContent {
 
 
 
+
+			{TitleRow(Lang.getWithColon("personal_charts"))}
+			{DashRow(
+				DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.enablePersonalCharts)} />
+								<span>{Lang.get("enable_personal_charts")}</span>
+								<small>{Lang.get("enable_personal_charts_info")}</small>
+							</label>
+						</div>
+				}),
+				study.enablePersonalCharts.get() && DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.chartsVisibleOnlyAfterStudy)} />
+								<span>{Lang.get("charts_visible_only_after_study")}</span>
+								<small>{Lang.get("charts_visible_only_after_study_info")}</small>
+							</label>
+						</div>
+				})
+			)}
 
 			{TitleRow(Lang.getWithColon("inform_server_about_events"))}
 			{DashRow(
@@ -263,6 +334,14 @@ export class Content extends SectionContent {
 							</label>
 						</div>
 				}))}
+
+			{TitleRow(Lang.getWithColon("reset_study"))}
+			<div class="center">
+				<small>{Lang.get("reset_study_desc")}</small>
+				<br />
+				<br />
+				{BtnTrash(this.resetStudy.bind(this, study), Lang.get("reset_study"))}
+			</div>
 
 			{TitleRow(Lang.getWithColon("delete_study"))}
 			<div class="center">

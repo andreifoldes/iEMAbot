@@ -1,0 +1,72 @@
+{
+  "$comment": "Regex CLASSES for private details. Never put literal private values (usernames, hostnames, IPs, tokens) in this file: it is public. Specific literals belong in the PRIVATE_TERMS repository secret (see docs/deployment/security-audit).",
+  "contentRules": [
+    {
+      "id": "tailscale-cgnat-ip",
+      "description": "IPv4 in the carrier-grade NAT block used by Tailscale",
+      "regex": "\\b100\\.(?:6[4-9]|[7-9]\\d|1[01]\\d|12[0-7])\\.\\d{1,3}\\.\\d{1,3}\\b"
+    },
+    {
+      "id": "private-ipv4",
+      "description": "RFC 1918 private IPv4 address",
+      "regex": "\\b(?:10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(?:1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3})\\b"
+    },
+    {
+      "id": "tailnet-hostname",
+      "description": "Tailscale MagicDNS hostname",
+      "regex": "\\b[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.ts\\.net\\b"
+    },
+    {
+      "id": "unix-home-path",
+      "description": "Absolute path inside a real user's home directory",
+      "regex": "(?:/Users/|/home/)(?!(?:runner|node|user|username|you|your-user|app|www-data|ubuntu|debian|vagrant|name|me)\\b)[A-Za-z0-9._-]+/"
+    },
+    {
+      "id": "windows-home-path",
+      "description": "Absolute path inside a Windows user profile",
+      "regex": "[A-Za-z]:\\\\Users\\\\(?!(?:Public|Default|user|username|You)\\b)[A-Za-z0-9._ -]+\\\\"
+    },
+    {
+      "id": "personal-email",
+      "description": "Email address that is not a known placeholder/noreply domain",
+      "regex": "\\b[A-Za-z0-9._%+-]+@(?!(?:example\\.(?:com|org|net)|esmira|localhost|users\\.noreply\\.github\\.com|noreply\\.github\\.com|anthropic\\.com)\\b)[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}\\b"
+    },
+    {
+      "id": "password-note",
+      "description": "Note recording a privileged-account credential or where it is kept",
+      "regex": "(?i)\\b(?:sudo|root|ssh|login|vps)\\s+pass(?:word|wd)?\\b"
+    },
+    {
+      "id": "ssh-user-at-host",
+      "description": "ssh command that names an explicit remote user",
+      "regex": "\\bssh(?:\\s+-\\S+(?:\\s+\\S+)?)*\\s+[A-Za-z0-9._-]+@[A-Za-z0-9.-]+"
+    },
+    {
+      "id": "private-key-block",
+      "description": "PEM private key block",
+      "regex": "-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----"
+    },
+    {
+      "id": "token-shape",
+      "description": "Well-known API token shapes",
+      "regex": "\\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35})\\b"
+    }
+  ],
+  "forbiddenPathPatterns": [
+    { "id": "ai-session-log", "description": "AI assistant session logs or local tooling config", "regex": "(?:^|/)\\.claude/(?:logs/|settings(?:\\.local)?\\.json|scheduled_tasks\\.lock)" },
+    { "id": "mcp-config", "description": "Local MCP server config", "regex": "(?:^|/)\\.mcp\\.json$" },
+    { "id": "dotenv", "description": "Environment secrets file", "regex": "(?:^|/)\\.env(?:\\.[^/]*)?$" },
+    { "id": "key-material", "description": "Private key or certificate material", "regex": "\\.(?:pem|key|p12|pfx|ppk)$" },
+    { "id": "credentials-file", "description": "Credentials file", "regex": "(?:^|/)credentials\\.json$" },
+    { "id": "named-secret", "description": "File named like a secret or token", "regex": "(?:^|/)[^/]*(?:_secret|_token)[^/]*$" },
+    { "id": "local-database", "description": "Local database that may hold user data", "regex": "\\.(?:sqlite3?|db)$" },
+    { "id": "claude-settings", "description": "Claude Code settings.json (holds tokens)", "regex": "(?:^|/)settings\\.json$", "onlyUnder": "\\.claude/" },
+    { "id": "esmira-data", "description": "ESMira runtime data folder", "regex": "(?:^|/)esmira_data/" }
+  ],
+  "skipPathPatterns": [
+    "(?:^|/)node_modules/",
+    "(?:^|/)package-lock\\.json$",
+    "(?:^|/)website/build/\\.docusaurus/",
+    "\\.(?:png|jpe?g|gif|ico|webp|woff2?|ttf|eot|zip|gz|pdf|mp3|mp4|webm|wasm)$"
+  ]
+}

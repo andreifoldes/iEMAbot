@@ -24,6 +24,9 @@ class Paths {
     public static function folderAudio(int $studyId): string {
         return self::folderMedia($studyId) . 'audio/';
     }
+    public static function folderKeystrokes(int $studyId): string {
+        return self::folderMedia($studyId) . 'keystrokes/';
+    }
     public static function folderMedia(int $studyId): string {
         return Configs::getDataStore()->getServerStore()->getMediaFolderPath($studyId);
     }
@@ -48,7 +51,20 @@ class Paths {
     public static function fileAudioFromData(int $studyId, string $userId, int $entryId, string $key): string {
         return self::folderAudio($studyId) . Paths::makeUrlFriendly(Paths::publicFileMedia($userId, $entryId, $key));
     }
-    
+
+    public static function publicFileKeystrokesFromFileName(string $fileName): string {
+        return 'keystrokes/' . $fileName . '.csv';
+    }
+    public static function publicFileKeystrokesFromData(string $userId, int $entryId, string $key): string {
+        return self::publicFileKeystrokesFromFileName(self::publicFileMedia($userId, $entryId, $key));
+    }
+    public static function publicFileKeystrokesFromMediaFilename(string $fileName): string {
+        return self::publicFileKeystrokesFromFileName(self::getFromUrlFriendly($fileName));
+    }
+    public static function fileKeystrokesFromData(int $studyId, string $userId, int $entryId, string $key): string {
+        return self::folderKeystrokes($studyId) . Paths::makeUrlFriendly(Paths::publicFileMedia($userId, $entryId, $key));
+    }
+
     public static function publicFileImageFromFileName(string $fileName): string {
         return 'images/' . $fileName . '.png';
     }

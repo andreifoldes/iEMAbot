@@ -1,0 +1,16 @@
+{
+  "name": "esmira-pwa-a11y",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Automated WCAG 2.2 accessibility audit for the ESMira participant PWA (axe-core + Playwright).",
+  "scripts": {
+    "audit": "node audit.mjs",
+    "test": "node --test cvd.test.mjs cvd-scan.test.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "playwright": "^1.50.1"
+  }
+}

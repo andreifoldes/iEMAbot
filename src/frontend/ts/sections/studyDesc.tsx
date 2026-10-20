@@ -6,6 +6,7 @@ import {BindObservable} from "../components/BindObservable";
 import {RichText} from "../components/RichText";
 import {RegexTextInput} from "../components/RegexTextInput";
 import {SectionData} from "../site/SectionData";
+import {TRIANGLIFY_PALETTES, generateProceduralCover} from "../helpers/ProceduralCover";
 
 export class Content extends SectionContent {
 	public static preLoad(sectionData: SectionData): Promise<any>[] {
@@ -13,6 +14,27 @@ export class Content extends SectionContent {
 	}
 	public title(): string {
 		return Lang.get("study_description")
+	}
+
+	private selectedPalette: string = "Emerald (default)"
+
+	private generateTrianglifyArtwork(): void {
+		const palette = TRIANGLIFY_PALETTES[this.selectedPalette] ?? TRIANGLIFY_PALETTES["Emerald (default)"]
+		// Random seed so each click yields a fresh variation the admin can shuffle through
+		this.getStudyOrThrow().studyArtwork.set(generateProceduralCover({ palette }))
+		m.redraw()
+	}
+
+	private handleArtworkUpload(e: Event): void {
+		const input = e.target as HTMLInputElement
+		const file = input.files?.[0]
+		if (!file) return
+		const reader = new FileReader()
+		reader.onload = () => {
+			this.getStudyOrThrow().studyArtwork.set(reader.result as string)
+			m.redraw()
+		}
+		reader.readAsDataURL(file)
 	}
 
 	public getView(): Vnode<any, any> {
@@ -39,6 +61,40 @@ export class Content extends SectionContent {
 			}
 
 			<div class="fakeLabel spacingTop line">
+				<small>Study artwork ({Lang.get("can_be_left_empty")}):</small>
+				{study.studyArtwork.get() &&
+					<div style="margin:8px 0;">
+						<img
+							src={study.studyArtwork.get()}
+							alt="Study artwork preview"
+							style="width:100%;max-width:400px;height:100px;border-radius:8px;object-fit:cover;display:block;"
+						/>
+					</div>
+				}
+				<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;">
+					<select
+						style="flex:1;min-width:160px;"
+						onchange={(e: Event) => {
+							this.selectedPalette = (e.target as HTMLSelectElement).value
+							m.redraw()
+						}}
+					>
+						{Object.keys(TRIANGLIFY_PALETTES).map(name =>
+							<option value={name} selected={name === this.selectedPalette}>{name}</option>
+						)}
+					</select>
+					<button type="button" onclick={this.generateTrianglifyArtwork.bind(this)}>
+						Generate artwork
+					</button>
+					<small style="color:#666;">or</small>
+					<input type="file" accept="image/*" onchange={this.handleArtworkUpload.bind(this)} />
+					{study.studyArtwork.get() &&
+						<button type="button" onclick={() => { study.studyArtwork.set(""); m.redraw() }}>Remove</button>
+					}
+				</div>
+			</div>
+
+			<div class="fakeLabel spacingTop line">
 				<small>{Lang.getWithColon("description")}</small>
 				{RichText(study.studyDescription)}
 				{ObservableLangChooser(study)}
@@ -55,6 +111,22 @@ export class Content extends SectionContent {
 				{RichText(study.postInstallInstructions)}
 				{ObservableLangChooser(this.getStudyOrThrow())}
 			</div>
+
+			{study.enableTutorialMode.get() &&
+				<div class="fakeLabel spacingTop line">
+					<h3 class="center">{Lang.get("tutorial")}</h3>
+					<label class="line">
+						<small>{Lang.getWithColon("tutorial_offer_prompt")} ({Lang.get("can_be_left_empty")})</small>
+						<textarea {...BindObservable(study.tutorialOffer)}></textarea>
+						{ObservableLangChooser(this.getStudyOrThrow())}
+					</label>
+					<label class="line spacingTop">
+						<small>{Lang.getWithColon("tutorial_intro_text")} ({Lang.get("can_be_left_empty")})</small>
+						<textarea {...BindObservable(study.tutorialIntro)}></textarea>
+						{ObservableLangChooser(this.getStudyOrThrow())}
+					</label>
+				</div>
+			}
 
 			<div class="fakeLabel spacingTop line">
 				<small>{Lang.get("faqs")} ({Lang.get("can_be_left_empty")}):</small>

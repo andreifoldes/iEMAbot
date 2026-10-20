@@ -82,6 +82,17 @@ switch($dataType) {
 			return;
 		}
 		break;
+	case 'Keystrokes':
+		// Content-free keystroke-dynamics log: a small text/CSV file.
+		if(empty($fileData['tmp_name'])) {
+			echo JsonOutput::error('tmp_name is faulty. The file might be too big?');
+			return;
+		}
+		if(!preg_match('#^(text/|application/csv)#i', mime_content_type($fileData['tmp_name']))) {
+			echo JsonOutput::error('Wrong format');
+			return;
+		}
+		break;
 	default:
 		echo JsonOutput::error('Unknown type');
 		return;

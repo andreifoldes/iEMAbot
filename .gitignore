@@ -7,3 +7,15 @@
 /.phpunit.result.cache
 /src/test/phpunit-9.5.21.phar
 .php-cs-fixer.cache
+
+# Test artifacts (Playwright MCP screenshots, ad-hoc root screenshots)
+/.playwright-mcp/
+/*.png
+/tools/pvt/_pvt_cursor_shots/
+
+# Claude Code session logs & local tooling config (kept out of version control)
+/.claude/logs/
+/.claude/scheduled_tasks.lock
+/skills-lock.json
+/.mcp.json
+/DESIGN.md

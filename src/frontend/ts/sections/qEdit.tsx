@@ -248,6 +248,22 @@ export class Content extends SectionContent {
 		</div >
 	}
 
+	/**
+	 * The input list only shows the type and question text. For inputs that carry answer
+	 * options (list single / multiple) this previews the choices inline, so researchers can
+	 * see them without opening the item editor – otherwise the options are only visible in the
+	 * participant app. Returns null for input types that have no choices.
+	 */
+	private choicesPreview(input: Input): Vnode<any, any> | null {
+		const choices = input.listChoices.get()
+		if(choices.length == 0)
+			return null
+
+		return <div class="smallText" style="opacity: 0.7">
+			{choices.map((choice) => <span class="nowrap spacingRight">• {choice.get()}</span>)}
+		</div>
+	}
+
 	private getPageView(dragTools: DragTools, study: Study, questionnaire: Questionnaire, page: Page, pageIndex: number): Vnode<any, any> {
 		return <div class="spacingTop" >
 			{
@@ -303,6 +319,8 @@ export class Content extends SectionContent {
 								<div class="verticalPadding highlight smallText">{`${Lang.getDynamic("input_" + input.responseType.get())} ${input.required.get() ? '*' : ''} (${input.name.get()})`}</div>
 
 								<div class="verticalPadding">{m.trust(input.text.get())}</div>
+
+								{this.choicesPreview(input)}
 							</div>
 
 							<div class="nowrap selfAlignCenter">

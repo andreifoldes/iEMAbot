@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invite Link Generator — ESMira</title>
+  <style>
+    :root {
+      --brand: #075E54;
+      --brand-light: #128C7E;
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --text: #111b21;
+      --muted: #667781;
+      --border: #e9edef;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { background: var(--brand); color: white; padding: 18px 24px 20px; display: flex; align-items: flex-start; gap: 14px; }
+    header svg { flex-shrink: 0; margin-top: 2px; opacity: .9; }
+    header h1 { font-size: 20px; font-weight: 700; line-height: 1.2; }
+    header p { font-size: 13px; opacity: .78; margin-top: 4px; line-height: 1.45; }
+    main { max-width: 940px; margin: 24px auto 48px; padding: 0 16px; display: flex; flex-direction: column; gap: 20px; }
+    .card { background: var(--card); border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    h2 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+    h2 + h2 { margin-top: 24px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .03em; text-transform: uppercase; }
+    .field input, .field textarea {
+      border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 12px;
+      font-size: 14px; color: var(--text); background: #fff; outline: none; width: 100%;
+      transition: border-color .15s;
+    }
+    .field input:focus, .field textarea:focus { border-color: var(--brand-light); }
+    .field input[type="number"] { -moz-appearance: textfield; }
+    .field input[type="number"]::-webkit-inner-spin-button { opacity: .5; }
+    .field textarea { resize: vertical; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 13px; }
+    .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    @media (max-width: 600px) { .grid-4 { grid-template-columns: 1fr 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+    .form-section { display: flex; flex-direction: column; gap: 14px; }
+    .radio-group { display: flex; gap: 20px; flex-wrap: wrap; padding: 2px 0; }
+    .radio-group label { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 500; cursor: pointer; color: var(--text); }
+    .radio-group input[type="radio"] { accent-color: var(--brand); width: 16px; height: 16px; cursor: pointer; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; transition: all .15s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--brand); color: white; }
+    .btn-primary:hover { background: var(--brand-light); }
+    .btn-primary:active { transform: scale(.97); }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-secondary:active { transform: scale(.97); }
+    .btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
+    .generate-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+    .error-msg { color: #c0392b; font-size: 13px; font-weight: 600; display: none; }
+    .divider { height: 1px; background: var(--border); margin: 6px 0; }
+    .hidden { display: none !important; }
+    /* Output */
+    .output-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .output-header h2 { margin: 0; }
+    .output-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 9px 12px; font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; background: var(--bg); border-bottom: 1.5px solid var(--border); }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    td.num { color: var(--muted); width: 36px; font-size: 12px; }
+    td.pid-cell { font-weight: 700; white-space: nowrap; }
+    td.url-cell a { color: var(--brand-light); text-decoration: none; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+    td.url-cell a:hover { text-decoration: underline; }
+    td.action-cell { width: 60px; text-align: right; }
+    .copy-one-btn { transition: color .2s, background .2s; }
+    .copy-one-btn.copied { background: #e6f4ea; color: #25a244; border-color: #a8d5b5; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.55; display: flex; gap: 8px; }
+    .note-icon { flex-shrink: 0; margin-top: 1px; }
+    .preview-label { font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .preview-url { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 4px; color: var(--brand-light); word-break: break-all; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="8" fill="white" fill-opacity=".2"/>
+    <path d="M7 10h18M7 16h12M7 22h9" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="25" cy="22" r="4.5" fill="white" fill-opacity=".95"/>
+    <path d="M23 22l1.3 1.3 2.2-2.3" stroke="#075E54" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div>
+    <h1>Invite Link Generator</h1>
+    <p>Generate personalised participant invite links with pre-assigned IDs — no backend changes required.</p>
+  </div>
+</header>
+
+<main>
+  <!-- Form card -->
+  <div class="card">
+    <h2>Study settings</h2>
+    <div class="form-section">
+      <div class="field">
+        <label for="base-url">PWA base URL</label>
+        <input type="url" id="base-url" placeholder="https://…/esmira/pwa/" />
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="access-key">Access key <span class="hint">(required)</span></label>
+          <input type="text" id="access-key" placeholder="ssrc" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="study-id">Study ID <span class="hint">(optional — narrows to one study when access key covers multiple)</span></label>
+          <input type="number" id="study-id" placeholder="e.g. 9727" min="1" />
+        </div>
+      </div>
+    </div>
+
+    <div class="divider" style="margin:22px 0 20px;"></div>
+
+    <h2>Participant IDs</h2>
+    <div class="form-section">
+      <div class="field">
+        <label>Source</label>
+        <div class="radio-group">
+          <label><input type="radio" name="pid-mode" value="sequential" checked /> Generate sequential</label>
+          <label><input type="radio" name="pid-mode" value="custom" /> Enter custom list</label>
+        </div>
+      </div>
+
+      <!-- Sequential options -->
+      <div id="sequential-opts" class="grid-4">
+        <div class="field">
+          <label for="pid-prefix">Prefix</label>
+          <input type="text" id="pid-prefix" value="P" maxlength="20" />
+        </div>
+        <div class="field">
+          <label for="pid-start">Start at</label>
+          <input type="number" id="pid-start" value="1" min="0" />
+        </div>
+        <div class="field">
+          <label for="pid-count">Count</label>
+          <input type="number" id="pid-count" value="10" min="1" max="1000" />
+        </div>
+        <div class="field">
+          <label for="pid-padding">Zero-pad to digits</label>
+          <input type="number" id="pid-padding" value="3" min="1" max="6" />
+        </div>
+      </div>
+
+      <!-- Custom list options -->
+      <div id="custom-opts" class="hidden">
+        <div class="field">
+          <label for="pid-list">Participant IDs <span class="hint">one per line — blank lines ignored</span></label>
+          <textarea id="pid-list" rows="8" placeholder="P001&#10;P002&#10;P003&#10;participant-A&#10;participant-B"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- URL preview -->
+    <div id="preview-wrap" style="margin-top:18px;">
+      <div class="preview-label">Preview (first link):</div>
+      <div class="preview-url" id="preview-url">—</div>
+    </div>
+
+    <div class="generate-row" style="margin-top:20px;">
+      <button class="btn btn-primary" id="generate-btn" type="button">Generate invite links</button>
+      <span class="error-msg" id="error-msg"></span>
+    </div>
+  </div>
+
+  <!-- Output card (hidden until first generate) -->
+  <div class="card hidden" id="output-card">
+    <div class="output-header">
+      <h2 id="output-title"></h2>
+      <div class="output-actions">
+        <button class="btn btn-secondary" id="copy-all-btn" type="button">Copy all URLs</button>
+        <button class="btn btn-secondary" id="copy-csv-clipboard-btn" type="button">Copy as CSV</button>
+        <button class="btn btn-secondary" id="download-csv-btn" type="button">⬇ Download CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Participant ID</th>
+            <th>Invite URL</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="output-body"></tbody>
+      </table>
+    </div>
+    <div class="note">
+      <span class="note-icon">⚠️</span>
+      <span>Each link encodes the participant ID in the URL. Send each link only to its intended participant — IDs are assigned client-side on first visit and are not validated or locked server-side.</span>
+    </div>
+  </div>
+</main>
+
+<script>
+  /* ── Helpers ──────────────────────────────────────────────── */
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function buildUrl(base, accessKey, studyId, pid) {
+    try {
+      const u = new URL(base.endsWith('/') ? base : base + '/');
+      u.searchParams.set('key', accessKey);
+      if (studyId) u.searchParams.set('id', String(studyId));
+      u.searchParams.set('pid', pid);
+      return u.toString();
+    } catch {
+      // Fallback: manual construction
+      const sep = base.includes('?') ? '&' : '?';
+      const parts = [base, sep, 'key=', encodeURIComponent(accessKey)];
+      if (studyId) parts.push('&id=', encodeURIComponent(studyId));
+      parts.push('&pid=', encodeURIComponent(pid));
+      return parts.join('');
+    }
+  }
+
+  function getPids() {
+    const mode = document.querySelector('input[name="pid-mode"]:checked').value;
+    if (mode === 'sequential') {
+      const prefix = document.getElementById('pid-prefix').value;
+      const start = Math.max(0, parseInt(document.getElementById('pid-start').value, 10) || 1);
+      const count = Math.min(1000, Math.max(1, parseInt(document.getElementById('pid-count').value, 10) || 10));
+      const pad = Math.min(6, Math.max(1, parseInt(document.getElementById('pid-padding').value, 10) || 3));
+      return Array.from({ length: count }, (_, i) =>
+        prefix + String(start + i).padStart(pad, '0')
+      );
+    }
+    return document.getElementById('pid-list').value
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+  }
+
+  /* ── Auto-fill base URL ───────────────────────────────────── */
+  (function () {
+    const input = document.getElementById('base-url');
+    // Strip the filename from the current URL to derive the pwa/ root
+    const auto = window.location.href.replace(/[?#].*$/, '').replace(/invite-generator\.html$/, '');
+    input.value = auto || window.location.origin + '/esmira/pwa/';
+  })();
+
+  /* ── Live preview ─────────────────────────────────────────── */
+  function updatePreview() {
+    const base = document.getElementById('base-url').value.trim();
+    const key = document.getElementById('access-key').value.trim();
+    const sid = document.getElementById('study-id').value.trim();
+    const pids = getPids();
+    const previewEl = document.getElementById('preview-url');
+    if (!base || !key || !pids.length) {
+      previewEl.textContent = '—';
+      return;
+    }
+    previewEl.textContent = buildUrl(base, key, sid || null, pids[0]);
+  }
+
+  ['base-url', 'access-key', 'study-id', 'pid-prefix', 'pid-start', 'pid-count', 'pid-padding', 'pid-list']
+    .forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
+  document.querySelectorAll('input[name="pid-mode"]').forEach(r => r.addEventListener('change', updatePreview));
+
+  /* ── PID mode toggle ──────────────────────────────────────── */
+  document.querySelectorAll('input[name="pid-mode"]').forEach(r => {
+    r.addEventListener('change', () => {
+      const isSeq = r.value === 'sequential';
+      document.getElementById('sequential-opts').classList.toggle('hidden', !isSeq);
+      document.getElementById('custom-opts').classList.toggle('hidden', isSeq);
+    });
+  });
+
+  /* ── Generate ─────────────────────────────────────────────── */
+  let generatedRows = [];
+
+  document.getElementById('generate-btn').addEventListener('click', () => {
+    const base = document.getElementById('base-url').value.trim();
+    const accessKey = document.getElementById('access-key').value.trim();
+    const studyId = document.getElementById('study-id').value.trim() || null;
+    const errEl = document.getElementById('error-msg');
+
+    errEl.style.display = 'none';
+
+    if (!base) { errEl.textContent = 'Please enter the PWA base URL.'; errEl.style.display = ''; return; }
+    if (!accessKey) { errEl.textContent = 'Please enter an access key.'; errEl.style.display = ''; return; }
+
+    const pids = getPids();
+    if (!pids.length) { errEl.textContent = 'No participant IDs to generate.'; errEl.style.display = ''; return; }
+
+    // Check for duplicates
+    const unique = new Set(pids);
+    if (unique.size < pids.length) {
+      errEl.textContent = `Duplicate PIDs detected (${pids.length - unique.size} duplicates). Each participant needs a unique ID.`;
+      errEl.style.display = '';
+      return;
+    }
+
+    generatedRows = pids.map((pid, i) => ({
+      n: i + 1,
+      pid,
+      url: buildUrl(base, accessKey, studyId, pid),
+    }));
+
+    const tbody = document.getElementById('output-body');
+    tbody.innerHTML = '';
+    for (const row of generatedRows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="num">${row.n}</td>
+        <td class="pid-cell">${esc(row.pid)}</td>
+        <td class="url-cell"><a href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">${esc(row.url)}</a></td>
+        <td class="action-cell"><button class="btn btn-secondary btn-sm copy-one-btn" data-url="${esc(row.url)}" type="button">Copy</button></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Wire per-row copy buttons
+    tbody.querySelectorAll('.copy-one-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(btn.dataset.url).then(() => {
+          btn.textContent = '✓ Copied';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1400);
+        });
+      });
+    });
+
+    const plural = generatedRows.length !== 1 ? 's' : '';
+    document.getElementById('output-title').textContent = `${generatedRows.length} invite link${plural} generated`;
+    const card = document.getElementById('output-card');
+    card.classList.remove('hidden');
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  /* ── Copy all URLs ────────────────────────────────────────── */
+  document.getElementById('copy-all-btn').addEventListener('click', () => {
+    const text = generatedRows.map(r => r.url).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      flashBtn('copy-all-btn', 'Copy all URLs', '✓ Copied!');
+    });
+  });
+
+  /* ── Copy as CSV to clipboard ─────────────────────────────── */
+  document.getElementById('copy-csv-clipboard-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(buildCsv()).then(() => {
+      flashBtn('copy-csv-clipboard-btn', 'Copy as CSV', '✓ Copied!');
+    });
+  });
+
+  /* ── Download CSV ─────────────────────────────────────────── */
+  document.getElementById('download-csv-btn').addEventListener('click', () => {
+    const blob = new Blob([buildCsv()], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const key = document.getElementById('access-key').value.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'study';
+    a.download = `esmira-invites-${key}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  function buildCsv() {
+    const lines = ['Participant ID,Invite URL'];
+    for (const r of generatedRows) {
+      lines.push(`"${r.pid.replace(/"/g, '""')}","${r.url.replace(/"/g, '""')}"`);
+    }
+    return lines.join('\r\n');
+  }
+
+  function flashBtn(id, original, label) {
+    const btn = document.getElementById(id);
+    btn.textContent = label;
+    setTimeout(() => { btn.textContent = original; }, 1600);
+  }
+
+  // Initial preview
+  updatePreview();
+</script>
+</body>
+</html>

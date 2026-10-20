@@ -1,0 +1,84 @@
+name: Security audit (private-detail leaks)
+
+# This repository and its documentation site are PUBLIC. This workflow makes
+# sure no secrets or private operational details leak into either:
+#
+#   1. gitleaks   - credential-shaped secrets across the FULL git history.
+#   2. private-details scanner (scripts/security/) over
+#        - every tracked file (IPs in private/Tailscale ranges, home-directory
+#          paths, personal emails, password notes, token shapes, ...),
+#        - tracked paths that must never be committed (AI session logs, .env,
+#          keys, settings.json, esmira_data/, ...),
+#        - every line ADDED in any commit of any ref (a deleted leak is still
+#          public history),
+#        - optional literals from the PRIVATE_TERMS repository secret (values
+#          are never printed).
+#   The built docs site is scanned separately in docs.yml before publishing.
+#
+# Known, human-pending disclosures live in scripts/security/allowlist.json with
+# "pending": true; they never fail the run but are re-printed as warnings.
+#
+# Setup (optional but recommended): add a repository secret PRIVATE_TERMS with
+# one literal per line (your username, internal hostnames, ssh aliases, study
+# access keys ...). Secrets are not exposed to fork pull requests; the regex
+# rules still run there.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 5 * * 1' # weekly, Monday 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  gitleaks:
+    name: gitleaks (secrets, full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned gitleaks (checksum-verified)
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+          ./gitleaks version
+
+      - name: Scan git history
+        run: ./gitleaks git . --no-banner --redact --verbose --exit-code 1
+
+  private-details:
+    name: private-detail scanner (files, paths, history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Scanner rule tests
+        run: node --test scripts/security/scan-private-details.test.mjs
+
+      - name: Scan tracked files, tracked paths and history
+        env:
+          PRIVATE_TERMS: ${{ secrets.PRIVATE_TERMS }}
+        run: node scripts/security/scan-private-details.mjs --tracked --paths --history

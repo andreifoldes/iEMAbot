@@ -1,0 +1,33 @@
+{
+  "$comment": "Accepted findings. Each entry needs rule, path (regex) and reason. 'pending: true' means a REAL disclosure that is tolerated only until a human decides (remove from tree, rewrite history, or accept); it is re-printed as a warning on every run.",
+  "entries": [
+    {
+      "rule": "personal-email",
+      "path": "^\\.github/workflows/update_parent\\.yml$",
+      "reason": "Upstream's bot git identity (file inherited from KL-Psychological-Methodology/ESMira-web, 2023); not a person of this fork."
+    },
+    {
+      "rule": "personal-email",
+      "path": "^src/backend/php/libs/phplot/phplot\\.php$",
+      "reason": "Third-party library copyright header (phplot), public by design."
+    },
+    {
+      "rule": "unix-home-path",
+      "path": "^deploy\\.sh$",
+      "reason": "REMOTE_DIR hard-codes a real user's home path. Parameterise via an env var, or accept.",
+      "pending": true
+    },
+    {
+      "rule": "unix-home-path",
+      "path": "(?:^|/)\\.claude/logs/",
+      "reason": "AI session logs embed a local home path. Remove from the tree and decide on history rewrite.",
+      "pending": true
+    },
+    {
+      "rule": "ai-session-log",
+      "path": "(?:^|/)\\.claude/logs/",
+      "reason": "AI session logs are tracked despite .gitignore. 4 are already deleted locally but not committed. Remove from the tree, review contents, decide on history rewrite.",
+      "pending": true
+    }
+  ]
+}

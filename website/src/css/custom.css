@@ -1,0 +1,63 @@
+/**
+ * Theme tokens follow the participant PWA palette (green) so the docs and the
+ * product read as one family.
+ */
+:root {
+  --ifm-color-primary: #075e54;
+  --ifm-color-primary-dark: #06554c;
+  --ifm-color-primary-darker: #065148;
+  --ifm-color-primary-darkest: #054339;
+  --ifm-color-primary-light: #08685c;
+  --ifm-color-primary-lighter: #086c60;
+  --ifm-color-primary-lightest: #0a8272;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #25c2a0;
+  --ifm-color-primary-dark: #21af90;
+  --ifm-color-primary-darker: #1fa588;
+  --ifm-color-primary-darkest: #1a8870;
+  --ifm-color-primary-light: #29d5b0;
+  --ifm-color-primary-lighter: #32d8b4;
+  --ifm-color-primary-lightest: #4fddbf;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Status badges used across the docs: Shipped / Partial / TBC */
+.status {
+  display: inline-block;
+  padding: 0.05rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.status--shipped {
+  background: #d9f2e3;
+  color: #0b5a2b;
+}
+.status--partial {
+  background: #fff1c9;
+  color: #6b4a00;
+}
+.status--tbc {
+  background: #ececf1;
+  color: #3d3d4a;
+  border: 1px dashed #8a8a99;
+}
+[data-theme='dark'] .status--shipped {
+  background: #124a2b;
+  color: #bff0d1;
+}
+[data-theme='dark'] .status--partial {
+  background: #5a4300;
+  color: #ffe9a8;
+}
+[data-theme='dark'] .status--tbc {
+  background: #2b2b36;
+  color: #d4d4e0;
+  border-color: #77778a;
+}
