@@ -463,7 +463,7 @@ function PhoneHandoff({ defaultOpen }: { defaultOpen: boolean }) {
           <div className="w-full">
             <CopyLink />
           </div>
-          <p className="text-[11px] text-on-surface-variant leading-relaxed">
+          <p className="text-[0.75rem] text-on-surface-variant leading-relaxed">
             Open it in <strong>Safari</strong> or <strong>Chrome</strong> (iPhone), or{' '}
             <strong>Chrome</strong> (Android).
           </p>

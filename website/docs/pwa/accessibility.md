@@ -21,6 +21,14 @@ but **no usability study with those groups is documented**.
 - **Fallbacks:** voice and typing alternatives, *Skip*, and *Change response*.
 - **Semantics:** modal focus trap and Esc (`useDialogA11y`), an `aria-live` chat log, `lang="en"`.
 
+## Researcher-supplied accessibility content
+
+<span className="status status--shipped">Shipped</span> Each question has optional fields in the study
+editor (translatable per language): **Image description (alt text)** for `image` questions, a
+**Screen reader label** that becomes the announced name of the question, and **Read-aloud text** that
+adds a *Listen* button. See [Study model](../backend/study-model.md) for the field names. Leaving them
+empty changes nothing for existing studies.
+
 ## Automated audit
 
 | Aspect | Detail |

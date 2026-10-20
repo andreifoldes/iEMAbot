@@ -30,6 +30,9 @@ export interface PreloadedQuestion {
   // Optional explanatory helper text shown beneath `text`, de-emphasised (muted, regular
   // weight). Rich HTML like `text`. Distinct from `description` below (cognitive cards).
   subtext?: string;
+  // Researcher-supplied accessibility content (see EsmiraInput).
+  aria_label?: string; // announced instead of the visible question text
+  spoken_text?: string; // enables the "Listen" button
   type: QType;
   required: boolean;
   options?: string[] | null;
@@ -123,6 +126,12 @@ export interface EsmiraInput {
   text?: string;
   /** Optional explanatory text shown beneath the question (rich HTML, web/PWA only). */
   description?: string;
+  /** "image" type: text alternative for the picture (web/PWA only). */
+  imageAlt?: string;
+  /** Read by screen readers in place of the question text (web/PWA only). */
+  screenReaderLabel?: string;
+  /** Read aloud by the question's "Listen" button (web/PWA only). */
+  spokenText?: string;
   /**
    * ESMira relevance condition — the input only shows when it holds. Native apps
    * evaluate this as a full Merlin script; this PWA supports the single-comparison

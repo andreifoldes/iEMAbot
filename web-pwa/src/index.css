@@ -203,6 +203,18 @@
   scrollbar-color: var(--sys-outline-variant) transparent;
 }
 
+/* Keyboard focus indicator (WCAG 2.4.7, 2.4.11, 1.4.11). Many controls opt out of the
+   browser default with Tailwind's `focus:outline-none`; this rule restores a thick,
+   high-contrast ring for keyboard users only and wins over those utilities. The ring
+   colour is the theme's primary, which meets 3:1 against the surfaces in every theme. */
+:where(button, a[href], summary, [role="button"], [role="checkbox"], [role="radio"], [tabindex]):focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--sys-primary) !important;
+  outline-offset: 2px !important;
+}
+
 /* Honour the OS "reduce motion" setting for CSS-driven motion (Tailwind
    transition, animation and scale utilities). The in-app "Reduce motion"
    toggle only gates the framer-motion animations, so this covers everything
@@ -237,4 +249,19 @@
 .esmira-rich img {
   cursor: zoom-in;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Reflow for very short viewports (400 % zoom on a phone is about 320 x 256 CSS px,
+   WCAG 1.4.10): the header and footer stop reserving space and the whole page scrolls
+   as one document instead of leaving a sliver for the conversation. */
+@media (max-height: 30rem) {
+  .app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .app-shell > main {
+    flex: none;
+    overflow: visible;
+  }
 }

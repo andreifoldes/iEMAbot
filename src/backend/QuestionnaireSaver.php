@@ -508,8 +508,9 @@ class QuestionnaireSaver {
     
     function image(stdClass $input, bool $required, string $name, string $value): string {
         $url = $input->url ?? '';
+        $alt = htmlspecialchars($input->imageAlt ?? '', ENT_QUOTES);
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><img alt=\"\" src=\"$url\" class=\"questionnaireInputImage\"/><input type=\"hidden\" name=\"$name\" value=\"1\"/></div>";
+            ."<div class=\"center\"><img alt=\"$alt\" src=\"$url\" class=\"questionnaireInputImage\"/><input type=\"hidden\" name=\"$name\" value=\"1\"/></div>";
     }
     
     function likert(stdClass $input, bool $required, string $name, string $value): string {
