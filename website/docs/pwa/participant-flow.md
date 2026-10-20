@@ -108,7 +108,7 @@ these studies.
 ## Consent, name and join time
 
 The study description (HTML) and consent text are shown, then *I consent* / *I do not consent*. A generic
-*Welcome to <title>.* line comes first, unless the description itself opens with "Welcome". The display
+*Welcome to &lt;title&gt;.* line comes first, unless the description itself opens with "Welcome". The display
 name is cosmetic; the participant ID is assigned automatically. **The consent time is the enrolment anchor**
 (`esmira_joined_*`, event `joined`), from which `durationStartingAfterDays` and similar fields count.
 
