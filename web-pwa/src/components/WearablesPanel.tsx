@@ -1,5 +1,5 @@
 /**
- * Settings sub-panel for connecting wearables (Fitbit / Withings / Oura).
+ * Settings sub-panel for connecting wearables (Fitbit / Withings / Google Health).
  *
  * Lists the providers the study offers (already intersected with the providers the
  * server has credentials for) and, for each, a Connect or Disconnect action plus the
@@ -14,7 +14,6 @@ import type { WearableStatus } from '../types';
 const PROVIDER_LABEL: Record<string, string> = {
   fitbit: 'Fitbit',
   withings: 'Withings',
-  oura: 'Oura Ring',
   googlehealth: 'Google Health',
 };
 

@@ -4,7 +4,7 @@
 // encryption key on first use. CLI-only. Re-run per provider.
 //
 // Usage:
-//   php cli/wearables_setup.php <fitbit|withings|oura|googlehealth> <client_id> <client_secret> [redirect_uri]
+//   php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]
 //   php cli/wearables_setup.php genkey            # only (re)generate the token key
 //   php cli/wearables_setup.php fitbit-verify <code>  # Fitbit subscriber verification code
 //   php cli/wearables_setup.php googlehealth-webhook   # secret + request body to register the Google Health subscriber
@@ -89,7 +89,7 @@ if(($args[0] ?? '') === 'fitbit-verify') {
 }
 
 if(count($args) < 3) {
-	fwrite(STDERR, "Usage: php cli/wearables_setup.php <fitbit|withings|oura|googlehealth> <client_id> <client_secret> [redirect_uri]\n");
+	fwrite(STDERR, "Usage: php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]\n");
 	fwrite(STDERR, "       php cli/wearables_setup.php genkey\n");
 	exit(1);
 }

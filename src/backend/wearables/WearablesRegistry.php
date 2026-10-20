@@ -17,7 +17,6 @@ class WearablesRegistry {
 	const PROVIDERS = [
 		'fitbit'   => FitbitProvider::class,
 		'withings' => WithingsProvider::class,
-		'oura'     => OuraProvider::class,
 		'googlehealth' => GoogleHealthProvider::class,
 	];
 

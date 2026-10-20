@@ -245,7 +245,7 @@ export interface EsmiraStudy {
    *  the intersection of `wearablesProviders` and the server's `wearableProviders`
    *  (those with OAuth credentials configured) as connectable devices. */
   wearablesEnabled?: boolean;
-  /** Provider slugs the researcher offers for this study (e.g. ["fitbit","oura"]). */
+  /** Provider slugs the researcher offers for this study (e.g. ["fitbit","googlehealth"]). */
   wearablesProviders?: string[];
   questionnaires: EsmiraQuestionnaire[];
 }

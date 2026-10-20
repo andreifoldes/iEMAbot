@@ -7,7 +7,7 @@ description: "Fitbit and Withings linking over OAuth 2.0, token storage, sync sc
 # Wearables
 
 <span className="status status--shipped">Shipped</span> ingestion and export · fork-only
-<span className="status status--partial">Partial</span> webhook-triggered prompts for Withings and Fitbit (untested against live providers; Google Health is an untested placeholder)
+<span className="status status--partial">Partial</span> webhook-triggered prompts for Withings and Fitbit (untested against live providers)
 <span className="status status--tbc">TBC</span> tailoring prompts from measurement values
 
 Participants can link a consumer wearable to a study. The server pulls their data on a schedule and stores it
@@ -25,6 +25,7 @@ is no value threshold and no real wake-up detection. See [Current status](../cur
 | Provider | Data types fetched by default |
 | --- | --- |
 | **Fitbit** | activity (steps; 1-minute intraday with a daily fallback on HTTP 403), heart rate, sleep, weight, SpO₂, HRV, breathing rate |
+| **Google Health** (Fitbit / Pixel Watch) | same study data types as Fitbit: steps, heart rate, sleep, weight, SpO₂, HRV, respiratory rate (sleep summary). One row per UTC day, value = that day's data points verbatim |
 | **Withings** | weight, blood pressure, activity, sleep (summary), ECG |
 
 `Study.wearablesDataTypes` can narrow the list, but **no designer UI sets it**; use the study source. If it is
@@ -36,7 +37,7 @@ Credentials are server-wide, set with the CLI:
 
 ```bash
 php cli/wearables_setup.php genkey                                  # token-encryption key
-php cli/wearables_setup.php <fitbit|withings> <client_id> <client_secret> [redirect_uri]
+php cli/wearables_setup.php <fitbit|withings|googlehealth> <client_id> <client_secret> [redirect_uri]
 ```
 
 | Config key | Purpose |
@@ -131,8 +132,7 @@ Optional config key `wearables_webhook_uri` overrides the auto-derived public ca
 proxy that rewrites the host or path). Participants who linked **before** this feature was deployed have no
 webhook subscription until they re-link.
 
-**Only these providers have webhooks.** Oura is supported for data sync but has no sensor-trigger support
-here, and the designer offers only *Any connected wearable*, *Withings* and *Fitbit* (Google Health is hidden). The data types below are
+**Only these providers have webhooks.** The designer offers *Any connected wearable*, *Withings*, *Fitbit* and *Google Health*. The data types below are
 the complete set the designer offers, each checked against the provider's own documentation (2026-10-09):
 
 | Designer type | Withings `appli` | Fitbit collection | Google Health data types |
@@ -172,19 +172,18 @@ rejects genuine notifications, Fitbit receives 404s and may disable the endpoint
 
 ### Google Health API
 
-<span className="status status--tbc">TBC</span> Untested placeholder code.
+<span className="status status--partial">Partial</span> Implemented, untested against a live project.
 
-:::danger[Experimental, untested placeholder]
-This provider was written from Google's documentation alone and has **never been run against a real Google Cloud
-project, token, or webhook**: when it was written Google stated *"we are not onboarding new projects at this
-time"*. Treat it as a starting point that will need changes once access exists, not as a working feature. The
-designer and researcher panel do **not offer it** (switch `SHOW_GOOGLE_HEALTH` in
-`data/study/EventTrigger.ts`, currently `false`), so the backend below is dormant until that is flipped; a study
-that already names `googlehealth` in its source still renders. The CLI labels it "experimental, untested". It is
-inert until you configure it, and should not be relied on for a study.
+:::caution[Not yet verified against a live project]
+Written from Google's documentation. Google caps an unverified OAuth app at 100 users (more needs a third-party
+security review), and while the consent screen is in *Testing* each user must be a listed test user and refresh
+tokens expire after 7 days: publish the app before a study. Measurement download (below) and the webhook path
+have not been run against a real Google account.
 :::
 
-Trigger path only.
+Triggers and measurement download. Data points are read from `users/me/dataTypes/<id>/dataPoints` with a per-day UTC filter
+(`steps`, `heart-rate`, `heart-rate-variability`, `oxygen-saturation`, `respiratory-rate-sleep-summary`, `sleep`, `weight`);
+a type whose scope was not granted (HTTP 403) is skipped.
 
 | | Fitbit (legacy) | Google Health |
 | --- | --- | --- |

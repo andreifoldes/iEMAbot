@@ -95,7 +95,7 @@ class WearablesTokenStore {
 
 	/**
 	 * Return a currently-valid access token, refreshing (and re-saving) when it is near
-	 * expiry. Persisting the refreshed token immediately is essential for Withings/Oura,
+	 * expiry. Persisting the refreshed token immediately is essential for Withings,
 	 * whose refresh tokens are single-use. Returns null when no token is stored.
 	 * @throws WearablesException
 	 */
@@ -111,7 +111,7 @@ class WearablesTokenStore {
 		if($refresh === '')
 			return (string) $token['access_token']; // nothing we can do; let the caller try
 		$fresh = $providerObj->refreshToken($refresh);
-		// Preserve fields the refresh response may omit (Oura drops the user id).
+		// Preserve fields the refresh response may omit (Google Health drops the user id).
 		$merged = array_merge($token, [
 			'access_token'     => $fresh['access_token'],
 			'refresh_token'    => $fresh['refresh_token'] !== '' ? $fresh['refresh_token'] : $refresh,

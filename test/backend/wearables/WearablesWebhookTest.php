@@ -29,7 +29,7 @@ class WearablesWebhookTest extends TestCase {
 	function test_providers_only_offer_kinds_they_can_deliver() {
 		$this->assertContains('blood_pressure', WearablesEventKinds::kindsFor('withings'));
 		$this->assertNotContains('blood_pressure', WearablesEventKinds::kindsFor('fitbit'));
-		$this->assertSame([], WearablesEventKinds::kindsFor('oura'));
+		$this->assertSame([], WearablesEventKinds::kindsFor('nonexistent'));
 	}
 
 	function test_bed_out_is_a_withings_only_kind() {

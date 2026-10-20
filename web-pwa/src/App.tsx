@@ -66,7 +66,7 @@ const LAST_KEY_STORE = 'esmira_last_key';
 /** PWA package version, injected at build time (see vite.config.ts). */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 /** Display names for wearable provider slugs (used in the Details panel). */
-const WEARABLE_LABEL: Record<string, string> = { fitbit: 'Fitbit', withings: 'Withings', oura: 'Oura Ring', googlehealth: 'Google Health' };
+const WEARABLE_LABEL: Record<string, string> = { fitbit: 'Fitbit', withings: 'Withings', googlehealth: 'Google Health' };
 type TextSize = 'normal' | 'large' | 'xlarge' | 'xxlarge';
 
 interface ChatMsg {

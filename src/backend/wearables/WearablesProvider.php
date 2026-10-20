@@ -6,8 +6,8 @@ namespace backend\wearables;
 use backend\Main;
 
 /**
- * Base class for a wearable OAuth2 provider (Fitbit / Withings / Oura). Ported in
- * spirit from iema-bot/src/wearables/{fitbit,withings,oura}.py — the same auth URLs,
+ * Base class for a wearable OAuth2 provider (Fitbit / Withings / Google Health). Ported in
+ * spirit from iema-bot/src/wearables/{fitbit,withings}.py — the same auth URLs,
  * token endpoints, scopes and provider quirks.
  *
  * A provider is instantiated with the *server-wide* OAuth app credentials (one app per
@@ -47,7 +47,7 @@ abstract class WearablesProvider {
 	abstract public function exchangeCode(string $code, string $redirectUri): array;
 
 	/**
-	 * Refresh an access token. Withings and Oura issue single-use refresh tokens, so
+	 * Refresh an access token. Withings issues single-use refresh tokens, so
 	 * the caller MUST persist the returned refresh_token immediately.
 	 * @return array normalized token array (provider_user_id may be empty on refresh)
 	 * @throws WearablesException

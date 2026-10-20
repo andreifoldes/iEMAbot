@@ -6,10 +6,9 @@ namespace backend\wearables;
 /**
  * Google Health API (successor of the Fitbit Web API, which Google turns off on 2026-10-30).
  *
- * EXPERIMENTAL - UNTESTED PLACEHOLDER. Written from Google's published documentation only and
- * never run against a live Google Cloud project, because Google was not onboarding new projects
- * when this was written. Expect to adjust it (scopes, notification shape, signature check) once
- * real access exists. Do not rely on it for a study.
+ * Written from Google's published documentation; verify against a real Google Cloud project and
+ * Fitbit/Pixel Watch account before relying on it for a study (an unverified OAuth app is capped at
+ * 100 users and, while in Testing, its refresh tokens expire after 7 days).
  *
  * Differences from FitbitProvider that matter here:
  *  - Google OAuth 2.0: credentials go in the POST body, `access_type=offline` is needed for a
@@ -20,7 +19,8 @@ namespace backend\wearables;
  *    profile (then we must not mark the participant as connected).
  *  - Webhooks use AUTOMATIC subscriptions registered once per server (see
  *    cli/wearables_setup.php googlehealth-webhook), so there is no per-participant subscribe call.
- *  - Only the trigger path is implemented: measurement data is not downloaded yet.
+ *  - Measurement download uses users/me/dataTypes/<id>/dataPoints (see DATA_TYPES); one row per
+ *    day and type holds that day's data points verbatim, like FitbitProvider.
  */
 class GoogleHealthProvider extends WearablesProvider {
 	const AUTH_URL     = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -35,8 +35,24 @@ class GoogleHealthProvider extends WearablesProvider {
 	public function scopes(): string {
 		return implode(' ', array_map(fn($name) => self::SCOPE_PREFIX . $name, self::SCOPE_NAMES));
 	}
-	/** Measurement download is not implemented; the hourly sync skips providers without data types. */
-	public function dataTypes(): array { return []; }
+	const DATA_BASE = 'https://health.googleapis.com/v4/users/me/dataTypes';
+	const MAX_PAGES = 20;
+	/**
+	 * Study data type (same names as Fitbit) => [Google dataType id, filter field suffix].
+	 * Filter fields follow Google's category rules: sample types filter on sample_time,
+	 * interval types on interval.start_time, sleep sessions on interval.end_time.
+	 */
+	const DATA_TYPES = [
+		'activity'       => ['steps', 'interval.start_time'],
+		'heartrate'      => ['heart-rate', 'sample_time.physical_time'],
+		'hrv'            => ['heart-rate-variability', 'sample_time.physical_time'],
+		'spo2'           => ['oxygen-saturation', 'sample_time.physical_time'],
+		'breathing_rate' => ['respiratory-rate-sleep-summary', 'sample_time.physical_time'],
+		'sleep'          => ['sleep', 'interval.end_time'],
+		'weight'         => ['weight', 'sample_time.physical_time'],
+	];
+
+	public function dataTypes(): array { return array_keys(self::DATA_TYPES); }
 	public function subscribesPerUser(): bool { return false; }
 
 	public function getAuthUrl(string $state, string $redirectUri): string {
@@ -69,7 +85,39 @@ class GoogleHealthProvider extends WearablesProvider {
 	}
 
 	public function fetchData(string $accessToken, string $providerUserId, string $dataType, int $startMs, int $endMs): array {
-		return [];
+		if(!isset(self::DATA_TYPES[$dataType]))
+			return [];
+		[$id, $field] = self::DATA_TYPES[$dataType];
+		$rows = [];
+		foreach($this->dateRange($startMs, $endMs) as $date) {
+			$points = $this->fetchDay($accessToken, $id, str_replace('-', '_', $id) . '.' . $field, $date);
+			if(!empty($points))
+				$rows[] = ['measurement_time' => $date, 'data_type' => $dataType, 'value' => $points];
+		}
+		return $rows;
+	}
+
+	/** All data points of one UTC day, following nextPageToken. @throws WearablesException */
+	private function fetchDay(string $accessToken, string $id, string $field, string $date): array {
+		$next = gmdate('Y-m-d', strtotime("$date +1 day"));
+		$filter = "$field >= \"{$date}T00:00:00Z\" AND $field < \"{$next}T00:00:00Z\"";
+		$points = [];
+		$pageToken = '';
+		for($page = 0; $page < self::MAX_PAGES; $page++) {
+			$query = ['filter' => $filter, 'pageSize' => 10000];
+			if($pageToken !== '')
+				$query['pageToken'] = $pageToken;
+			$resp = WearablesHttp::getJson(self::DATA_BASE . "/$id/dataPoints", $query, ['Authorization' => "Bearer $accessToken"]);
+			if($resp['status'] === 403)
+				return $points; // scope not granted for this type: skip it rather than fail the whole sync
+			if($resp['status'] < 200 || $resp['status'] >= 300 || $resp['json'] === null)
+				throw new WearablesException("Google Health fetch ($id) returned {$resp['status']} " . substr($resp['body'], 0, 200));
+			array_push($points, ...($resp['json']['dataPoints'] ?? []));
+			$pageToken = (string) ($resp['json']['nextPageToken'] ?? '');
+			if($pageToken === '')
+				break;
+		}
+		return $points;
 	}
 
 	/** @throws WearablesException */
