@@ -31,11 +31,6 @@ planned.
 | <span className="status status--partial">Partial</span> | Some of the behaviour exists; the page states precisely which part. |
 | <span className="status status--tbc">TBC</span> | Not implemented (or not verified). The page holds a placeholder so the gap is explicit rather than hidden. |
 
-:::info[Why the placeholders?]
-The project makes several promises. Where the code does not yet back one up, this site says so
-instead of omitting it. See **[Current status](./current-status.md)** for a claim-by-claim table.
-:::
-
 ## Where to start
 
 | If you are… | Read |
