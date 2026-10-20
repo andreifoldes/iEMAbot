@@ -1,6 +1,3 @@
-<p>
-	<img src="https://translate.jodli.dev/widgets/esmira/-/svg-badge.svg" alt="" />
-</p>
 <p align="center">
 	<img src="https://raw.githubusercontent.com/KL-Psychological-Methodology/ESMira/main/about/images/web_header_normal.svg" alt="ESMira" width="300"/>
 	<br>
@@ -15,7 +12,9 @@ For more general information about ESMira have a look at the [main Readme](https
 
 
 <p align="center">
-	<img src="https://raw.githubusercontent.com/KL-Psychological-Methodology/ESMira/main/about/images/demo_image_web.png" height="400" alt=""/>
+	<img src="website/static/img/mockups-telegram-pwa.png" height="640" alt="Illustrative mockup of the same check-in in a Telegram chat (left) and in the participant web app (right): a 1 to 5 rating, a nine-point sleepiness scale and a reaction-time game."/>
+	<br>
+	<em>One study, two ways to answer: the same check-in as a Telegram conversation (left) and in the installable participant web app (right). Illustrative mockups.</em>
 </p>
 
 
@@ -32,22 +31,11 @@ This repository is the iEMAbot fork of the ESMira web server (study design inter
 
 The documentation site lives in `website/` and is deployed from `main`. A security check scans every push and pull request for private details, so please never include credentials, server addresses, study access keys or participant data in code, docs or discussions. If you think you have found a security vulnerability, do not post it publicly: open a discussion asking for a private way to share it, without including the details.
 
-## :globe_with_meridians: Translations for ESMira
-<p align="center">
-	<img src="https://translate.jodli.dev/widgets/esmira/-/multi-blue.svg" alt="" />
-</p>
-
-We have set up a platform were you can help us translate ESMira:
-<https://translate.jodli.dev/projects/esmira/>
-
-If you want to translate ESMira into a language that is not listed, please inform us in [the discussions](https://github.com/KL-Psychological-Methodology/ESMira/discussions), so we can add it.
-
 ## :link: Resources
 - [Main repository](https://github.com/KL-Psychological-Methodology/ESMira)
 - [Website](https://esmira.kl.ac.at/?about)
 - [Wiki](https://github.com/KL-Psychological-Methodology/ESMira/wiki)
 - [Discussions](https://github.com/andreifoldes/iEMAbot/discussions)
 - [iEMAbot documentation](https://andreifoldes.github.io/iEMAbot/)
-- [Translation platform](https://translate.jodli.dev/)
 - [Demo Server](https://demo-esmira.kl.ac.at/)
 - [Help development](https://github.com/KL-Psychological-Methodology/ESMira/wiki/Help-development)
