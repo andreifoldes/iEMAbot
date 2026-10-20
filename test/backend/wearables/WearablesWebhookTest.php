@@ -22,7 +22,7 @@ class WearablesWebhookTest extends TestCase {
 			$this->assertSame($kind, WearablesEventKinds::fromWithingsAppli($appli));
 		foreach(WearablesEventKinds::FITBIT_COLLECTION as $kind => $collection)
 			$this->assertSame($kind, WearablesEventKinds::fromFitbitCollection($collection));
-		$this->assertNull(WearablesEventKinds::fromWithingsAppli(2));
+		$this->assertNull(WearablesEventKinds::fromWithingsAppli(46)); // account events carry no data
 		$this->assertNull(WearablesEventKinds::fromFitbitCollection('foods'));
 	}
 
