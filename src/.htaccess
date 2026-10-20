@@ -41,3 +41,9 @@ RewriteRule ^survey-(\d+)-([a-zA-Z][a-zA-Z0-9]+)$ index.php?qid=$1&key=$2 [NC,L,
 
 # Fallback in case we ever want to replace the php backend:
 RewriteRule ^api/([^.]+)$ api/$1.php [NC,L,QSA]
+
+# Apache hides the Authorization header from PHP by default. wearables_webhook.php needs it: Google Health
+# sends the subscriber secret there. Hand it to PHP as HTTP_AUTHORIZATION (REDIRECT_HTTP_AUTHORIZATION on an
+# internal redirect, which the script also accepts).
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

@@ -9,8 +9,6 @@
 //   php cli/wearables_setup.php fitbit-verify <code>  # Fitbit subscriber verification code
 //   php cli/wearables_setup.php googlehealth-webhook   # secret + request body to register the Google Health subscriber
 //
-// NOTE: the googlehealth provider is an EXPERIMENTAL, UNTESTED placeholder (see GoogleHealthProvider).
-//
 // Sensor-triggered prompts need webhooks: register
 //   https://<your-server>/esmira/api/wearables_webhook.php?provider=fitbit
 // as the Fitbit subscriber endpoint (with the verification code above). Withings URLs are
@@ -68,9 +66,8 @@ if(($args[0] ?? '') === 'googlehealth-webhook') {
 			'subscriptionCreatePolicy' => 'AUTOMATIC',
 		]],
 	];
-	fwrite(STDOUT, "WARNING: Google Health support is an EXPERIMENTAL, UNTESTED placeholder.\n\n");
-	fwrite(STDOUT, "Register ONE Google Health subscriber for this server (needs a Google Cloud project that Google has\n");
-	fwrite(STDOUT, "enabled for the Google Health API, and IAM permission health.subscribers.create):\n\n");
+	fwrite(STDOUT, "Register ONE Google Health subscriber for this server (needs a Google Cloud project with the Google\n");
+	fwrite(STDOUT, "Health API enabled, and IAM permission health.subscribers.create):\n\n");
 	fwrite(STDOUT, "  POST https://health.googleapis.com/v4beta/projects/<PROJECT_NUMBER>/subscribers?subscriberId=esmira\n");
 	fwrite(STDOUT, "  (use the project NUMBER, not the project id)\n\n");
 	fwrite(STDOUT, json_encode($body, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n\n");
@@ -109,11 +106,9 @@ if(isset($args[3]) && $args[3] !== '')
 FileSystemBasics::writeServerConfigs($config);
 
 fwrite(STDOUT, "Configured wearables provider: $provider\n");
-if($provider === 'googlehealth')
-	fwrite(STDOUT, "WARNING: Google Health support is an EXPERIMENTAL, UNTESTED placeholder; do not rely on it for a study.\n");
 if(isset($config['wearables_token_key']))
 	fwrite(STDOUT, "Generated wearables token key (encrypts stored tokens at rest).\n");
 if(!function_exists('sodium_crypto_secretbox'))
 	fwrite(STDOUT, "WARNING: libsodium not available — tokens will be stored in plaintext.\n");
-$redirect = $config['wearables_redirect_uri'] ?? '<your-server>/esmira/api/wearables_oauth.php';
+$redirect = $config['wearables_redirect_uri'] ?? WearablesRegistry::redirectUri();
 fwrite(STDOUT, "Register this redirect URI with $provider's developer console:\n  $redirect\n");
