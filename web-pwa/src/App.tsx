@@ -48,7 +48,7 @@ import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
 import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pwaInstall';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
-import { enrollUrl, invitedParticipantId } from './lib/invite';
+import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
@@ -669,8 +669,10 @@ export default function App() {
           await Promise.all(regs.map((r) => r.unregister()));
         }
       } catch { /* ignore */ }
-      // Restart — a fresh navigation with no SW/caches/storage = first-visit state.
-      window.location.reload();
+      // Restart on the bare app path: a fresh navigation with no SW/caches/storage and no
+      // ?key= = first-visit state (the invite-code screen). A plain reload would keep the
+      // invite link's key and start the same study again.
+      window.location.replace(signedOutUrl(window.location.pathname));
     })();
   };
 

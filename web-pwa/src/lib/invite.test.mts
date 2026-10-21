@@ -7,7 +7,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { enrollUrl, invitedParticipantId } from './invite.ts';
+import { enrollUrl, invitedParticipantId, signedOutUrl } from './invite.ts';
 
 describe('invitedParticipantId', () => {
   const ids = (qs: string) => invitedParticipantId(new URLSearchParams(qs));
@@ -43,5 +43,11 @@ describe('enrollUrl', () => {
     const params = new URL(enrollUrl('/pwa/', 'ssrc', 'P-007'), 'https://x.test').searchParams;
     assert.equal(params.get('key'), 'ssrc');
     assert.equal(invitedParticipantId(params), 'P-007');
+  });
+});
+
+describe('signedOutUrl', () => {
+  it('is the bare app path, so the invite key and participant ID are not reloaded', () => {
+    assert.equal(signedOutUrl('/pwa/'), '/pwa/');
   });
 });
