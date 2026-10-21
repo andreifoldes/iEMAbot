@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../../../autoload.php';
 
 /** Telegram bot admin endpoints: the token is write-only and malformed tokens are rejected. */
 class TelegramSettingsTest extends BaseAdminPermissionTestSetup {
-	const TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw0';
+	const TOKEN = '12345:fake_test_token_fake_test_token_0';
 
 	/** @var bool */
 	private $configExisted;
