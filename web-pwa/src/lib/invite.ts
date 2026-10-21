@@ -17,6 +17,15 @@ export function invitedParticipantId(params: URLSearchParams): string {
  * participant ID when one was typed. Reloading there runs the normal load flow, which
  * reads `key` and `pid` exactly as it would from an invite link.
  */
+/**
+ * Where sign-out sends the participant: the app's own path with no query or hash. Reloading
+ * the current address would keep `?key=` (and `pid`) from the invite link, and the load flow
+ * would start the same study again instead of showing the invite-code screen.
+ */
+export function signedOutUrl(pathname: string): string {
+  return pathname;
+}
+
 export function enrollUrl(pathname: string, code: string, participantId: string): string {
   const pid = participantId.trim();
   return `${pathname}?key=${encodeURIComponent(code.trim())}${pid ? `&pid=${encodeURIComponent(pid)}` : ''}`;
