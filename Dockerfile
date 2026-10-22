@@ -5,7 +5,7 @@
 # npm install
 # npm run prod
 
-FROM php:8.3.10-apache
+FROM php:8.3.36-apache
 ADD --chmod=0755 https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 # gmp + mbstring + curl are required by minishlink/web-push (VAPID signing,
 # payload encryption, and the HTTP client used to reach push services).
