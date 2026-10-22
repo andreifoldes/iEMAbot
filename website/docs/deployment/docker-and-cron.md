@@ -17,7 +17,7 @@ database, queue or worker service: ESMira stores files plus one embedded SQLite 
 
 | Layer | Detail |
 | --- | --- |
-| Base | `php:8.3.10-apache` |
+| Base | `php:8.3.36-apache` |
 | PHP extensions | `zip`, `gmp`, `mbstring`, `curl`, `sodium`; `pdo_sqlite` (built in, asserted at build time) |
 | Why | `gmp`, `mbstring`, `curl` for `minishlink/web-push` (VAPID signing, payload encryption, HTTP client); `sodium` encrypts stored wearable tokens; `pdo_sqlite` backs the collected-data database |
 | App files | `COPY ./dist /var/www/html`, so the ESMira webpack build **and** the PWA (`dist/pwa/`) must exist before `docker build` |
