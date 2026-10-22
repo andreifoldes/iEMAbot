@@ -46,6 +46,19 @@ export function reminderId(studyId: number, questionnaireId: number, occurrenceK
   return (h >>> 0) & 0x7fffffff;
 }
 
+/** The study author's notification text for a questionnaire (first notifying action), like PushScheduler::firstNotificationBody. */
+export function notificationText(q: EsmiraQuestionnaire): string | null {
+  for (const t of q.actionTriggers ?? []) {
+    for (const a of t.actions ?? []) {
+      if ([1, 3].includes(a.type ?? 1)) {
+        const msg = (a.msgText ?? '').trim();
+        if (msg) return msg;
+      }
+    }
+  }
+  return null;
+}
+
 function fmtTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -94,7 +107,7 @@ export function planReminders(
           id,
           at,
           title: study.title || 'ESMira',
-          body: `Time for “${q.title}”.${deadline}`,
+          body: `${notificationText(q) ?? `Time for “${q.title}”.`}${deadline}`,
           questionnaireId: q.internalId,
           occurrenceKey: w.key,
         });

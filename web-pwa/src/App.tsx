@@ -38,6 +38,7 @@ import {
 import { mirrorCompletion, backfillCompletions } from './lib/completionMirror';
 import { planReminders, hasScheduledSignals } from './lib/notificationPlan';
 import { syncReminders, clearReminders, requestReminderPermission } from './lib/nativeReminders';
+import { configureServerNudges, cancelServerNudges } from './lib/serverNudges';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
@@ -50,7 +51,7 @@ import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
 import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pwaInstall';
 import { isNativeApp } from './lib/platform';
-import { getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
+import { getApiRoot, getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
@@ -445,6 +446,12 @@ export default function App() {
     });
     void syncReminders(plan, study.id);
   }, [study, userId, enrolledAt, reminderSyncTick]);
+  // Native app: arm the background poll for server-driven nudges. Re-armed on every app start, so a poll
+  // that stopped itself (study had nothing to nudge about) picks up a later study change.
+  useEffect(() => {
+    if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
+    void configureServerNudges(getApiRoot(), study.id, userId, enrolledAt);
+  }, [study?.id, userId, enrolledAt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Delegated tap-to-enlarge: any image inside rendered question rich text
   // (question cards, subtext, chat history) opens the zoomable lightbox. One
   // document-level listener covers every dangerouslySetInnerHTML render site.
@@ -681,6 +688,7 @@ export default function App() {
       } catch { /* best-effort */ }
       // Native app: cancel the on-device reminders too.
       await clearReminders();
+      await cancelServerNudges();
       // Clear all web storage.
       try { localStorage.clear(); } catch { /* ignore */ }
       try { sessionStorage.clear(); } catch { /* ignore */ }
