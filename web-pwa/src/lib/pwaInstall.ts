@@ -10,6 +10,8 @@
  */
 import { useEffect, useState } from 'react';
 
+import { isNativeApp } from './platform.ts';
+
 export interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -20,8 +22,13 @@ function userAgent(): string {
   return typeof navigator === 'undefined' ? '' : navigator.userAgent || '';
 }
 
-/** True when running as an installed PWA (launched from the Home Screen / app list). */
+/**
+ * True when running as an installed app: a PWA launched from the Home Screen / app list, or
+ * the native Android app (Capacitor), which is installed by definition. Every install,
+ * "Open in Chrome" and "Add to Home Screen" prompt keys off this, so it stands them all down.
+ */
 export function isStandalone(): boolean {
+  if (isNativeApp()) return true;
   if (typeof window === 'undefined') return false;
   return (
     window.matchMedia?.('(display-mode: standalone)').matches === true ||

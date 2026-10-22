@@ -47,6 +47,8 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
 import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pwaInstall';
+import { isNativeApp } from './lib/platform';
+import { getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
@@ -185,6 +187,8 @@ export default function App() {
   const [serverVersion, setServerVersion] = useState(11);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState(''); // invite-code field on the enterKey screen
+  const [serverInput, setServerInput] = useState(() => getStoredServerBase() ?? getDefaultServer()); // native app: which ESMira server
+  const [serverError, setServerError] = useState(false);
   const [pidInput, setPidInput] = useState(''); // optional participant-ID field on the same screen
   // `standalone` is true when the app is running as an installed PWA (home-screen /
   // standalone) rather than a browser tab. The signup funnel (install → open → enter code)
@@ -834,6 +838,9 @@ export default function App() {
   // has taken the "continue without notifications" escape hatch.
   const notificationsSettled = useCallback((s: EsmiraStudy): boolean => {
     if (!s.webPushEnabled) return true;
+    // Native app: reminders do not use Web Push (the WebView has none), and there is no Home
+    // Screen to add the app to. Android notification permission is handled natively instead.
+    if (isNativeApp()) return true;
     if (localStorage.getItem(`esmira_push_optout_${s.id}`) === '1') return true;
     return typeof Notification !== 'undefined'
       && Notification.permission === 'granted'
@@ -1583,6 +1590,8 @@ export default function App() {
   const submitAccessKey = () => {
     const code = keyInput.trim();
     if (!code) return;
+    // The native app ships once for every server, so the participant says which one.
+    if (isNativeApp() && !setServerBase(serverInput)) { setServerError(true); return; }
     window.location.assign(enrollUrl(window.location.pathname, code, pidInput));
   };
 
@@ -1728,13 +1737,37 @@ export default function App() {
                 <p className="text-sm text-on-surface-variant leading-relaxed">
                   Enter the invite code from your invitation, and your participant ID if you were given one, to begin.
                 </p>
+                {isNativeApp() && (
+                  <>
+                    <input
+                      type="url"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={serverInput}
+                      onChange={(e) => { setServerInput(e.target.value); setServerError(false); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
+                      placeholder="Study server address"
+                      aria-label="Study server address"
+                      aria-invalid={serverError}
+                      aria-describedby={serverError ? 'server-error' : undefined}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    {serverError && (
+                      <p id="server-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
+                        That doesn't look like a server address. Check your invitation and try again.
+                      </p>
+                    )}
+                  </>
+                )}
                 <input
                   type="text"
                   inputMode="text"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  autoFocus
+                  autoFocus={!isNativeApp()}
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
@@ -1758,7 +1791,7 @@ export default function App() {
                 />
                 <button
                   onClick={submitAccessKey}
-                  disabled={!keyInput.trim()}
+                  disabled={!keyInput.trim() || (isNativeApp() && !serverInput.trim())}
                   className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-50 disabled:active:scale-100"
                 >
                   Continue
@@ -2703,17 +2736,28 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest }: {
       )}
       <div>
         <p className="font-semibold text-sm mb-2">If reminders aren't arriving:</p>
-        <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
-          <li>Install this app (add it to your home screen or Dock) so it can run in the background.</li>
-          <li>Allow notifications for this site in your browser settings.</li>
-          <li>Check your device's system notification settings for your browser or this app.</li>
-          <li>On Android, exclude your browser from battery optimisation so reminders aren't delayed.</li>
-          <li>Open the app regularly — browsers limit background activity, so some reminders can be delayed.</li>
-        </ul>
+        {isNativeApp() ? (
+          <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
+            <li>Open Android Settings → Apps → ESMira → Notifications and make sure they are allowed.</li>
+            <li>Exclude ESMira from battery optimisation (Settings → Apps → ESMira → Battery → Unrestricted) so reminders aren't delayed.</li>
+            <li>Check that Do Not Disturb is not silencing the app.</li>
+            <li>Allow “Alarms &amp; reminders” for ESMira if your phone asks, so reminders arrive on time.</li>
+          </ul>
+        ) : (
+          <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
+            <li>Install this app (add it to your home screen or Dock) so it can run in the background.</li>
+            <li>Allow notifications for this site in your browser settings.</li>
+            <li>Check your device's system notification settings for your browser or this app.</li>
+            <li>On Android, exclude your browser from battery optimisation so reminders aren't delayed.</li>
+            <li>Open the app regularly — browsers limit background activity, so some reminders can be delayed.</li>
+          </ul>
+        )}
       </div>
-      <p className="text-xs text-on-surface-variant">
-        For the most reliable reminders, the ESMira iOS or Android app is recommended.
-      </p>
+      {!isNativeApp() && (
+        <p className="text-xs text-on-surface-variant">
+          For the most reliable reminders, the ESMira iOS or Android app is recommended.
+        </p>
+      )}
     </div>
   );
 }
