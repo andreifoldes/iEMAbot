@@ -29,5 +29,7 @@ return [
 	'serverName' => ['en' => ''], //_ is the default language. All alternative languages need to be added via language-code (langCodes needs to be updates as well)
 	'defaultLang' => 'en',
 	'langCodes' => ['en'], //will be used for privacyPolicy, legal and servername. The optional languages of the UI are hardcoded and will not be influenced by this value
+	// Lets the ESMira Android app (Capacitor WebView, origin https://localhost) call the participant API. Off by default; see backend/Cors.php
+	'native_app_cors' => false,
 	'webOnlyMode' => false //when true, iOS/Android-only features are greyed out in the admin (web PWA only deployment)
 ];

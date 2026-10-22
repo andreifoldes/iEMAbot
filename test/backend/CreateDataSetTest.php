@@ -291,6 +291,20 @@ class CreateDataSetTest extends BaseTestSetup {
 		]);
 	}
 	
+	function test_updateServerStatistics_with_android_app() {
+		// Capacitor wrapper of the PWA: counted in the user total only, and the day statistics
+		// must still be written (an unknown appType would abort the whole update).
+		$appType = 'AndroidApp';
+		$this->creaseObserverForStatistics($appType);
+
+		$this->createDataSetObj([
+			'eventType' => 'joined',
+		], [
+			'userId' => $this->userIdNewUser,
+			'appType' => $appType
+		]);
+	}
+
 	function test_with_joined_event() {
 		$source = $this->getSourceData([
 			'eventType' => 'joined',
