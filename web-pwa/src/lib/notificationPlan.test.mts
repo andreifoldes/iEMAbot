@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire } from '../types.ts';
-import { planReminders, reminderId, hasScheduledSignals } from './notificationPlan.ts';
+import { planReminders, reminderId, hasScheduledSignals, notificationText } from './notificationPlan.ts';
 
 const DAY = 86400000;
 const H = 3600000;
@@ -76,4 +76,14 @@ test('ids are stable, positive 31-bit, and distinct per occurrence', () => {
 test('caps the number of reminders', () => {
   const plan = planReminders(study(q({}, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])), JOINED, NOW, {}, { horizonDays: 7, max: 25 });
   assert.equal(plan.length, 25);
+});
+
+test('uses the study author\'s message when the action has one, else a default', () => {
+  const withMsg = q({ actionTriggers: [{ schedules: [{ signalTimes: [{ startTimeOfDay: 20 * H }] }], actions: [{ msgText: 'How was your day?' }] }] });
+  assert.equal(notificationText(withMsg), 'How was your day?');
+  assert.equal(planReminders(study(withMsg), JOINED, NOW, {}, { horizonDays: 0 })[0].body, 'How was your day?');
+  // an action type that is not a notification (e.g. 2) is ignored
+  const other = q({ actionTriggers: [{ schedules: [{ signalTimes: [{ startTimeOfDay: 20 * H }] }], actions: [{ type: 2, msgText: 'not shown' }] }] });
+  assert.equal(notificationText(other), null);
+  assert.match(planReminders(study(other), JOINED, NOW, {}, { horizonDays: 0 })[0].body, /Check-in/);
 });

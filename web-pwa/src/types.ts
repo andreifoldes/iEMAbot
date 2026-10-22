@@ -179,8 +179,16 @@ export interface EsmiraSchedule {
   signalTimes?: EsmiraSignalTime[];
 }
 
+/** A trigger's action. Only the notifying kinds matter to the participant app (type 1 = invitation, 3 = reminder-style; a missing `type` means 1). */
+export interface EsmiraAction {
+  type?: number;
+  /** Notification text written by the study author. */
+  msgText?: string;
+}
+
 export interface EsmiraActionTrigger {
   schedules?: EsmiraSchedule[];
+  actions?: EsmiraAction[];
 }
 
 export interface EsmiraQuestionnaire {
