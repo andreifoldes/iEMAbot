@@ -94,10 +94,10 @@ export function headerText(html: string | undefined): string {
 }
 
 /** Fisher–Yates shuffle (per-session randomization of randomized pages). */
-function shuffle<T>(arr: T[]): T[] {
+function shuffle<T>(arr: T[], rand: () => number = Math.random): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rand() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -267,11 +267,38 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   }
 }
 
+/** Live runs show this many tasks of a page made up only of cognitive tasks; practice shows all. */
+export const LIVE_BATTERY_SIZE = 2;
+
+export interface AdaptOptions {
+  /** Practice runs let the participant try every task, so no subset is drawn. */
+  practice?: boolean;
+  /** Task ids drawn earlier for this run (a resumed check-in), so the same ones come back. */
+  battery?: string[];
+  /** Random source in [0, 1); injectable for tests. */
+  random?: () => number;
+}
+
+/**
+ * A "battery" is a page of more than LIVE_BATTERY_SIZE items that are all cognitive tasks. A live
+ * run draws LIVE_BATTERY_SIZE of them at random (kept in authored order); a resumed run reuses the
+ * earlier draw.
+ */
+function drawBattery(items: PreloadedQuestion[], opts: AdaptOptions): PreloadedQuestion[] {
+  if (opts.practice || items.length <= LIVE_BATTERY_SIZE || !items.every((x) => x.type === 'cognitive')) return items;
+  const earlier = items.filter((x) => opts.battery?.includes(x.id));
+  if (earlier.length === LIVE_BATTERY_SIZE) return earlier;
+  const rand = opts.random ?? Math.random;
+  const keep = new Set(shuffle(items, rand).slice(0, LIVE_BATTERY_SIZE).map((x) => x.id));
+  return items.filter((x) => keep.has(x.id));
+}
+
 /** Build a PreloadedSession from a questionnaire (pages -> sections). */
 export function adaptQuestionnaire(
   studyId: number,
   q: EsmiraQuestionnaire,
   nowMs: number,
+  opts: AdaptOptions = {},
 ): PreloadedSession {
   const questions: PreloadedQuestion[] = [];
   const sections: PreloadedSection[] = [];
@@ -279,6 +306,7 @@ export function adaptQuestionnaire(
   q.pages.forEach((page, pageIdx) => {
     let mapped = page.inputs.map(mapInput).filter((x): x is PreloadedQuestion => x !== null);
     if (page.randomized) mapped = shuffle(mapped);
+    mapped = drawBattery(mapped, opts);
     if (mapped.length === 0) return;
 
     const start = questions.length;
