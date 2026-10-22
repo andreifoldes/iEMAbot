@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { initInstallCapture } from './lib/pwaInstall';
+import { initJoinLinks } from './lib/joinLink';
 import './index.css';
 
 // Capture the native PWA install prompt as early as possible — Chrome fires
@@ -17,6 +18,7 @@ initInstallCapture();
 // changes) that have already been deployed. Reloading on controllerchange means an
 // update applies on the participant's very next in-app navigation instead.
 registerSW({ immediate: true });
+initJoinLinks(); // native app only: esmira://join?... invite links / QR codes
 
 if ('serviceWorker' in navigator) {
   // Reload ONLY when a new build replaces an existing controller (a real update).

@@ -12,6 +12,8 @@
 import type { EsmiraStudy, StudiesEnvelope, WearableStatus } from '../types';
 import { flushAudioQueue, markAudioReady } from './audioUploads';
 import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
+import { getApiRoot } from './serverRoot';
+import { clientAppType } from './platform';
 
 /**
  * Root of the ESMira backend (the PHP app + api/). The PWA is served at /pwa/ but the
@@ -19,7 +21,6 @@ import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
  * to /esmira/ (overridable at build time via VITE_API_ROOT). In dev, vite proxies
  * /esmira/api/* to the configured ESMIRA target (see vite.config.ts).
  */
-const API_ROOT = (import.meta.env.VITE_API_ROOT as string | undefined) || '/esmira/';
 
 /**
  * Local-only studies (study field `webLocalOnly`, e.g. the ESRS 2026 poster demo): nothing the
@@ -40,7 +41,7 @@ export function isLocalOnly(): boolean {
 /** Full URL of the ESMira server root the PWA talks to (for display in About). */
 export function serverRootUrl(): string {
   try {
-    return new URL(API_ROOT, window.location.href).href;
+    return new URL(getApiRoot(), window.location.href).href;
   } catch {
     return window.location.origin;
   }
@@ -56,7 +57,7 @@ export interface FetchedStudy {
 }
 
 export async function fetchStudy(accessKey: string, studyId?: number): Promise<FetchedStudy> {
-  const url = `${API_ROOT}api/studies.php?access_key=${encodeURIComponent(accessKey)}`;
+  const url = `${getApiRoot()}api/studies.php?access_key=${encodeURIComponent(accessKey)}`;
   const resp = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!resp.ok) throw new Error(`studies.php returned ${resp.status}`);
   const env = (await resp.json()) as StudiesEnvelope;
@@ -86,7 +87,7 @@ export async function subscribeToPush(args: {
   subscription: PushSubscriptionJSON;
 }): Promise<boolean> {
   if (localOnly) return false;
-  const resp = await fetch(`${API_ROOT}api/push_subscribe.php`, {
+  const resp = await fetch(`${getApiRoot()}api/push_subscribe.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -118,7 +119,7 @@ export async function sendWelcomePush(args: {
 }): Promise<number> {
   if (localOnly) return 0;
   try {
-    const resp = await fetch(`${API_ROOT}api/push_test.php`, {
+    const resp = await fetch(`${getApiRoot()}api/push_test.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -152,7 +153,7 @@ export async function reportClientInfo(studyId: number, userId: string): Promise
     const coarse = mm?.('(pointer: coarse)').matches ?? false;
     const minSide = Math.min(screen?.width ?? 0, screen?.height ?? 0);
     const device = coarse ? (minSide >= 600 ? 'tablet' : 'mobile') : (uaMobile ? 'mobile' : 'desktop');
-    await fetch(`${API_ROOT}api/client_info.php`, {
+    await fetch(`${getApiRoot()}api/client_info.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ studyId, userId, installed, device }),
@@ -176,7 +177,7 @@ export async function reportPushEvent(args: {
 }): Promise<void> {
   if (localOnly) return;
   try {
-    await fetch(`${API_ROOT}api/push_event.php`, {
+    await fetch(`${getApiRoot()}api/push_event.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ studyId: args.studyId, userId: args.userId, event: args.event }),
@@ -201,7 +202,7 @@ export interface PushStatus {
 export async function fetchNextNotification(studyId: number, userId: string): Promise<PushStatus> {
   try {
     const resp = await fetch(
-      `${API_ROOT}api/push_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      `${getApiRoot()}api/push_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
       { headers: { Accept: 'application/json' } },
     );
     if (!resp.ok) return { next: null, joinedAt: null };
@@ -230,7 +231,7 @@ export async function logEvent(args: {
   const now = Date.now();
   const payload = {
     userId: args.userId,
-    appType: 'Web',
+    appType: clientAppType(),
     appVersion: String(args.serverVersion),
     serverVersion: args.serverVersion,
     dataset: [{
@@ -249,7 +250,7 @@ export async function logEvent(args: {
     }],
   };
   try {
-    await fetch(`${API_ROOT}api/datasets.php`, {
+    await fetch(`${getApiRoot()}api/datasets.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -271,7 +272,7 @@ export async function startWearableConnect(args: {
   provider: string;
 }): Promise<string> {
   if (localOnly) throw new Error('This study does not send any data');
-  const resp = await fetch(`${API_ROOT}api/wearables_connect.php`, {
+  const resp = await fetch(`${getApiRoot()}api/wearables_connect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -294,7 +295,7 @@ export async function startWearableConnect(args: {
 export async function fetchWearableStatus(studyId: number, userId: string): Promise<WearableStatus[]> {
   try {
     const resp = await fetch(
-      `${API_ROOT}api/wearables_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      `${getApiRoot()}api/wearables_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
       { headers: { Accept: 'application/json' } },
     );
     if (!resp.ok) return [];
@@ -313,7 +314,7 @@ export async function disconnectWearable(args: {
   provider: string;
 }): Promise<boolean> {
   if (localOnly) return false;
-  const resp = await fetch(`${API_ROOT}api/wearables_disconnect.php`, {
+  const resp = await fetch(`${getApiRoot()}api/wearables_disconnect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -413,7 +414,7 @@ function buildPayload(args: SubmitArgs): DatasetPayload {
   });
   return {
     userId: args.userId,
-    appType: 'Web',
+    appType: clientAppType(),
     appVersion: String(args.serverVersion),
     serverVersion: args.serverVersion,
     dataset,
@@ -537,7 +538,7 @@ function saveQueue(q: QueuedSubmit[]): void {
 
 async function postDataset(payload: DatasetPayload): Promise<void> {
   if (localOnly) return;
-  const resp = await fetch(`${API_ROOT}api/datasets.php`, {
+  const resp = await fetch(`${getApiRoot()}api/datasets.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -600,7 +601,7 @@ function buildJoinPayload(args: JoinArgs): DatasetPayload {
   const model = navigator.userAgent;
   return {
     userId: args.userId,
-    appType: 'Web',
+    appType: clientAppType(),
     appVersion: String(args.serverVersion),
     serverVersion: args.serverVersion,
     dataset: [{
@@ -657,7 +658,7 @@ export async function sendParticipantMessage(args: {
   userId: string;
   content: string;
 }): Promise<boolean> {
-  const resp = await fetch(`${API_ROOT}api/save_message.php`, {
+  const resp = await fetch(`${getApiRoot()}api/save_message.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -702,7 +703,7 @@ export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<
   };
   const payload: DatasetPayload = {
     userId: args.userId,
-    appType: 'Web',
+    appType: clientAppType(),
     appVersion: String(args.serverVersion),
     serverVersion: args.serverVersion,
     dataset: args.rows.map((r, i) => ({
