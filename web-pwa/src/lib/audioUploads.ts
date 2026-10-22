@@ -16,7 +16,7 @@
  * identifier. Uploads retry on reconnect/visibility alongside the dataset queue.
  */
 
-const API_ROOT = (import.meta.env.VITE_API_ROOT as string | undefined) || '/esmira/';
+import { getApiRoot } from './serverRoot';
 
 const DB_NAME = 'esmira_audio';
 const STORE = 'recordings';
@@ -118,7 +118,7 @@ async function uploadOne(rec: AudioRecord): Promise<void> {
   // `(int)$fileData['name']` to match the pending-upload marker.
   form.append('upload', rec.blob, String(rec.identifier));
 
-  const resp = await fetch(`${API_ROOT}api/file_uploads.php`, { method: 'POST', body: form });
+  const resp = await fetch(`${getApiRoot()}api/file_uploads.php`, { method: 'POST', body: form });
   if (!resp.ok) throw new Error(`file_uploads.php returned ${resp.status}`);
   const env = await resp.json();
   if (!env.success) throw new Error(env.error || 'Audio upload rejected');
