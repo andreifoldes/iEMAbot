@@ -385,6 +385,7 @@ async function auditInstallScreens(browser) {
       viewport: v.viewport, isMobile: v.isMobile, hasTouch: v.hasTouch, userAgent: v.ua, screen: v.screen,
       reducedMotion: 'reduce', serviceWorkers: 'block',
     });
+    await context.addInitScript(SILENCE_SPEECH);
     try {
       const page = await context.newPage();
       if (v.init) await page.addInitScript(v.init);
@@ -591,11 +592,25 @@ function writeReport() {
   log(`\n▶ Report written to a11y/report/a11y-report.{json,md}`);
 }
 
+// ── silence ─────────────────────────────────────────────────────────────────
+// The app's read-aloud calls window.speechSynthesis, which on macOS plays through the
+// system voice (so Chromium's --mute-audio does not cover it). The audit walks every
+// screen and would speak each one out of the developer's speakers during a deploy, so
+// speech is swallowed in every page; the controls and their markup are still audited.
+// Each utterance "ends" at once, because the app resets its reading state in onend.
+const SILENCE_SPEECH = () => {
+  const synth = window.speechSynthesis;
+  if (!synth) return;
+  synth.speak = (utterance) => {
+    setTimeout(() => { if (typeof utterance.onend === 'function') utterance.onend(new Event('end')); }, 0);
+  };
+};
+
 // ── main ────────────────────────────────────────────────────────────────────
 (async () => {
   await startPreview();
   const browser = await chromium.launch({
-    args: ['--mute-audio', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required', '--mute-audio'],
   });
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -611,6 +626,7 @@ function writeReport() {
     // (b) audits aren't served from a stale precache.
     serviceWorkers: 'block',
   });
+  await context.addInitScript(SILENCE_SPEECH);
   context.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})));
   const page = await context.newPage();
   page.on('dialog', (d) => d.dismiss().catch(() => {}));

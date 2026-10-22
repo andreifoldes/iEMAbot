@@ -50,7 +50,7 @@ import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pw
 import { isNativeApp } from './lib/platform';
 import { getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
-import { enrollUrl, invitedParticipantId } from './lib/invite';
+import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
@@ -673,8 +673,10 @@ export default function App() {
           await Promise.all(regs.map((r) => r.unregister()));
         }
       } catch { /* ignore */ }
-      // Restart — a fresh navigation with no SW/caches/storage = first-visit state.
-      window.location.reload();
+      // Restart on the bare app path: a fresh navigation with no SW/caches/storage and no
+      // ?key= = first-visit state (the invite-code screen). A plain reload would keep the
+      // invite link's key and start the same study again.
+      window.location.replace(signedOutUrl(window.location.pathname));
     })();
   };
 
@@ -1096,10 +1098,10 @@ export default function App() {
       }
     }
     practiceRef.current = practice;
-    const session = adaptQuestionnaire(study.id, q, Date.now());
     // A check-in parked with "Remind me later" picks up where it stopped (lib/pausedCheckin.ts).
     const parked = practice ? null : loadPaused(study.id, userId);
     const resume = parked && parked.questionnaireId === internalId ? parked : null;
+    const session = adaptQuestionnaire(study.id, q, Date.now(), { practice, battery: resume?.cognitiveIds });
     if (resume) {
       session.answered = resume.responses;
       session.current_question_index = resume.currentIndex;
@@ -1312,6 +1314,7 @@ export default function App() {
       keystrokeIds: [...keystrokeIdsRef.current],
       keystrokeTexts: { ...keystrokeTextsRef.current },
       keystrokeModes: { ...keystrokeModesRef.current },
+      cognitiveIds: engine.session.questions.filter((x) => x.type === 'cognitive').map((x) => x.id),
       pausedAt: Date.now(),
     });
     pushBot(saved
