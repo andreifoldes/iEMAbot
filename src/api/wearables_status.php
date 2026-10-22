@@ -8,6 +8,7 @@ use backend\wearables\WearablesTokenStore;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
 // Reports which wearables a participant has connected and, per provider, the last day
 // the sync job ingested. Best-effort and read-only (mirrors api/push_status.php).
 

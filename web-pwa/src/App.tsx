@@ -36,6 +36,8 @@ import {
   type Availability,
 } from './lib/availability';
 import { mirrorCompletion, backfillCompletions } from './lib/completionMirror';
+import { planReminders, hasScheduledSignals } from './lib/notificationPlan';
+import { syncReminders, clearReminders, requestReminderPermission } from './lib/nativeReminders';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
@@ -47,6 +49,8 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
 import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pwaInstall';
+import { isNativeApp } from './lib/platform';
+import { getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
@@ -185,6 +189,8 @@ export default function App() {
   const [serverVersion, setServerVersion] = useState(11);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState(''); // invite-code field on the enterKey screen
+  const [serverInput, setServerInput] = useState(() => getStoredServerBase() ?? getDefaultServer()); // native app: which ESMira server
+  const [serverError, setServerError] = useState(false);
   const [pidInput, setPidInput] = useState(''); // optional participant-ID field on the same screen
   // `standalone` is true when the app is running as an installed PWA (home-screen /
   // standalone) rather than a browser tab. The signup funnel (install → open → enter code)
@@ -416,6 +422,29 @@ export default function App() {
     const id = setInterval(() => setNowTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+  // Native app: keep the OS reminder schedule in line with the study. Re-planned when the study or
+  // enrollment changes, after each completion, and whenever the app returns to the foreground, which
+  // also rolls the 7-day window forward. No-op in the browser (see lib/nativeReminders.ts).
+  const [reminderSyncTick, setReminderSyncTick] = useState(0);
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    // Timers do not run while the app is backgrounded, so also refresh the availability cards on return
+    // (a notification tap would otherwise land on a stale "Opens at 20:00" card).
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setNowTick((t) => t + 1);
+      setReminderSyncTick((t) => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+  useEffect(() => {
+    if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
+    const plan = planReminders(study, enrolledAt, Date.now(), loadCompletions(study.id, userId), {
+      exclude: (q) => q.title === TRIALS_QN_TITLE,
+    });
+    void syncReminders(plan, study.id);
+  }, [study, userId, enrolledAt, reminderSyncTick]);
   // Delegated tap-to-enlarge: any image inside rendered question rich text
   // (question cards, subtext, chat history) opens the zoomable lightbox. One
   // document-level listener covers every dangerouslySetInnerHTML render site.
@@ -650,6 +679,8 @@ export default function App() {
           if (sub) await sub.unsubscribe();
         }
       } catch { /* best-effort */ }
+      // Native app: cancel the on-device reminders too.
+      await clearReminders();
       // Clear all web storage.
       try { localStorage.clear(); } catch { /* ignore */ }
       try { sessionStorage.clear(); } catch { /* ignore */ }
@@ -834,6 +865,9 @@ export default function App() {
   // has taken the "continue without notifications" escape hatch.
   const notificationsSettled = useCallback((s: EsmiraStudy): boolean => {
     if (!s.webPushEnabled) return true;
+    // Native app: reminders do not use Web Push (the WebView has none), and there is no Home
+    // Screen to add the app to. Android notification permission is handled natively instead.
+    if (isNativeApp()) return true;
     if (localStorage.getItem(`esmira_push_optout_${s.id}`) === '1') return true;
     return typeof Notification !== 'undefined'
       && Notification.permission === 'granted'
@@ -845,6 +879,20 @@ export default function App() {
   // (e.g. a returning device), subscribe + welcome silently and continue; otherwise
   // show the step. Non-push studies (or already-settled ones) go straight through.
   const enterStudyGated = useCallback((s: EsmiraStudy) => {
+    // Native app: reminders are scheduled on the device, so ask for Android's notification permission
+    // (a system dialog on Android 13+) once, then go straight in. Declining is allowed: the help panel
+    // explains how to turn reminders on later, and the questionnaires stay reachable from the list.
+    if (isNativeApp()) {
+      void (async () => {
+        if (hasScheduledSignals(s.questionnaires)) {
+          pushBot("I'll remind you when a questionnaire is ready. Please tap Allow when Android asks about notifications.");
+          await requestReminderPermission();
+        }
+        setReminderSyncTick((t) => t + 1);
+        enterStudy(s);
+      })();
+      return;
+    }
     if (notificationsSettled(s)) { enterStudy(s); return; }
     if (isPushSupported() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       void (async () => {
@@ -856,7 +904,7 @@ export default function App() {
     }
     pushBot("One last step — please turn on notifications so you don't miss a questionnaire. I'll send a quick welcome to confirm they're working.");
     setPhase('notifications');
-  }, [notificationsSettled, enterStudy, subscribePush, maybeDeliverWelcome, pushBot]);
+  }, [notificationsSettled, enterStudy, subscribePush, maybeDeliverWelcome, pushBot, setReminderSyncTick]);
 
   // Mandatory notifications step — primary action. Request permission (if not decided),
   // then subscribe + deliver the welcome push, then continue into the study. A denied
@@ -1418,6 +1466,7 @@ export default function App() {
         if (rec) void mirrorCompletion(study.id, userId, q.internalId, rec.lastAt, rec.count, rec.occ);
       }
       setNowTick((t) => t + 1);
+      setReminderSyncTick((t) => t + 1);
     }
     setSubmitting(false);
     // Studies that opt in (webSnapshot) get a snapshot, the participant's own answers and a thank-you.
@@ -1583,6 +1632,8 @@ export default function App() {
   const submitAccessKey = () => {
     const code = keyInput.trim();
     if (!code) return;
+    // The native app ships once for every server, so the participant says which one.
+    if (isNativeApp() && !setServerBase(serverInput)) { setServerError(true); return; }
     window.location.assign(enrollUrl(window.location.pathname, code, pidInput));
   };
 
@@ -1728,13 +1779,37 @@ export default function App() {
                 <p className="text-sm text-on-surface-variant leading-relaxed">
                   Enter the invite code from your invitation, and your participant ID if you were given one, to begin.
                 </p>
+                {isNativeApp() && (
+                  <>
+                    <input
+                      type="url"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      value={serverInput}
+                      onChange={(e) => { setServerInput(e.target.value); setServerError(false); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
+                      placeholder="Study server address"
+                      aria-label="Study server address"
+                      aria-invalid={serverError}
+                      aria-describedby={serverError ? 'server-error' : undefined}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    {serverError && (
+                      <p id="server-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
+                        That doesn't look like a server address. Check your invitation and try again.
+                      </p>
+                    )}
+                  </>
+                )}
                 <input
                   type="text"
                   inputMode="text"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  autoFocus
+                  autoFocus={!isNativeApp()}
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
@@ -1758,7 +1833,7 @@ export default function App() {
                 />
                 <button
                   onClick={submitAccessKey}
-                  disabled={!keyInput.trim()}
+                  disabled={!keyInput.trim() || (isNativeApp() && !serverInput.trim())}
                   className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-50 disabled:active:scale-100"
                 >
                   Continue
@@ -2703,17 +2778,28 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest }: {
       )}
       <div>
         <p className="font-semibold text-sm mb-2">If reminders aren't arriving:</p>
-        <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
-          <li>Install this app (add it to your home screen or Dock) so it can run in the background.</li>
-          <li>Allow notifications for this site in your browser settings.</li>
-          <li>Check your device's system notification settings for your browser or this app.</li>
-          <li>On Android, exclude your browser from battery optimisation so reminders aren't delayed.</li>
-          <li>Open the app regularly — browsers limit background activity, so some reminders can be delayed.</li>
-        </ul>
+        {isNativeApp() ? (
+          <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
+            <li>Open Android Settings → Apps → ESMira → Notifications and make sure they are allowed.</li>
+            <li>Exclude ESMira from battery optimisation (Settings → Apps → ESMira → Battery → Unrestricted) so reminders aren't delayed.</li>
+            <li>Check that Do Not Disturb is not silencing the app.</li>
+            <li>Allow “Alarms &amp; reminders” for ESMira if your phone asks, so reminders arrive on time.</li>
+          </ul>
+        ) : (
+          <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
+            <li>Install this app (add it to your home screen or Dock) so it can run in the background.</li>
+            <li>Allow notifications for this site in your browser settings.</li>
+            <li>Check your device's system notification settings for your browser or this app.</li>
+            <li>On Android, exclude your browser from battery optimisation so reminders aren't delayed.</li>
+            <li>Open the app regularly — browsers limit background activity, so some reminders can be delayed.</li>
+          </ul>
+        )}
       </div>
-      <p className="text-xs text-on-surface-variant">
-        For the most reliable reminders, the ESMira iOS or Android app is recommended.
-      </p>
+      {!isNativeApp() && (
+        <p className="text-xs text-on-surface-variant">
+          For the most reliable reminders, the ESMira iOS or Android app is recommended.
+        </p>
+      )}
     </div>
   );
 }
