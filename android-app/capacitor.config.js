@@ -14,4 +14,8 @@ module.exports = {
     // Fixed so the WebView origin (and with it localStorage/IndexedDB) never changes between releases.
     androidScheme: 'https',
   },
+  plugins: {
+    // Status-bar icon + accent for reminder notifications (res/drawable/ic_stat_esmira.xml).
+    LocalNotifications: { smallIcon: 'ic_stat_esmira', iconColor: '#065f52' },
+  },
 };

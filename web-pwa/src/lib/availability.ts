@@ -27,13 +27,13 @@ export interface Availability {
   reason: string;
 }
 
-interface CompletionRecord { lastAt: number; count: number; occ: Record<string, number>; }
-type Completions = Record<number, CompletionRecord>;
+export interface CompletionRecord { lastAt: number; count: number; occ: Record<string, number>; }
+export type Completions = Record<number, CompletionRecord>;
 
 // ── date helpers (mirror ESMira's methods.ts / Scheduler.ts) ──────────────────
-function midnight(ms: number): number { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
+export function midnight(ms: number): number { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
 /** Whole local-day boundaries between two instants (ESMira Scheduler.getDatesDiff). */
-function datesDiff(a: number, b: number): number {
+export function datesDiff(a: number, b: number): number {
   const da = new Date(a), db = new Date(b);
   const ua = Date.UTC(da.getFullYear(), da.getMonth(), da.getDate());
   const ub = Date.UTC(db.getFullYear(), db.getMonth(), db.getDate());
@@ -67,11 +67,11 @@ function scheduledOnDay(s: EsmiraSchedule, dayIndex: number, dayMs: number, star
   return true;
 }
 
-interface Window { start: number; end: number; key: string } // start/end = ms since midnight
+export interface Window { start: number; end: number; key: string } // start/end = ms since midnight
 
 /** Completion windows for the given local day, or null when the questionnaire has no
  *  schedule at all (a passive questionnaire, completable any time while active). */
-function windowsForDay(q: EsmiraQuestionnaire, joined: number, dayMs: number): Window[] | null {
+export function windowsForDay(q: EsmiraQuestionnaire, joined: number, dayMs: number): Window[] | null {
   const startAfter = q.durationStartingAfterDays ?? 0;
   const dayIndex = datesDiff(dayMs, joined);
 
