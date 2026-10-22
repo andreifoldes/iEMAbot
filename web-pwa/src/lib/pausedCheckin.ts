@@ -18,6 +18,8 @@ export interface PausedCheckin {
   keystrokeIds: number[];
   keystrokeTexts: Record<string, string>;
   keystrokeModes: Record<string, string>;
+  /** Cognitive task ids in the run, so a resume keeps the battery subset drawn at the start. */
+  cognitiveIds?: string[];
   pausedAt: number;
 }
 

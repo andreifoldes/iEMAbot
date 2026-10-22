@@ -1091,10 +1091,10 @@ export default function App() {
       }
     }
     practiceRef.current = practice;
-    const session = adaptQuestionnaire(study.id, q, Date.now());
     // A check-in parked with "Remind me later" picks up where it stopped (lib/pausedCheckin.ts).
     const parked = practice ? null : loadPaused(study.id, userId);
     const resume = parked && parked.questionnaireId === internalId ? parked : null;
+    const session = adaptQuestionnaire(study.id, q, Date.now(), { practice, battery: resume?.cognitiveIds });
     if (resume) {
       session.answered = resume.responses;
       session.current_question_index = resume.currentIndex;
@@ -1307,6 +1307,7 @@ export default function App() {
       keystrokeIds: [...keystrokeIdsRef.current],
       keystrokeTexts: { ...keystrokeTextsRef.current },
       keystrokeModes: { ...keystrokeModesRef.current },
+      cognitiveIds: engine.session.questions.filter((x) => x.type === 'cognitive').map((x) => x.id),
       pausedAt: Date.now(),
     });
     pushBot(saved
