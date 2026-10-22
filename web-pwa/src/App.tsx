@@ -36,6 +36,8 @@ import {
   type Availability,
 } from './lib/availability';
 import { mirrorCompletion, backfillCompletions } from './lib/completionMirror';
+import { planReminders, hasScheduledSignals } from './lib/notificationPlan';
+import { syncReminders, clearReminders, requestReminderPermission } from './lib/nativeReminders';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
@@ -420,6 +422,29 @@ export default function App() {
     const id = setInterval(() => setNowTick((t) => t + 1), 60000);
     return () => clearInterval(id);
   }, []);
+  // Native app: keep the OS reminder schedule in line with the study. Re-planned when the study or
+  // enrollment changes, after each completion, and whenever the app returns to the foreground, which
+  // also rolls the 7-day window forward. No-op in the browser (see lib/nativeReminders.ts).
+  const [reminderSyncTick, setReminderSyncTick] = useState(0);
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    // Timers do not run while the app is backgrounded, so also refresh the availability cards on return
+    // (a notification tap would otherwise land on a stale "Opens at 20:00" card).
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setNowTick((t) => t + 1);
+      setReminderSyncTick((t) => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+  useEffect(() => {
+    if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
+    const plan = planReminders(study, enrolledAt, Date.now(), loadCompletions(study.id, userId), {
+      exclude: (q) => q.title === TRIALS_QN_TITLE,
+    });
+    void syncReminders(plan, study.id);
+  }, [study, userId, enrolledAt, reminderSyncTick]);
   // Delegated tap-to-enlarge: any image inside rendered question rich text
   // (question cards, subtext, chat history) opens the zoomable lightbox. One
   // document-level listener covers every dangerouslySetInnerHTML render site.
@@ -654,6 +679,8 @@ export default function App() {
           if (sub) await sub.unsubscribe();
         }
       } catch { /* best-effort */ }
+      // Native app: cancel the on-device reminders too.
+      await clearReminders();
       // Clear all web storage.
       try { localStorage.clear(); } catch { /* ignore */ }
       try { sessionStorage.clear(); } catch { /* ignore */ }
@@ -852,6 +879,20 @@ export default function App() {
   // (e.g. a returning device), subscribe + welcome silently and continue; otherwise
   // show the step. Non-push studies (or already-settled ones) go straight through.
   const enterStudyGated = useCallback((s: EsmiraStudy) => {
+    // Native app: reminders are scheduled on the device, so ask for Android's notification permission
+    // (a system dialog on Android 13+) once, then go straight in. Declining is allowed: the help panel
+    // explains how to turn reminders on later, and the questionnaires stay reachable from the list.
+    if (isNativeApp()) {
+      void (async () => {
+        if (hasScheduledSignals(s.questionnaires)) {
+          pushBot("I'll remind you when a questionnaire is ready. Please tap Allow when Android asks about notifications.");
+          await requestReminderPermission();
+        }
+        setReminderSyncTick((t) => t + 1);
+        enterStudy(s);
+      })();
+      return;
+    }
     if (notificationsSettled(s)) { enterStudy(s); return; }
     if (isPushSupported() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       void (async () => {
@@ -863,7 +904,7 @@ export default function App() {
     }
     pushBot("One last step — please turn on notifications so you don't miss a questionnaire. I'll send a quick welcome to confirm they're working.");
     setPhase('notifications');
-  }, [notificationsSettled, enterStudy, subscribePush, maybeDeliverWelcome, pushBot]);
+  }, [notificationsSettled, enterStudy, subscribePush, maybeDeliverWelcome, pushBot, setReminderSyncTick]);
 
   // Mandatory notifications step — primary action. Request permission (if not decided),
   // then subscribe + deliver the welcome push, then continue into the study. A denied
@@ -1425,6 +1466,7 @@ export default function App() {
         if (rec) void mirrorCompletion(study.id, userId, q.internalId, rec.lastAt, rec.count, rec.occ);
       }
       setNowTick((t) => t + 1);
+      setReminderSyncTick((t) => t + 1);
     }
     setSubmitting(false);
     // Studies that opt in (webSnapshot) get a snapshot, the participant's own answers and a thank-you.
