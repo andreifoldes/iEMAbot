@@ -17,15 +17,20 @@ const ESMIRA = process.env.ESMIRA_PROXY || 'https://iemabot.surrey.ac.uk';
 // (chore(release): vX.Y.Z), unlike web-pwa's own package.json which never moves.
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8')) as { version: string };
 
-export default defineConfig({
-  base: '/pwa/',
+// `vite build --mode native` builds the bundle shipped inside the Capacitor Android app
+// (android-app/): relative base, no service worker/manifest (the WebView is not a PWA host and
+// the API root is a runtime setting, see src/lib/serverRoot.ts) and no Telegram handoff page.
+export default defineConfig(({ mode }) => {
+const native = mode === 'native';
+return {
+  base: native ? './' : '/pwa/',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    ...(native ? [] : [VitePWA({
       registerType: 'autoUpdate',
       // injectManifest: we own the service worker (src/sw.ts) so it can handle
       // `push` / `notificationclick` for web-push reminders, while still
@@ -66,22 +71,25 @@ export default defineConfig({
       },
       // Exercise the service worker under `npm run dev` (which proxies /esmira/api).
       devOptions: { enabled: true, type: 'module' },
-    }),
+    })]),
   ],
   resolve: {
-    alias: { '@': path.resolve(__dirname, 'src') },
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      ...(native ? { 'virtual:pwa-register': path.resolve(__dirname, 'src/native/pwaRegisterStub.ts') } : {}),
+    },
   },
   build: {
     // Output into the served tree at <repo>/dist/pwa so Apache can serve it
     // alongside ESMira's own dist/. Kept out of ESMira's webpack build.
-    outDir: path.resolve(__dirname, '..', 'dist', 'pwa'),
+    outDir: path.resolve(__dirname, '..', 'dist', native ? 'pwa-native' : 'pwa'),
     emptyOutDir: true,
     rollupOptions: {
       // handoff.html: single-item page opened from chat channels (Telegram Mini App) for
       // items a chat cannot render — see src/handoff/ and backend/channels/handoff/.
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        handoff: path.resolve(__dirname, 'handoff.html'),
+        ...(native ? {} : { handoff: path.resolve(__dirname, 'handoff.html') }),
       },
     },
   },
@@ -108,4 +116,5 @@ export default defineConfig({
       },
     },
   },
+};
 });

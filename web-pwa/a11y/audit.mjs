@@ -595,7 +595,7 @@ function writeReport() {
 (async () => {
   await startPreview();
   const browser = await chromium.launch({
-    args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
+    args: ['--mute-audio', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
   });
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
