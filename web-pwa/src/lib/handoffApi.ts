@@ -6,8 +6,8 @@
  */
 import type { EsmiraInput } from '../types';
 import type { TrialRow } from './cognitiveTrials';
+import { getApiRoot } from './serverRoot';
 
-const API_ROOT = (import.meta.env.VITE_API_ROOT as string | undefined) || '/esmira/';
 
 export interface HandoffItem {
   studyId: number;
@@ -28,7 +28,7 @@ export interface HandoffResult {
 }
 
 async function call<T>(init?: RequestInit, query = ''): Promise<T> {
-  const resp = await fetch(`${API_ROOT}api/channel_handoff.php${query}`, { cache: 'no-store', ...init });
+  const resp = await fetch(`${getApiRoot()}api/channel_handoff.php${query}`, { cache: 'no-store', ...init });
   const json = await resp.json() as { success: boolean; dataset?: T; error?: string };
   if (!json.success) throw new Error(json.error || 'Request failed');
   return json.dataset as T;

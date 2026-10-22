@@ -15,7 +15,7 @@ const BROWN = '#be7800';
 let browser;
 let page;
 before(async () => {
-  browser = await chromium.launch();
+  browser = await chromium.launch({ args: ['--mute-audio'] }); // read-aloud tests must stay silent
   page = await browser.newPage();
 });
 after(async () => { await browser?.close(); });
