@@ -7,6 +7,7 @@ use backend\JsonOutput;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
 $dataStore = Configs::getDataStore();
 
 if(!$dataStore->isReady()) {

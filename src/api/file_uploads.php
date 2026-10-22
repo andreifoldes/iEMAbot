@@ -4,6 +4,8 @@ set_time_limit(0);
 
 require_once dirname(__FILE__, 2) . '/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
+
 use backend\exceptions\CriticalException;
 use backend\FileUploader;
 use backend\JsonOutput;

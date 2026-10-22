@@ -9,6 +9,7 @@ use backend\wearables\WearablesRegistry;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
 // Starts a wearable connection: validates the participant/study, mints a single-use
 // OAuth state, and returns the provider's authorization-page URL for the PWA to open.
 // Mirrors api/push_subscribe.php's validation header.

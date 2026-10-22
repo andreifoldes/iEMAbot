@@ -8,6 +8,7 @@ use backend\wearables\WearablesRegistry;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
 if(!Configs::getDataStore()->isReady()) {
 	echo JsonOutput::error('Server is not ready.');
 	return;

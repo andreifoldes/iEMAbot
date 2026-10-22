@@ -479,6 +479,7 @@ class CreateDataSet {
 						break;
 					case 'Telegram': // chat channels (backend/channels): counted in the user total only
 					case 'WhatsApp':
+					case 'AndroidApp': // Capacitor wrapper of the PWA (android-app/): same treatment
 						break;
 					default:
 						return false;

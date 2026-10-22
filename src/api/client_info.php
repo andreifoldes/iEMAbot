@@ -7,6 +7,7 @@ use backend\notifications\PushEvents;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
+if(\backend\Cors::handleNativeAppRequest()) return;
 // Lightweight client telemetry beacon: whether the participant is running the app
 // installed-to-home-screen (display-mode standalone) vs in a browser tab, and a coarse
 // device class. Latest report per participant wins. Powers the Push panel's
