@@ -49,4 +49,8 @@
     <!-- Voice-memo (record_audio) questions; requested at runtime, only when such a question is shown -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Reminders: the plugin adds POST_NOTIFICATIONS, boot and wake-lock permissions. USE_EXACT_ALARM
+         (API 33+) is granted automatically, so a signal at 20:00 fires at 20:00 and the plugin never has
+         to send the participant to a system settings screen. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 </manifest>
