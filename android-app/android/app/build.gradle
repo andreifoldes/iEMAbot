@@ -7,8 +7,9 @@ android {
         applicationId "org.esmira.participant"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Local test builds (android-app/scripts/ship-test.local.sh) bump these; defaults otherwise.
+        versionCode = Integer.parseInt(System.getenv("ESMIRA_VERSION_CODE") ?: "1")
+        versionName = System.getenv("ESMIRA_VERSION_NAME") ?: "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
