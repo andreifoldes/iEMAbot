@@ -15,6 +15,7 @@
 import { isNativeApp } from './platform.ts';
 import { extractCognitive } from './esmiraAdapter.ts';
 import type { EsmiraStudy } from '../types.ts';
+import { downloadTaskWeb, proxyTaskUrl, webCacheAvailable, webTaskReady } from './webTaskCache.ts';
 
 const INDEX_KEY = 'esmira_task_cache';
 const BASE_DIR = 'tasks';
@@ -119,9 +120,13 @@ function writeIndex(i: Index): void {
   try { localStorage.setItem(INDEX_KEY, JSON.stringify(i)); } catch { /* storage unavailable: re-download next time */ }
 }
 
-async function fetchManifest(http: HttpPlugin, taskDir: string): Promise<TaskManifest | null> {
+async function fetchManifest(http: HttpPlugin | null, taskDir: string): Promise<TaskManifest | null> {
   try {
-    const r = await http.get({ url: `${taskDir}task-manifest.json` });
+    const url = `${taskDir}task-manifest.json`;
+    // Native: the plugin's own HTTP stack (no CORS). Browser: a plain same-origin fetch.
+    const r = http
+      ? await http.get({ url })
+      : await fetch(url, { cache: 'no-cache' }).then(async (x) => ({ status: x.status, data: x.ok ? await x.json() : null }));
     const data = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
     return r.status === 200 && validManifest(data) ? data : null;
   } catch { return null; }
@@ -155,20 +160,36 @@ async function downloadTask(c: CapGlobal, taskDir: string): Promise<void> {
   writeIndex(done);
 }
 
+/** Browser PWA: the same task, cached through the Cache API and the service worker's task route. */
+async function downloadTaskInBrowser(taskDir: string): Promise<void> {
+  if (!webCacheAvailable(location.origin, taskDir)) return;
+  const manifest = await fetchManifest(null, taskDir);
+  if (!manifest) return;
+  await downloadTaskWeb(taskDir, manifest, new URL(manifest.root, taskDir).toString());
+}
+
 /** Fetch offline copies of every task the study uses. Safe to call repeatedly; failures are silent. */
 export async function syncStudyTasks(study: Pick<EsmiraStudy, 'questionnaires'>, serverBase: string): Promise<void> {
   const c = cap();
-  if (!c) return;
-  const dirs = new Set(collectTaskUrls(study, serverBase).map(taskDirUrl));
+  // The browser PWA's API root is a bare path (/esmira/); URL() needs an absolute base.
+  let base = serverBase;
+  try { base = new URL(serverBase, globalThis.location?.href).toString(); } catch { /* no page URL to resolve against */ }
+  const dirs = new Set(collectTaskUrls(study, base).map(taskDirUrl));
   for (const dir of dirs) {
-    try { await downloadTask(c, dir); } catch { /* offline or partial: retried next time */ }
+    try { await (c ? downloadTask(c, dir) : downloadTaskInBrowser(dir)); } catch (err) { console.warn('[tasks] offline copy not ready:', dir, err); }
   }
 }
 
 /** The URL to put in the task iframe: the local copy when complete, otherwise the original. */
-export async function resolveTaskUrl(taskUrl: string): Promise<string> {
+export async function resolveTaskUrl(taskUrl: string, base = browserBase()): Promise<string> {
   const c = cap();
-  if (!c?.Plugins?.Filesystem || !c.convertFileSrc) return taskUrl;
+  if (!c) {
+    try {
+      if (!webCacheAvailable(location.origin, taskUrl)) return taskUrl;
+      return (await webTaskReady(taskDirUrl(taskUrl), base)) ? proxyTaskUrl(taskUrl, base) : taskUrl;
+    } catch { return taskUrl; }
+  }
+  if (!c.Plugins?.Filesystem || !c.convertFileSrc) return taskUrl;
   try {
     const dir = taskDirUrl(taskUrl);
     const hit = readIndex()[dir];
@@ -177,4 +198,9 @@ export async function resolveTaskUrl(taskUrl: string): Promise<string> {
     const local = c.convertFileSrc(uri.endsWith('/') ? uri : `${uri}/`);
     return localTaskUrl(taskUrl, dir, local);
   } catch { return taskUrl; }
+}
+
+function browserBase(): string {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  return env?.BASE_URL || '/pwa/';
 }

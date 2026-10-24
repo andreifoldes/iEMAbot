@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -26,6 +26,8 @@ return {
   base: native ? './' : '/pwa/',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    // Native bundle only: files from public/ that ship inside the APK (see lib/bundledAssets.ts).
+    __BUNDLED_PUBLIC__: JSON.stringify(native ? readdirSync(path.resolve(__dirname, 'public')) : []),
   },
   plugins: [
     react(),
