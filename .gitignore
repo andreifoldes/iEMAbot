@@ -23,3 +23,6 @@
 # Local-only Android test-build tooling (version counter, Drive upload)
 android-app/scripts/*.local.sh
 android-app/.test-build-number
+android-app/.last-shipped-hash
+android-app/.ship.lock
+android-app/ship-test.log
