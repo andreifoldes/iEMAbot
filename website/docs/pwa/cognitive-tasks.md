@@ -84,6 +84,38 @@ bundle. Participants with an installed PWA also need the service worker to updat
 
 Related: the PVT instruction screen defaults `show_tutorial` to true.
 
+## Offline use
+
+<span className="status status--shipped">Shipped</span> in the browser PWA and the Android app, per task once its host publishes a manifest.
+
+A participant who signed up while online can run the interactive tasks with no connection. After sign-up (and on every app start and
+reconnect) the app downloads each task listed in the study, then opens it from the local copy:
+
+- **Browser PWA:** files go into the Cache API and the iframe runs at `/pwa/t/<server path>`, which the service worker maps back to the cache
+  (the task pages sit outside the worker's `/pwa/` scope, so it cannot answer for them directly).
+- **Android app:** files go into the app's private storage and are served same-origin by the Capacitor WebView.
+
+A task is only used offline when a **complete** copy exists; otherwise it loads from the network as before. Library files shared by several
+tasks (m2c2kit `core`, about 7.6 MB) are stored and fetched once.
+
+### Publishing the manifest
+
+Each task folder needs a `task-manifest.json` listing its files (and the module folders its import map points at). Generate them on a copy of
+the host's webapp tree and publish them next to the tasks; re-run after **every** task deploy:
+
+```bash
+node tools/cognitive-tasks/build-task-manifest.mjs <webroot>   # e.g. the m2c2 folder, then the novel-assessments folder
+```
+
+A folder with no manifest simply stays online-only. Check the result with
+`python3 tools/e2e/offline_real_tasks_e2e.py <webapp-dir> <task-path>…`, which generates manifests for a local copy of the tree, signs up in
+Chromium, relaunches the app **offline** for each task and fails on any task that does not render from the cache.
+
+:::note[What still needs a connection]
+Signing up (the first study fetch), push and wearable set-up, the participant-ID device lock, and the Listen button on devices without offline
+speech voices. Answers, voice memos and keystroke logs are queued on the device and upload when the connection returns.
+:::
+
 ## Accessibility note
 
 The cognitive iframe is deliberately **excluded** from the automated accessibility audit, since the content
