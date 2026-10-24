@@ -116,3 +116,12 @@ test('no manifest published: task stays online-only', async () => {
   assert.equal(n.downloaded.length, 0);
   assert.equal(await resolveTaskUrl(`${DIR}index.html`), `${DIR}index.html`);
 });
+
+test('a bare API root (browser PWA: "/esmira/") still finds absolute task URLs', async () => {
+  store.clear();
+  (globalThis as Record<string, unknown>).location = { href: 'https://srv.example/pwa/', origin: 'https://srv.example' };
+  const n = fakeNative({ manifest: MANIFEST });
+  await syncStudyTasks(study, '/esmira/');
+  assert.equal(n.downloaded.length, 2);
+  delete (globalThis as Record<string, unknown>).location;
+});
