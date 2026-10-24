@@ -33,10 +33,12 @@ export function voiceScore(v: VoiceInfo, lang: string): number {
 }
 
 /** The best available voice for `lang`, or undefined to let the browser decide. */
-export function pickVoice<T extends VoiceInfo>(voices: readonly T[], lang: string): T | undefined {
+export function pickVoice<T extends VoiceInfo>(voices: readonly T[], lang: string, offline = false): T | undefined {
   let best: T | undefined;
   let bestScore = 0;
   for (const v of voices) {
+    // Offline, a network ("online"/cloud) voice would stay silent, so only on-device voices qualify.
+    if (offline && v.localService === false) continue;
     const sc = voiceScore(v, lang);
     if (sc > bestScore) { best = v; bestScore = sc; }
   }
@@ -54,7 +56,8 @@ export function speak(text: string, lang: string, onEnd: () => void): void {
   if (lang) utterance.lang = lang;
   utterance.rate = SPEECH_RATE;
   // getVoices() can be empty until the browser has loaded them; then the default is used.
-  const voice = pickVoice(window.speechSynthesis.getVoices(), lang);
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const voice = pickVoice(window.speechSynthesis.getVoices(), lang, offline);
   if (voice) utterance.voice = voice;
   utterance.onend = onEnd;
   utterance.onerror = onEnd;
