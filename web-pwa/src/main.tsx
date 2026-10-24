@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { initInstallCapture } from './lib/pwaInstall';
 import { initJoinLinks } from './lib/joinLink';
+import './fonts';
 import './index.css';
 
 // Capture the native PWA install prompt as early as possible — Chrome fires
