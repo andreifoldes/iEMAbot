@@ -41,13 +41,15 @@ def main() -> int:
     if not (DIST / 'index.html').exists():
         print('build the PWA first (cd web-pwa && npx vite build)'); return 2
     tmp = Path(tempfile.mkdtemp()); make_tasks(tmp)
-    state = {'origin': ''}
+    state = {'origin': '', 'posts': []}
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, fmt, *a): pass
         def send(self, code, body: bytes, ctype='application/octet-stream'):
             self.send_response(code); self.send_header('Content-Type', ctype); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
-        def do_POST(self): self.send(200, b'{"success":true}', 'application/json')
+        def do_POST(self):
+            state['posts'].append(self.path.split('?')[0]); self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            self.send(200, b'{"success":true}', 'application/json')
         def do_GET(self):
             p = self.path.split('?')[0]
             if p.startswith('/esmira/api/studies.php'): return self.send(200, json.dumps(study_json(state['origin'])).encode(), 'application/json')
@@ -92,9 +94,16 @@ def main() -> int:
         assert 'TASK-LOADED' in frame.locator('#m').inner_text()
         frame.locator('#b').click()
         page.wait_for_function("() => document.body.innerText.includes('Completed')", timeout=15000)
+        # the finished questionnaire was queued while offline; it must reach the server once back online
+        n_off = sum(p.endswith('datasets.php') for p in state['posts'])
+        ctx.set_offline(False); page.evaluate("window.dispatchEvent(new Event('online'))")
+        for _ in range(40):
+            if sum(p.endswith('datasets.php') for p in state['posts']) > n_off: break
+            page.wait_for_timeout(500)
+        assert sum(p.endswith('datasets.php') for p in state['posts']) > n_off, 'queued dataset never uploaded after reconnect'
         ok = True
         b.close()
-    print('PASS: task ran offline in the browser PWA' if ok else 'FAIL')
+    print('PASS: task ran offline in the browser PWA and the result uploaded after reconnect' if ok else 'FAIL')
     return 0 if ok else 1
 
 if __name__ == '__main__':
