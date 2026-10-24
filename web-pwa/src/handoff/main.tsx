@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HandoffApp } from './HandoffApp';
 import { initTelegram } from '../lib/telegramWebApp';
+import '../fonts';
 import '../index.css';
 
 // Single-item page for chat channels. Deliberately no service worker, install prompt or
