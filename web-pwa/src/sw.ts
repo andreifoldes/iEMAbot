@@ -3,8 +3,8 @@
  * Custom service worker (injectManifest strategy).
  *
  * Replicates the previous generateSW behaviour — precache the app shell, SPA
- * navigation fallback, NetworkFirst for the study definition, CacheFirst for
- * Google Fonts — and adds the web-push handlers that let the server deliver
+ * navigation fallback, NetworkFirst for the study definition, precaching of the bundled Inter font,
+ * and adds the web-push handlers that let the server deliver
  * questionnaire reminders while the PWA is closed.
  */
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
@@ -12,7 +12,7 @@ import { clientsClaim } from 'workbox-core';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { createHandlerBoundToURL, precacheAndRoute, type PrecacheEntry } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { NetworkFirst } from 'workbox-strategies';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: (string | PrecacheEntry)[];
@@ -49,19 +49,6 @@ registerRoute(
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
       new ExpirationPlugin({ maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 30 }),
-    ],
-  }),
-);
-
-// Google Fonts (Inter) used by index.html.
-registerRoute(
-  ({ url }) =>
-    url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',
-  new CacheFirst({
-    cacheName: 'google-fonts',
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 }),
     ],
   }),
 );
