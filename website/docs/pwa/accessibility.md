@@ -49,7 +49,7 @@ npm run a11y:setup   # one-off: installs the audit's dependencies
 npm run a11y
 ```
 
-`deploy.sh` runs the same audit as a **hard gate** before syncing (`A11Y_SKIP=1` bypasses it). A GitHub
+The deploy workflow runs the same audit as a **hard gate** before syncing. A GitHub
 workflow runs it on published releases and on manual dispatch, **not on every push**.
 
 ### Colour-vision deficiency

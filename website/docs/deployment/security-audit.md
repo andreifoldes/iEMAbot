@@ -65,7 +65,6 @@ At the time of writing there are three pending items:
 
 | Item | Detail | Decision needed |
 | --- | --- | --- |
-| Deploy script path | `deploy.sh` hard-codes a real user's home directory as the remote directory | Parameterise via an environment variable, or accept |
 | AI session logs in the tree | Several `.claude/logs/*` files are still tracked despite `.gitignore` | Remove from the tree; review contents |
 | AI session logs in history | The same files, and the home path inside them, are in earlier commits | Rewrite history (destructive, force-push), or accept |
 

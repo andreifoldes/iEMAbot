@@ -84,7 +84,7 @@ Upstream's participant UI is a Mithril web client with no scheduling. The fork a
 | Feature | Status | Docs |
 | --- | --- | --- |
 | Dockerfile with PHP extensions, Composer, cron jobs | <span className="status status--shipped">Shipped</span> | [Docker and cron](./deployment/docker-and-cron.md) |
-| `deploy.sh` / `ship.sh` build-gate-deploy flow | <span className="status status--shipped">Shipped</span> | [CI and release](./deployment/ci-and-release.md) |
+| Build-gate-deploy pipeline (staging repo, self-hosted runner) | <span className="status status--shipped">Shipped</span> | [CI and release](./deployment/ci-and-release.md) |
 | Accessibility workflow | <span className="status status--shipped">Shipped</span> | [CI and release](./deployment/ci-and-release.md) |
 | Security audit workflow | <span className="status status--shipped">Shipped</span> | [Security audit](./deployment/security-audit.md) |
 

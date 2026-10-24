@@ -3,11 +3,11 @@ name: Accessibility audit (participant PWA)
 # Automated WCAG 2.2 A/AA gate for the participant PWA. Runs the axe-core +
 # Playwright harness (web-pwa/a11y) against the real production build, driving
 # every question type in light + dark themes. Fully offline (fixture study), so
-# it needs no VPN or live server. Mirrors the hard gate baked into deploy.sh.
+# it needs no VPN or live server. Mirrors the hard gate baked into the deploy workflow.
 #
 # Runs at release time only (not on every push) to conserve Actions minutes:
 # on a published GitHub release, and on demand via the Actions tab. Day-to-day
-# enforcement is the deploy.sh gate, which runs the same audit on every deploy.
+# enforcement is the the deploy workflow gate, which runs the same audit on every deploy.
 
 on:
   release:

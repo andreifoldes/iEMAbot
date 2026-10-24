@@ -7,7 +7,7 @@ participant journey — invite code → consent → name → the mandatory notif
 step → the tutorial → a practice run of **every questionnaire** — running an axe
 scan at each state, in both the **light** and **dark** themes.
 
-This is the same check that gates a production deploy (see `deploy.sh`).
+This is the same check that gates a production deploy (see the deploy workflow).
 
 ## What it covers
 
@@ -91,8 +91,7 @@ A human-readable summary and the full machine-readable results are written to
 
 ## In the deploy pipeline
 
-`deploy.sh` runs this audit right after `npm run build:all` and before anything
-is synced to the server; a critical/serious violation aborts the deploy. Set
-`A11Y_SKIP=1` to bypass it in an emergency. CI runs the same audit at release
+The deploy workflow runs this audit right after `npm run build:all` and before anything
+is synced to the server; a critical/serious violation aborts the deploy. CI runs the same audit at release
 time (`.github/workflows/accessibility.yml`, on a published GitHub release or
-on demand) — deploy.sh remains the day-to-day enforcement.
+on demand) — the deploy workflow remains the day-to-day enforcement.

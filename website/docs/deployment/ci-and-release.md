@@ -21,23 +21,18 @@ description: "The GitHub Actions workflows (inherited and fork-added), the deplo
 The new workflows use their own concurrency groups (`docs-*`, `pages`, `security-audit-*`, `demo-smoke-*`) and never touch
 `dist/` or `package.json`, so they cannot trigger an auto-tag.
 
-## `deploy.sh` and `ship.sh`
+## Deployment pipeline
 
-`deploy.sh` is the fork's production path. In order:
+All code changes go through a private staging repository; there are no manual deploy scripts. Merging to the
+staging `main` branch triggers a workflow that:
 
-1. **Heal** iCloud-style git conflict copies (`git-heal.sh`) and verify the object graph.
-2. **Guard:** the working tree must be clean, and the revision already deployed on the server must be an
-   ancestor of `HEAD` (stops a stale checkout overwriting newer work).
-3. **Bump** the patch version (`npm version patch --no-git-tag-version`).
-4. **Build** everything: `npm run build:all` (ESMira webpack, then the PWA).
-5. **Accessibility gate:** the axe audit must pass.
-6. **Commit** `chore(release): vX.Y.Z` (only `package.json` and the lockfile).
-7. **Sync** the build to the host and **rebuild and restart** the container; generate VAPID keys if missing;
-   record the deployed revision.
+1. **Builds** everything: `npm run build:all` (ESMira webpack, then the PWA).
+2. **Accessibility gate:** the axe audit must pass.
+3. **Deploys** from a self-hosted runner on the server: syncs the build, rebuilds and restarts the container
+   (data and config volumes are untouched), generates VAPID keys if missing, and records the deployed revision.
 
-`ship.sh` is `deploy.sh` followed by `git push origin`, so the code on `origin` never gets ahead of what was
-verified and shipped. Environment overrides exist for emergencies (`DEPLOY_SKIP_GUARD`, `DEPLOY_ALLOW_DIRTY`,
-`DEPLOY_NO_BUMP`, `A11Y_SKIP`, `A11Y_FAIL_ON`, and so on).
+Pull requests run the build and accessibility gate on GitHub-hosted runners only. A separate manual workflow
+promotes a reviewed snapshot of staging to this public repository after a private-detail scan.
 
 The host, remote directory and credentials are configured outside the public docs; they are deliberately not
 described here.
@@ -46,7 +41,7 @@ described here.
 
 - The root `package.json` version is the release version (`3.6.16` at 2026-10-06), shown on the PWA's About
   screen.
-- Patch bumps happen automatically on each deploy (14 `chore(release)` commits from `v3.6.3` to `v3.6.16`).
+- Patch bumps are made in the pull request that ships the change (14 `chore(release)` commits from `v3.6.3` to `v3.6.16`).
   Minor and major bumps are manual.
 - A push to `main` that changes the version makes `auto_release.yml` create the tag and release.
 - `CHANGELOG.md` is upstream's stub and is **not maintained** by the fork. Release history lives in

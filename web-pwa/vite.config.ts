@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -13,7 +13,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 const ESMIRA = process.env.ESMIRA_PROXY || 'https://iemabot.surrey.ac.uk';
 
 // Surface the release version to the app (shown on the About ESMira screen).
-// Read from the ROOT package.json — deploy.sh patch-bumps it on every deploy
+// Read from the ROOT package.json — bump it in the PR that ships a change
 // (chore(release): vX.Y.Z), unlike web-pwa's own package.json which never moves.
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8')) as { version: string };
 
@@ -26,8 +26,6 @@ return {
   base: native ? './' : '/pwa/',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    // Native bundle only: files from public/ that ship inside the APK (see lib/bundledAssets.ts).
-    __BUNDLED_PUBLIC__: JSON.stringify(native ? readdirSync(path.resolve(__dirname, 'public')) : []),
   },
   plugins: [
     react(),
