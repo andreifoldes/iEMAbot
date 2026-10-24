@@ -33,7 +33,7 @@ before(async () => {
     configFile: false,
     plugins: [react()],
     appType: 'custom',
-    server: { middlewareMode: true, hmr: false, watch: null },
+    server: { middlewareMode: true, hmr: false, ws: false, watch: null },
     optimizeDeps: { noDiscovery: true, include: [] },
     logLevel: 'error',
   });
