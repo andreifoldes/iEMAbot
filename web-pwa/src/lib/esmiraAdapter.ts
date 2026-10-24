@@ -44,7 +44,7 @@ const RENDERABLE = new Set([
  * Detect a cognitive/link-out `text` item (HTML with an anchor) and pull out the
  * launch URL, title (first <b>), and description. Returns null for plain text.
  */
-function extractCognitive(html: string): { url: string; title: string; description: string } | null {
+export function extractCognitive(html: string): { url: string; title: string; description: string } | null {
   const a = html.match(/<a\b[^>]*href="([^"]+)"[^>]*>.*?<\/a>/is);
   if (!a) return null;
   const url = a[1];
