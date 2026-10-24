@@ -39,6 +39,7 @@ import { mirrorCompletion, backfillCompletions } from './lib/completionMirror';
 import { planReminders, hasScheduledSignals } from './lib/notificationPlan';
 import { syncReminders, clearReminders, requestReminderPermission } from './lib/nativeReminders';
 import { configureServerNudges, cancelServerNudges } from './lib/serverNudges';
+import { syncStudyTasks, resolveTaskUrl } from './lib/taskCache';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
@@ -452,6 +453,15 @@ export default function App() {
     if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
     void configureServerNudges(getApiRoot(), study.id, userId, enrolledAt);
   }, [study?.id, userId, enrolledAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Native app: keep an offline copy of the study's interactive tasks. Runs after sign-up, on every app
+  // start and whenever the connection returns, so a download that was cut short is picked up again.
+  useEffect(() => {
+    if (!isNativeApp() || !study || !userId) return;
+    const run = () => void syncStudyTasks(study, getApiRoot());
+    run();
+    window.addEventListener('online', run);
+    return () => window.removeEventListener('online', run);
+  }, [study, userId]);
   // Delegated tap-to-enlarge: any image inside rendered question rich text
   // (question cards, subtext, chat history) opens the zoomable lightbox. One
   // document-level listener covers every dangerouslySetInnerHTML render site.
@@ -2119,7 +2129,11 @@ export default function App() {
             reduceMotion={reduceMotion}
             onRespond={handleRespond}
             onContinueInfo={handleContinueInfo}
-            onOpenWebview={(url, title) => setWebview({ url, title, qid: currentQuestion?.id })}
+            onOpenWebview={(url, title) => {
+              const qid = currentQuestion?.id;
+              // Native app: run the offline copy when there is one (falls back to the network URL).
+              void resolveTaskUrl(url).then((u) => setWebview({ url: u, title, qid }));
+            }}
             onOpenRecorder={() => setRecorder(currentQuestion)}
             onSkipAudio={handleAudioSkip}
             onOpenKeystroke={() => setKeystroker(currentQuestion)}
