@@ -11,7 +11,7 @@ manual code review of things axe can't detect.
 production build and drives the full participant journey (invite code → consent →
 name → notifications step → tutorial → a practice run of **every question type**)
 in **light and dark** themes, scanning **134 states** in total. See its README to
-run it. It gates `deploy.sh` and runs in CI at release time.
+run it. It gates the deploy workflow and runs in CI at release time.
 
 ## Starting point
 

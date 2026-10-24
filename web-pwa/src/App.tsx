@@ -453,11 +453,10 @@ export default function App() {
     if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
     void configureServerNudges(getApiRoot(), study.id, userId, enrolledAt);
   }, [study?.id, userId, enrolledAt]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Keep an offline copy of the study's interactive tasks (device storage in the native app, Cache API
-  // in the browser PWA). Runs after sign-up, on every app start and whenever the connection returns,
-  // so a download that was cut short is picked up again.
+  // Native app: keep an offline copy of the study's interactive tasks. Runs after sign-up, on every app
+  // start and whenever the connection returns, so a download that was cut short is picked up again.
   useEffect(() => {
-    if (!study || !userId) return;
+    if (!isNativeApp() || !study || !userId) return;
     const run = () => void syncStudyTasks(study, getApiRoot());
     run();
     window.addEventListener('online', run);

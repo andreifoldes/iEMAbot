@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes `task-manifest.json` into every task directory (any folder with an index.html outside
- * `modules/`, e.g. assessments/prices or assessments/@m2c2kit/assessment-x@1.0) so the
+ * Writes `task-manifest.json` into every task directory under <webroot>/assessments/* so the
  * Android app can download a task once and run it offline.
  *
  *   node tools/cognitive-tasks/build-task-manifest.mjs <webroot> [task-dir ...]
@@ -69,22 +68,12 @@ export function buildManifest(webroot, taskRel) {
   return { version, root: '../'.repeat(taskRel.split('/').length), files };
 }
 
-/** Every folder (posix, relative to webroot) that holds an index.html, skipping the shared `modules` tree. */
-export function findTaskDirs(webroot, rel = '') {
-  const out = [];
-  for (const name of readdirSync(join(webroot, rel))) {
-    const r = rel ? `${rel}/${name}` : name;
-    if (!statSync(join(webroot, r)).isDirectory() || (!rel && name === 'modules')) continue;
-    if (existsSync(join(webroot, r, 'index.html'))) out.push(r);
-    else out.push(...findTaskDirs(webroot, r));
-  }
-  return out;
-}
-
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const [webroot, ...tasks] = process.argv.slice(2);
   if (!webroot) { console.error('usage: build-task-manifest.mjs <webroot> [task-dir ...]'); process.exit(2); }
-  const list = tasks.length ? tasks : findTaskDirs(webroot);
+  const list = tasks.length
+    ? tasks
+    : readdirSync(join(webroot, 'assessments')).map((n) => `assessments/${n}`).filter((r) => statSync(join(webroot, r)).isDirectory());
   for (const taskRel of list) {
     const manifest = buildManifest(webroot, taskRel);
     writeFileSync(join(webroot, taskRel, MANIFEST), JSON.stringify(manifest));

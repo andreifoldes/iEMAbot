@@ -26,24 +26,6 @@ clientsClaim();
 const manifest = self.__WB_MANIFEST;
 precacheAndRoute(manifest);
 
-// Offline task copies (see lib/webTaskCache.ts). The page caches a task's files from the server and
-// runs its iframe at `<scope>t/<server path>`; map that back to the cached original, and to the
-// network on a miss. Registered BEFORE the SPA navigation fallback, which would otherwise answer the
-// iframe's navigation with the app's own index page. `__ping` lets the page confirm this route exists.
-const TASK_PREFIX = new URL('t/', self.registration.scope).pathname;
-registerRoute(
-  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith(TASK_PREFIX),
-  async ({ url }) => {
-    if (url.pathname === `${TASK_PREFIX}__ping`) {
-      return new Response('ok', { headers: { 'x-esmira-task-route': '1', 'cache-control': 'no-store' } });
-    }
-    const target = new URL(`/${url.pathname.slice(TASK_PREFIX.length)}`, url.origin);
-    target.search = url.search;
-    const hit = await caches.match(target.toString(), { ignoreSearch: true });
-    return hit ?? fetch(target.toString());
-  },
-);
-
 // SPA navigation fallback → the precached index.html, but never intercept the PHP API
 // or the chat-channel handoff page (its own entry, handoff.html — opened from Telegram).
 // Guarded: in `vite dev` the injected manifest is empty, and createHandlerBoundToURL
@@ -52,7 +34,7 @@ registerRoute(
 if (manifest && manifest.length) {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('index.html'), {
-      denylist: [/^\/esmira\/api\//, /^\/pwa\/handoff/, /^\/pwa\/t\//],
+      denylist: [/^\/esmira\/api\//, /^\/pwa\/handoff/],
     }),
   );
 }
