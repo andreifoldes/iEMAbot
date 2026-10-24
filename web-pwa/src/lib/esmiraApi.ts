@@ -9,7 +9,7 @@
  * CreateDataSet::prepare(). We only add a `joined` event on first submission.
  */
 
-import type { EsmiraStudy, StudiesEnvelope, WearableStatus } from '../types';
+import type { EsmiraStudy, WearableStatus } from '../types';
 import { flushAudioQueue, markAudioReady } from './audioUploads';
 import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
 import { getApiRoot } from './serverRoot';
@@ -47,32 +47,8 @@ export function serverRootUrl(): string {
   }
 }
 
-export interface FetchedStudy {
-  study: EsmiraStudy;
-  serverVersion: number;
-  /** Server VAPID public key for web push (only when a study has push enabled). */
-  vapidPublicKey?: string;
-  /** Wearable providers with credentials configured on the server. */
-  wearableProviders?: string[];
-}
-
-export async function fetchStudy(accessKey: string, studyId?: number): Promise<FetchedStudy> {
-  const url = `${getApiRoot()}api/studies.php?access_key=${encodeURIComponent(accessKey)}`;
-  const resp = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!resp.ok) throw new Error(`studies.php returned ${resp.status}`);
-  const env = (await resp.json()) as StudiesEnvelope;
-  if (!env.success) throw new Error(env.error || 'Study fetch failed');
-  if (!env.dataset?.length) throw new Error('No study found for this access key');
-  const study = studyId != null
-    ? env.dataset.find(s => s.id === studyId) ?? env.dataset[0]
-    : env.dataset[0];
-  return {
-    study,
-    serverVersion: env.serverVersion,
-    vapidPublicKey: env.vapidPublicKey,
-    wearableProviders: env.wearableProviders,
-  };
-}
+export type { FetchedStudy } from './studyFetch.ts';
+export { fetchStudy } from './studyFetch.ts';
 
 /**
  * Register this device's web-push subscription with the server, so the backend
