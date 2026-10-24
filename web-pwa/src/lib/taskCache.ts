@@ -19,11 +19,12 @@ import { downloadTaskWeb, proxyTaskUrl, webCacheAvailable, webTaskReady } from '
 
 const INDEX_KEY = 'esmira_task_cache';
 const BASE_DIR = 'tasks';
+const FILES_KEY = 'esmira_task_files'; // device path -> sha256 of the copy we downloaded
 
 export interface TaskManifest {
   version: string;
   root: string;
-  files: { path: string; size: number }[];
+  files: { path: string; size: number; sha256?: string }[];
 }
 
 export interface CachedTask {
@@ -116,6 +117,12 @@ function cap(): CapGlobal | null {
 function readIndex(): Index {
   try { return JSON.parse(localStorage.getItem(INDEX_KEY) || '{}') as Index; } catch { return {}; }
 }
+function readFileShas(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(FILES_KEY) || '{}') as Record<string, string>; } catch { return {}; }
+}
+function writeFileShas(m: Record<string, string>): void {
+  try { localStorage.setItem(FILES_KEY, JSON.stringify(m)); } catch { /* re-download next time */ }
+}
 function writeIndex(i: Index): void {
   try { localStorage.setItem(INDEX_KEY, JSON.stringify(i)); } catch { /* storage unavailable: re-download next time */ }
 }
@@ -145,15 +152,26 @@ async function downloadTask(c: CapGlobal, taskDir: string): Promise<void> {
   const { localRoot, taskPath, rootUrl } = localRootFor(taskDir, manifest);
   delete index[taskDir]; // never serve a half-written copy
   writeIndex(index);
-  try { await fs.rmdir({ path: localRoot, directory: 'DATA', recursive: true }); } catch { /* nothing there yet */ }
+  // Tasks of one folder share a root (and library modules), so never clear it: files are replaced one by one.
+  const known = readFileShas();
 
-  for (const f of manifest.files) {
-    const path = `${localRoot}${f.path}`;
-    // downloadFile's own `recursive` flag does not create parent folders on Android, so make them first.
-    try { await fs.mkdir({ path: path.replace(/\/[^/]*$/, ''), directory: 'DATA', recursive: true }); } catch { /* already there */ }
-    await fs.downloadFile({ url: new URL(f.path, rootUrl).toString(), path, directory: 'DATA', recursive: true });
-    const { size } = await fs.stat({ path, directory: 'DATA' });
-    if (size !== f.size) throw new Error(`size mismatch for ${f.path}`);
+  try {
+    for (const f of manifest.files) {
+      const path = `${localRoot}${f.path}`;
+      if (f.sha256 && known[path] === f.sha256) {
+        // Already downloaded for another task (shared library) or an earlier version: reuse it if intact.
+        try { if ((await fs.stat({ path, directory: 'DATA' })).size === f.size) continue; } catch { /* missing: fetch it */ }
+      }
+      // downloadFile's own `recursive` flag does not create parent folders on Android, so make them first.
+      try { await fs.mkdir({ path: path.replace(/\/[^/]*$/, ''), directory: 'DATA', recursive: true }); } catch { /* already there */ }
+      delete known[path];
+      await fs.downloadFile({ url: new URL(f.path, rootUrl).toString(), path, directory: 'DATA', recursive: true });
+      const { size } = await fs.stat({ path, directory: 'DATA' });
+      if (size !== f.size) throw new Error(`size mismatch for ${f.path}`);
+      if (f.sha256) known[path] = f.sha256;
+    }
+  } finally {
+    writeFileShas(known); // keep what did arrive, so a retry only fetches the rest
   }
   const done = readIndex();
   done[taskDir] = { version: manifest.version, localRoot, taskPath };

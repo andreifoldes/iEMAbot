@@ -70,11 +70,10 @@ def main() -> int:
         page.wait_for_function("() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('QT0'))", timeout=20000)
         want = len({t.split('?')[0].rsplit('/', 1)[0] for t in tasks})
         for _ in range(360):   # a set is only recorded once COMPLETE; big task sets (images, wasm) take a while
-            done = page.evaluate("Object.keys(JSON.parse(localStorage.getItem('esmira_task_cache_web') || '{}')).length")
+            done = page.evaluate("Object.keys(JSON.parse(localStorage.getItem('esmira_task_cache_web') || '{}').tasks || {}).length")
             if done >= want: break
             page.wait_for_timeout(500)
-        names = [k for k in page.evaluate('caches.keys()') if k.startswith('esmira-task:')]
-        print('cached task sets:', len(names))
+        print('cached task sets:', done, 'files:', page.evaluate("caches.open('esmira-task-files').then(c => c.keys()).then(k => k.length)"))
         ctx.set_offline(True)
         for i, t in enumerate(tasks):
             # relaunch the app OFFLINE for every task: shell from the service worker, study from its cache

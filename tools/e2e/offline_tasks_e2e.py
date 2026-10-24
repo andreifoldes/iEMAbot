@@ -82,7 +82,7 @@ def main() -> int:
         # wait until the questionnaire is offered, and for the task copy to land in the Cache API
         page.wait_for_function("() => [...document.querySelectorAll('button')].some(b => b.textContent.includes('Task check'))", timeout=20000)
         for _ in range(40):  # poll: the copy is downloaded in the background
-            if any(k.startswith('esmira-task:') for k in page.evaluate("caches.keys()")): break
+            if page.evaluate("Object.keys(JSON.parse(localStorage.getItem('esmira_task_cache_web') || '{}').tasks || {}).length") >= 1: break
             page.wait_for_timeout(500)
         print('cached:', page.evaluate("caches.keys()"))
         ctx.set_offline(True)

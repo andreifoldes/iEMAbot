@@ -125,3 +125,29 @@ test('a bare API root (browser PWA: "/esmira/") still finds absolute task URLs',
   assert.equal(n.downloaded.length, 2);
   delete (globalThis as Record<string, unknown>).location;
 });
+
+test('tasks sharing a folder never clear it, and a shared file is downloaded once', async () => {
+  store.clear();
+  const dirB = 'https://srv.example/webapp/m2c2/assessments/other/';
+  const two = {
+    questionnaires: [{ pages: [{ inputs: [
+      { name: 'a', responseType: 'webapp', url: `${DIR}index.html` },
+      { name: 'b', responseType: 'webapp', url: `${dirB}index.html` },
+    ] }] }],
+  } as never;
+  const shaManifest = (own: string) => ({ version: own, root: '../../', files: [
+    { path: `assessments/${own}/index.html`, size: 1, sha256: `s-${own}` },
+    { path: 'modules/core@1/dist/i.js', size: 1, sha256: 'lib' },
+  ] });
+  const n = fakeNative({});
+  (globalThis as Record<string, unknown>).Capacitor = {
+    ...((globalThis as Record<string, unknown>).Capacitor as object),
+    Plugins: {
+      ...(((globalThis as Record<string, unknown>).Capacitor as { Plugins: object }).Plugins),
+      CapacitorHttp: { get: async ({ url }: { url: string }) => ({ status: 200, data: shaManifest(url.includes('/other/') ? 'other' : 'pvt-ba') }) },
+    },
+  };
+  await syncStudyTasks(two, 'https://srv.example/esmira/');
+  assert.equal(n.removed.length, 0);
+  assert.equal(n.downloaded.filter((p) => p.endsWith('i.js')).length, 1);
+});
