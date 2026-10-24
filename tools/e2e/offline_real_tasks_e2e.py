@@ -12,7 +12,7 @@ task, failing on any request that fails or any task that does not render.
   e.g. ... ~/mirror/webapp m2c2/assessments/pvt-ba/index.html?show_end_screen=true novel-assessments/dma/index.html
 """
 from __future__ import annotations
-import json, mimetypes, subprocess, sys, threading
+import json, mimetypes, os, subprocess, sys, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote
@@ -25,7 +25,12 @@ GEN = ROOT / 'tools' / 'cognitive-tasks' / 'build-task-manifest.mjs'
 def main() -> int:
     if len(sys.argv) < 3: print(__doc__); return 2
     web = Path(sys.argv[1]).resolve(); tasks = sys.argv[2:]
-    for sub in sorted(p for p in web.iterdir() if p.is_dir()):
+    if os.environ.get('E2E_BUNDLED_ONLY'):
+        # no manifests on the "server": the app must use the ones bundled in it
+        for m in web.rglob('task-manifest.json'): m.unlink()
+        print('server publishes no manifests; using the bundled ones')
+    else:
+      for sub in sorted(p for p in web.iterdir() if p.is_dir()):
         r = subprocess.run(['node', str(GEN), str(sub)], capture_output=True, text=True)
         print(f'manifests {sub.name}:', r.stdout.strip().replace('\n', '; ')[:300], r.stderr.strip()[:200])
     state = {'origin': '', 'failed': []}

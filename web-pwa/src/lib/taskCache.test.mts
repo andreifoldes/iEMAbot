@@ -109,12 +109,13 @@ test('a failed or short download leaves no usable copy (falls back to the networ
   assert.equal(await resolveTaskUrl(`${DIR}index.html`), `${DIR}index.html`);
 });
 
-test('no manifest published: task stays online-only', async () => {
+test('no manifest published anywhere: task stays online-only', async () => {
   store.clear();
   const n = fakeNative({});
-  await syncStudyTasks(study, 'https://srv.example/esmira/');
+  const unknown = { questionnaires: [{ pages: [{ inputs: [{ name: 'u', responseType: 'webapp', url: 'https://srv.example/webapp/not-bundled/task/index.html' }] }] }] } as never;
+  await syncStudyTasks(unknown, 'https://srv.example/esmira/');
   assert.equal(n.downloaded.length, 0);
-  assert.equal(await resolveTaskUrl(`${DIR}index.html`), `${DIR}index.html`);
+  assert.equal(await resolveTaskUrl('https://srv.example/webapp/not-bundled/task/index.html'), 'https://srv.example/webapp/not-bundled/task/index.html');
 });
 
 test('a bare API root (browser PWA: "/esmira/") still finds absolute task URLs', async () => {
@@ -150,4 +151,23 @@ test('tasks sharing a folder never clear it, and a shared file is downloaded onc
   await syncStudyTasks(two, 'https://srv.example/esmira/');
   assert.equal(n.removed.length, 0);
   assert.equal(n.downloaded.filter((p) => p.endsWith('i.js')).length, 1);
+});
+
+test('no manifest published on the host: the one bundled with the app is used (any host, same path)', async () => {
+  store.clear();
+  const { bundledManifestFor } = await import('./bundledManifests.ts');
+  const dir = 'https://other-server.example/webapp/novel-assessments/dma/';
+  const bundled = bundledManifestFor(dir);
+  assert.ok(bundled && bundled.files.length >= 1, 'dma manifest is bundled');
+  const sizes = new Map(bundled.files.map((f) => [`tasks/other-server.example${new URL(bundled.root, dir).pathname}${f.path}`, f.size]));
+  const n = fakeNative({ sizeOf: (p) => sizes.get(p) ?? -1 });
+  const dmaStudy = { questionnaires: [{ pages: [{ inputs: [{ name: 'd', responseType: 'webapp', url: `${dir}index.html` }] }] }] } as never;
+  await syncStudyTasks(dmaStudy, 'https://other-server.example/esmira/');
+  assert.equal(n.downloaded.length, bundled.files.length);
+  assert.match(await resolveTaskUrl(`${dir}index.html?x=1`), /_capacitor_file_.*dma\/index\.html\?x=1$/);
+});
+
+test('an unknown task with no manifest anywhere stays online-only', async () => {
+  const { bundledManifestFor } = await import('./bundledManifests.ts');
+  assert.equal(bundledManifestFor('https://x.example/webapp/nothing/here/'), null);
 });

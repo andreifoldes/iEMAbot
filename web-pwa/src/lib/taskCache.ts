@@ -15,6 +15,7 @@
 import { isNativeApp } from './platform.ts';
 import { extractCognitive } from './esmiraAdapter.ts';
 import type { EsmiraStudy } from '../types.ts';
+import { bundledManifestFor } from './bundledManifests.ts';
 import { downloadTaskWeb, proxyTaskUrl, webCacheAvailable, webTaskReady } from './webTaskCache.ts';
 
 const INDEX_KEY = 'esmira_task_cache';
@@ -128,6 +129,12 @@ function writeIndex(i: Index): void {
 }
 
 async function fetchManifest(http: HttpPlugin | null, taskDir: string): Promise<TaskManifest | null> {
+  // A manifest published next to the task wins (it is regenerated whenever the task is deployed);
+  // otherwise the one bundled with the app, so no server-side step is required.
+  return (await fetchPublishedManifest(http, taskDir)) ?? bundledManifestFor(taskDir);
+}
+
+async function fetchPublishedManifest(http: HttpPlugin | null, taskDir: string): Promise<TaskManifest | null> {
   try {
     const url = `${taskDir}task-manifest.json`;
     // Native: the plugin's own HTTP stack (no CORS). Browser: a plain same-origin fetch.
