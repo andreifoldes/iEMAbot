@@ -40,7 +40,16 @@ registerRoute(
     const target = new URL(`/${url.pathname.slice(TASK_PREFIX.length)}`, url.origin);
     target.search = url.search;
     const hit = await caches.match(target.toString(), { ignoreSearch: true });
-    return hit ?? fetch(target.toString());
+    const upstream = hit ?? (await fetch(target.toString()));
+    // Re-wrap: a Response keeps the URL it was fetched from (/webapp/...), and the browser resolves a
+    // module script's relative imports against THAT, so the task would leave this path and go to the
+    // network. A fresh Response has no URL of its own, so the request URL (under the task route) stays
+    // the base for everything the task imports.
+    return new Response(await upstream.blob(), {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: upstream.headers,
+    });
   },
 );
 
