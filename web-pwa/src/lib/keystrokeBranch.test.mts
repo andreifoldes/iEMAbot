@@ -68,3 +68,23 @@ test('recording the memo leaves the keystroke fallback hidden', () => {
   assert.equal(next, null);
   assert.equal(engine.isComplete(), true);
 });
+
+test('progress advances when tasks are skipped, not only answered', () => {
+  const engine = new OfflineSurveyEngine(adaptQuestionnaire(1, makeQuestionnaire(), 0));
+  assert.equal(engine.getProgress(), 0);
+
+  // Skip the memo (its typed fallback opens): one of two items passed.
+  engine.activateFallback('memoText');
+  engine.skip();
+  assert.equal(engine.getProgress(), 0.5);
+
+  // Skip the typed fallback too: nothing was answered, but the task is behind the participant.
+  engine.skip();
+  assert.equal(engine.getProgress(), 1);
+});
+
+test('progress counts a hidden fallback once the memo is recorded', () => {
+  const engine = new OfflineSurveyEngine(adaptQuestionnaire(1, makeQuestionnaire(), 0));
+  engine.respond('memo', '12345');
+  assert.equal(engine.getProgress(), 1);
+});

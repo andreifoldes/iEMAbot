@@ -301,18 +301,18 @@ export class OfflineSurveyEngine {
     return this.state.complete;
   }
 
+  /**
+   * Share of questions dealt with: answered ones plus every question the participant has been
+   * moved past (skipped, or a hidden branch/fallback), so skipping a task still advances the bar.
+   */
   getProgress(): number {
-    const total = this.session.questions.length;
-    if (total === 0) return 1;
-    const answered = Object.keys(this.state.responses).length;
-    let skipped = 0;
-    for (let i = 0; i < this.state.currentIndex; i++) {
-      const q = this.session.questions[i];
-      if (q && !this.isVisible(q) && !this.state.responses[q.id]) {
-        skipped++;
-      }
-    }
-    return Math.min((answered + skipped) / total, 1);
+    const questions = this.session.questions;
+    if (questions.length === 0 || this.state.complete) return 1;
+    let done = 0;
+    questions.forEach((q, i) => {
+      if (i < this.state.currentIndex || this.state.responses[q.id] !== undefined) done++;
+    });
+    return Math.min(done / questions.length, 1);
   }
 
   private advanceToNextUnanswered(): void {
