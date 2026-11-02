@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace backend;
 
 use backend\dataClasses\StudyStatisticsEntry;
+use Throwable;
+use backend\notifications\ParticipantWithdrawals;
 use backend\exceptions\CriticalException;
 use backend\exceptions\DataSetException;
 use backend\notifications\ParticipantVariableStore;
-use backend\notifications\SensorTriggerScheduler;
+use backend\schedule\Schedule;
 use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\UserDataStore;
 use stdClass;
@@ -298,39 +300,48 @@ class CreateDataSet {
 			}
 		}
 		
-		$variableNames = $this->getVariableNames($studyId);
-		if(!empty($variableNames)) {
-			$values = array_intersect_key($questionnaireData, array_flip($variableNames));
-			if(!empty($values))
-				$this->pendingVariables[$datasetId] = ['studyId' => $studyId, 'values' => $values, 'time' => min((int) ($dataSet->responseTime ?? 0), Main::getMilliseconds())]; // client clock: never in the future
-		}
+		[$variableNames, $scheduled] = $this->getVariableNames($studyId);
+		$values = $variableNames ? array_intersect_key($questionnaireData, array_flip($variableNames)) : [];
+		$isCheckin = in_array($questionnaireId, $scheduled, true);
+		if(!empty($values) || $isCheckin)
+			$this->pendingVariables[$datasetId] = [
+				'studyId' => $studyId, 'values' => $values, 'qid' => $isCheckin ? $questionnaireId : null,
+				'time' => min((int) ($dataSet->responseTime ?? 0), Main::getMilliseconds()), // client clock: never in the future
+			];
 		
 		++$this->questionnaireEvents;
 		
 		$this->cache->addToQuestionnaireCache($studyId, $questionnaireId, $datasetId, $questionnaireData);
 	}
 	
-	/** @return string[] */
+	/**
+	 * Item names whose answers the schedule reads, and the questionnaires it has check-ins for (whose completions it
+	 * needs: done check-ins, wake-up from the wake-up check-in, the cool-down), see ParticipantVariableStore.
+	 * @return array{0: string[], 1: int[]}
+	 */
 	private function getVariableNames(int $studyId): array {
 		if(isset($this->variableNamesIndex[$studyId]))
 			return $this->variableNamesIndex[$studyId];
 		try {
 			$study = json_decode(Configs::getDataStore()->getStudyStore()->getStudyConfigAsJson($studyId), true);
-			$names = is_array($study) ? SensorTriggerScheduler::variableNames($study) : [];
+			$entry = is_array($study) ? [Schedule::variableNames($study), Schedule::questionnaireIds($study)] : [[], []];
 		}
 		catch(\Throwable $e) { // a scheduling helper must never block saving responses
-			$names = [];
+			$entry = [[], []];
 		}
-		return $this->variableNamesIndex[$studyId] = $names;
+		return $this->variableNamesIndex[$studyId] = $entry;
 	}
 	
 	private function recordVariables(int $datasetId) {
 		if(!isset($this->pendingVariables[$datasetId]))
 			return;
-		['studyId' => $studyId, 'values' => $values, 'time' => $time] = $this->pendingVariables[$datasetId];
+		['studyId' => $studyId, 'values' => $values, 'qid' => $qid, 'time' => $time] = $this->pendingVariables[$datasetId];
 		unset($this->pendingVariables[$datasetId]);
 		try {
-			ParticipantVariableStore::record($studyId, $this->userId, $values, $time);
+			if($values)
+				ParticipantVariableStore::record($studyId, $this->userId, $values, $time);
+			if($qid !== null)
+				ParticipantVariableStore::recordCompletion($studyId, $this->userId, $qid, $time);
 		}
 		catch(\Throwable $e) {
 			Main::report("Could not record participant variables for study $studyId:\n" .$e->getMessage());
@@ -454,8 +465,29 @@ class CreateDataSet {
 			
 			if($eventType === self::DATASET_TYPE_QUESTIONNAIRE)
 				$this->handleQuestionnaireDataSet($dataSet);
-			else if($eventType === self::DATASET_TYPE_JOINED)
+			else if($eventType === self::DATASET_TYPE_JOINED) {
 				++$this->joinEvents;
+				$this->updateWithdrawal($studyId, false);
+			}
+			else if($eventType === self::DATASET_TYPE_QUIT)
+				$this->updateWithdrawal($studyId, true);
+		}
+	}
+	
+	/**
+	 * A `quit` event withdraws the participant: no reminder (web push, native poll, chat channel)
+	 * is sent to them from now on and their delivery state is dropped. A `joined` event lifts the
+	 * withdrawal again. Never fails the dataset: the event itself is already recorded.
+	 */
+	private function updateWithdrawal(int $studyId, bool $quit) {
+		try {
+			if($quit)
+				ParticipantWithdrawals::withdraw($studyId, $this->userId, 'quit');
+			else
+				ParticipantWithdrawals::rejoined($studyId, $this->userId);
+		}
+		catch(Throwable $e) {
+			Main::reportError($e, $quit ? 'Could not withdraw participant after quit event' : 'Could not lift participant withdrawal after join event');
 		}
 	}
 	

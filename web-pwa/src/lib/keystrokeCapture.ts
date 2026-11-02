@@ -14,12 +14,15 @@
  * Focus loss and paste emit marker rows so offline analysis never treats away-time or a
  * paste as an inter-key interval.
  *
- * The log is a self-describing CSV: `class,hold,release,press` (seconds from t0 = first
- * observed event). Feature computation (percentiles, correction rate, pauses, sparsity
+ * The log is a self-describing CSV: `class,hold,release,press,source` (seconds from t0 = first
+ * observed event). `source` says which clock stamped the row: `dom` (the WebView/browser event's
+ * timeStamp) or `ime` (the Android app's native InputConnection hook, see nativeKeystrokes.ts —
+ * stamped when the keyboard's edit reaches the app, before the renderer and JS event loop add
+ * their latency and jitter). Feature computation (percentiles, correction rate, pauses, sparsity
  * threshold) is done offline by the researcher — no on-device aggregation, no black box.
  *
  * Handlers take plain event-like objects (not real DOM events) so the whole thing is unit
- * testable under `node --test`; `KeystrokeRecorder.tsx` is the thin DOM adapter that forwards
+ * testable under `node --test`; `useKeystrokeCapture.ts` is the thin DOM adapter that forwards
  * real listeners here.
  */
 
@@ -55,8 +58,20 @@ export interface BeforeInputLike {
   timeStamp: number;
 }
 
+/**
+ * A soft-keyboard edit timed by the native app (already classed on the device, never a character),
+ * with `timeStamp` converted to the same clock as DOM `event.timeStamp` (performance.now()).
+ */
+export interface NativeKeyRow {
+  cls: KeystrokeClass;
+  timeStamp: number;
+}
+
+/** Which clock stamped a row (CSV `source` column). */
+export type RowSource = 'dom' | 'ime';
+
 export interface KeystrokeResult {
-  /** The classed event log as CSV text (`class,hold,release,press`). */
+  /** The classed event log as CSV text (`class,hold,release,press,source`). */
   csv: string;
   /** The typed answer content (kept entirely separate from the dynamics log). */
   transcript: string;
@@ -68,6 +83,9 @@ interface Row {
   press: number;
   release: number | null;
   hold: number | null;
+  source: RowSource;
+  /** Recorded from a soft-keyboard `beforeinput` (replaceable by native IME rows). */
+  soft?: boolean;
 }
 
 const NAV_KEYS = new Set([
@@ -156,7 +174,7 @@ export class KeystrokeRecorderCore {
   onFocus(timeStamp: number): void {
     if (this.focused) return; // already focused — ignore the duplicate (blur/focus + visibilitychange)
     this.focused = true;
-    this.rows.push({ cls: 'focus_gained', press: this.rel(timeStamp), release: null, hold: null });
+    this.rows.push({ cls: 'focus_gained', press: this.rel(timeStamp), release: null, hold: null, source: 'dom' });
   }
 
   onBlur(timeStamp: number): void {
@@ -165,7 +183,7 @@ export class KeystrokeRecorderCore {
     // Drop dangling keydowns (no keyup) so away-time never becomes a bogus hold, then mark the gap.
     this.pending.clear();
     this.lastKeydownUsable = false;
-    this.rows.push({ cls: 'focus_lost', press: this.rel(timeStamp), release: null, hold: null });
+    this.rows.push({ cls: 'focus_lost', press: this.rel(timeStamp), release: null, hold: null, source: 'dom' });
   }
 
   onKeyDown(e: KeyEventLike): void {
@@ -185,7 +203,7 @@ export class KeystrokeRecorderCore {
     if (!down) return;
     this.pending.delete(e.code);
     const release = this.rel(e.timeStamp);
-    this.rows.push({ cls: down.cls, press: down.press, release, hold: round3(release - down.press) });
+    this.rows.push({ cls: down.cls, press: down.press, release, hold: round3(release - down.press), source: 'dom' });
     this.physicalUsed = true;
   }
 
@@ -194,13 +212,13 @@ export class KeystrokeRecorderCore {
     if (cls === null) return;
     // Paste is always marked, on either path (a paste boundary must never look like typing).
     if (cls === 'paste') {
-      this.rows.push({ cls: 'paste', press: this.rel(e.timeStamp), release: null, hold: null });
+      this.rows.push({ cls: 'paste', press: this.rel(e.timeStamp), release: null, hold: null, source: 'dom' });
       return;
     }
     // On desktop a usable keydown already covers this insertion (physical path records it with hold),
     // so skip to avoid double-counting. On soft keyboards there was no usable keydown → record here.
     if (this.lastKeydownUsable) return;
-    this.rows.push({ cls, press: this.rel(e.timeStamp), release: null, hold: null });
+    this.rows.push({ cls, press: this.rel(e.timeStamp), release: null, hold: null, source: 'dom', soft: true });
     this.softUsed = true;
   }
 
@@ -210,14 +228,33 @@ export class KeystrokeRecorderCore {
     return 'physical';
   }
 
-  /** Finalise: flush any keys still held (press-only), serialise the log, and take the transcript. */
-  finish(transcript: string): KeystrokeResult {
+  /**
+   * Swap the DOM soft-keyboard rows for the native app's IME-timed ones. Both observe the same
+   * edits, so keeping both would double count; physical-key rows and the focus/paste markers stay.
+   * An empty list (no hook, or it saw nothing) keeps the DOM rows, so a hook failure loses nothing.
+   */
+  private applyNative(native: NativeKeyRow[]): void {
+    if (native.length === 0) return;
+    this.rows = this.rows.filter((r) => !r.soft);
+    for (const n of native) {
+      this.rows.push({ cls: n.cls, press: this.rel(n.timeStamp), release: null, hold: null, source: 'ime' });
+    }
+    this.rows.sort((a, b) => a.press - b.press); // stable: equal stamps keep their order
+    this.softUsed = true;
+  }
+
+  /**
+   * Finalise: flush any keys still held (press-only), merge native IME timings when the Android
+   * app supplied them, serialise the log, and take the transcript.
+   */
+  finish(transcript: string, native: NativeKeyRow[] = []): KeystrokeResult {
     for (const down of this.pending.values()) {
-      this.rows.push({ cls: down.cls, press: down.press, release: null, hold: null });
+      this.rows.push({ cls: down.cls, press: down.press, release: null, hold: null, source: 'dom' });
     }
     this.pending.clear();
-    const header = 'class,hold,release,press';
-    const body = this.rows.map((r) => `${r.cls},${fmt(r.hold)},${fmt(r.release)},${fmt(r.press)}`);
+    this.applyNative(native);
+    const header = 'class,hold,release,press,source';
+    const body = this.rows.map((r) => `${r.cls},${fmt(r.hold)},${fmt(r.release)},${fmt(r.press)},${r.source}`);
     return {
       csv: [header, ...body].join('\n') + '\n',
       transcript,

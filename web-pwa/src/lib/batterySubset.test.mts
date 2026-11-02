@@ -1,6 +1,7 @@
 /**
  * Tests for the live cognitive battery: a page of only cognitive tasks shows LIVE_BATTERY_SIZE of
- * them in a live run, all of them in a practice run, and the same ones after a resume.
+ * them in a live run, all of them in a practice run, and the same ones after a resume. Randomized pages also keep
+ * their order after a resume.
  *
  * Run with `npm test`.
  */
@@ -48,5 +49,28 @@ describe('cognitive battery subset', () => {
     assert.deepEqual(ids(questionnaire([[task('a'), task('b')]])), ['a', 'b']);
     const mixed = questionnaire([[task('a'), task('b'), { responseType: 'text_input', name: 't', text: 't' }]]);
     assert.equal(ids(mixed).length, 3);
+  });
+});
+
+describe('randomized page order on resume', () => {
+  const item = (name: string) => ({ responseType: 'likert', name, text: name });
+  const ITEMS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const shuffled = { internalId: 1, title: 'Q', pages: [{ randomized: true, inputs: ITEMS.map(item) }] } as unknown as EsmiraQuestionnaire;
+
+  it('keeps the order shown before, so the saved position still points at the same question', () => {
+    const first = ids(shuffled);
+    for (let i = 0; i < 20; i++) assert.deepEqual(ids(shuffled, { order: first }), first);
+  });
+
+  it('puts items added since at the end', () => {
+    const before = ['h', 'g', 'f', 'e', 'd', 'c'];
+    const got = ids(shuffled, { order: before });
+    assert.deepEqual(got.slice(0, before.length), before);
+    assert.deepEqual(new Set(got.slice(before.length)), new Set(['a', 'b']));
+  });
+
+  it('leaves pages that are not randomized in authored order', () => {
+    const fixed = { internalId: 1, title: 'Q', pages: [{ inputs: ITEMS.map(item) }] } as unknown as EsmiraQuestionnaire;
+    assert.deepEqual(ids(fixed, { order: [...ITEMS].reverse() }), ITEMS);
   });
 });

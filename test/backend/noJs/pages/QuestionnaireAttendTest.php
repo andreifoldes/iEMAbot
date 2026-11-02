@@ -21,6 +21,8 @@ use testConfigs\BaseNoJsTestSetup;
 require_once __DIR__ . '/../../../autoload.php';
 
 class QuestionnaireAttendTest extends BaseNoJsTestSetup {
+	/** Makes the mocked responses store fail its save (set per test). */
+	private $hasSavingError = false;
 	protected $configs = [
 		123 => ['id' => 123, 'title' => 'study1', 'webQuestionnaireCompletedInstructions' => 'completed', 'questionnaires' => [
 			['internalId' => 1111, 'title'=>'questionnaire', 'pages' => [

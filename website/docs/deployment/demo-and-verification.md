@@ -23,7 +23,7 @@ rebuild). The admin password is random and printed once; the demo study's invite
 
 | File | Purpose |
 | --- | --- |
-| `docker-compose.demo.yml` | Builds **this repository's** image (the root `docker-compose.yml` pulls upstream's) and sets `ESMIRA_PATH_ALIAS=/esmira`. |
+| `scripts/demo/docker-compose.demo.yml` | Builds **this repository's** image (the root `docker-compose.yml` pulls upstream's) and sets `ESMIRA_PATH_ALIAS=/esmira`. |
 | `demo/demo-study.json` | A one-questionnaire demo study (a 5-point mood item and an optional free-text note). |
 | `scripts/demo/bootstrap.sh` | Creates the admin and imports the study through the real HTTP API. Safe to re-run. |
 | `scripts/demo/smoke.sh` | Black-box server checks (curl). |

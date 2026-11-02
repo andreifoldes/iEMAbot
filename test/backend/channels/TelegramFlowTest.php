@@ -45,18 +45,23 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 		$raw = file_get_contents(PathsFS::fileChannelBinding(self::STUDY, $binding['userId']));
 		$this->assertStringNotContainsString(self::CHAT, $raw);
 
-		// The dispatcher's first run only initialises the schedule cursor; a run a day later
-		// finds the 09:00 signal and opens the questionnaire.
+		// The dispatcher's first run only starts the participant's schedule (nothing due earlier is back-filled); a run
+		// just after the next 09:00, their local time, finds the morning check-in and opens the questionnaire.
+		$tz = ChannelStudies::tzOffsetMin($binding, $now);
+		$at = intdiv($now - $tz * 60000, 86400000) * 86400000 + 9 * 3600000 + $tz * 60000;
+		if($at <= $now)
+			$at += 86400000;
+		$at += 60000;
 		$this->calls = [];
 		ChannelDispatcher::run($now);
 		$this->assertSame([], $this->calls);
-		$stats = ChannelDispatcher::run($now + 86400000);
+		$stats = ChannelDispatcher::run($at);
 		$this->assertSame(1, $stats['started']);
 		$this->assertStringContainsString('Good morning!', $this->sentTexts());
 		$this->assertStringContainsString('Rested?', $this->sentTexts());
 
-		$this->press($this->buttonData('Yes'), $now + 86400000);
-		$this->press($this->buttonData('4'), $now + 86400000);
+		$this->press($this->buttonData('Yes'), $at);
+		$this->press($this->buttonData('4'), $at);
 		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
 		$csv = file_get_contents(PathsFS::fileResponses(self::STUDY, (string) self::QID));
 		$this->assertStringContainsString($binding['userId'], $csv);
@@ -64,10 +69,10 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 
 		// the same signal is never offered twice
 		$this->calls = [];
-		ChannelDispatcher::run($now + 86400000 + 60000);
+		ChannelDispatcher::run($at + 60000);
 		$this->assertSame([], $this->calls);
 
-		$this->text('/stop', $now + 86400000);
+		$this->text('/stop', $at);
 		$this->assertNull(ChannelBindingStore::findByChat('telegram', self::CHAT));
 		$this->assertStringContainsString('You have left the study', $this->sentTexts());
 	}
@@ -135,7 +140,7 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 			$this->calls[] = [$method, $params];
 			return ['ok' => true, 'result' => ['message_id' => ++$this->messageId]];
 		};
-		$channel = new class(new TelegramApiClient('t', $fake)) extends TelegramChannel {
+		$channel = new class(new TelegramApiClient('t', $fake), ReadingPace::off()) extends TelegramChannel {
 			public function fetchMedia(array $media): ?string {
 				$tmp = tempnam(sys_get_temp_dir(), 'voice');
 				file_put_contents($tmp, 'OggS-fake-voice-' . $media['ref']);

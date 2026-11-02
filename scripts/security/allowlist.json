@@ -16,18 +16,6 @@
       "path": "^deploy\\.sh$",
       "reason": "REMOTE_DIR hard-codes a real user's home path. Parameterise via an env var, or accept.",
       "pending": true
-    },
-    {
-      "rule": "unix-home-path",
-      "path": "(?:^|/)\\.claude/logs/",
-      "reason": "AI session logs embed a local home path. Remove from the tree and decide on history rewrite.",
-      "pending": true
-    },
-    {
-      "rule": "ai-session-log",
-      "path": "(?:^|/)\\.claude/logs/",
-      "reason": "AI session logs are tracked despite .gitignore. 4 are already deleted locally but not committed. Remove from the tree, review contents, decide on history rewrite.",
-      "pending": true
     }
   ]
 }

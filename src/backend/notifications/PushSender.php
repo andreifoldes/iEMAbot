@@ -7,6 +7,7 @@ use backend\Configs;
 use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\Main;
+use backend\schedule\Schedule;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 use Throwable;
@@ -26,6 +27,10 @@ class PushSender {
 	// the participant never sees more than one ESMira reminder at a time. The service
 	// worker also uses it as the default tag.
 	const REMINDER_TAG = 'esmira-reminder';
+	/** minishlink/web-push's default TTL (4 weeks), for a push without a known end. */
+	const DEFAULT_TTL = 2419200;
+	/** The study-complete message is held for a phone that is offline for a day at most. */
+	const STUDY_END_TTL = 86400;
 
 	public static function run(): array {
 		$publicKey  = Configs::get('vapid_public_key');
@@ -57,14 +62,11 @@ class PushSender {
 		$endpointMeta = []; // push endpoint -> ['s'=>studyId, 'u'=>userId], for delivery logging
 
 		foreach(self::listStudyIds() as $studyId) {
-			try {
-				$study = json_decode($studyStore->getStudyLangConfigAsJson($studyId, $defaultLang), true);
-			}
-			catch(Throwable $e) {
-				continue; // unreadable / no config in this lang — skip
-			}
-			if(!is_array($study) || empty($study['webPushEnabled']))
+			$defaultStudy = self::loadStudy($studyStore, $studyId, $defaultLang);
+			if($defaultStudy === null || empty($defaultStudy['webPushEnabled']))
 				continue;
+			// Texts in the participant's language (recorded at subscribe time), as the app shows them.
+			$studiesByLang = [$defaultLang => $defaultStudy];
 
 			$folder = PathsFS::folderPushSubscriptions($studyId);
 			if(!is_dir($folder))
@@ -75,12 +77,23 @@ class PushSender {
 				if(self::isStateFile($entry))
 					continue;
 				$file = $folder . $entry;
-				$data = json_decode(@file_get_contents($file), true);
-				if(!is_array($data) || empty($data['subscription']['endpoint']))
+				$data = self::readJsonFile($file);
+				if($data === null || empty($data['subscription']['endpoint']))
 					continue;
 
 				$userId = (string) ($data['userId'] ?? $entry);
+				// A participant who left the study gets nothing more. Their subscription is
+				// normally deleted the moment they withdraw; this catches one that was written
+				// afterwards (an older app build, a second device) and drops it for good.
+				if(ParticipantWithdrawals::isWithdrawn($studyId, $userId)) {
+					ParticipantWithdrawals::forgetDeliveryState($studyId, $userId);
+					continue;
+				}
 				$tz     = (int) ($data['tzOffset'] ?? 0);
+				$lang   = is_string($data['lang'] ?? null) && $data['lang'] !== '' ? $data['lang'] : $defaultLang;
+				if(!array_key_exists($lang, $studiesByLang))
+					$studiesByLang[$lang] = self::loadStudy($studyStore, $studyId, $lang);
+				$study = $studiesByLang[$lang] ?? $defaultStudy;
 
 				$stateFile = $file . '.state';
 				$state     = self::readJsonFile($stateFile);
@@ -97,6 +110,25 @@ class PushSender {
 				// each successive push replace the previous one, so at most one is ever visible.
 				// $sent is updated in place with the keys we actually queue this run.
 				$payload = self::buildCoalescedPayload($studyId, $userId, $study, $occurrences, $sent, $now);
+				$ttl = $payload === null ? 0 : self::ttlSeconds($payload, $now);
+				// The participant's last check-in has just closed or been completed: one "study complete" message,
+				// which takes the place of the last reminder on the phone (same tag) instead of leaving it there.
+				// Recorded once, sent or not, so it never repeats; a study that ended days ago is recorded without a
+				// message (and no longer checked every minute).
+				$ended = (is_array($state) && isset($state['ended'])) ? (int) $state['ended'] : 0;
+				if($payload === null && $ended === 0) {
+					$end = DueOccurrences::studyEnded($studyId, $userId, $study, $tz, (int) ($data['created'] ?? $now), $now);
+					if($end !== null)
+						$ended = $now;
+					if($end === Schedule::ENDED_JUST) {
+						$payload = self::studyEndPayload($study);
+						$ttl = self::STUDY_END_TTL;
+					}
+				}
+				// Switched off in the app: nothing is sent, but the cursor still moves on below, so turning
+				// notifications back on never delivers a backlog.
+				if(ParticipantNotificationPrefs::isOff($studyId, $userId))
+					$payload = null;
 				if($payload !== null) {
 					try {
 						$sub = Subscription::create([
@@ -106,19 +138,22 @@ class PushSender {
 								'auth'   => $data['subscription']['keys']['auth'] ?? '',
 							],
 						]);
-						$webPush->queueNotification($sub, json_encode($payload));
-						$endpointMeta[$data['subscription']['endpoint']] = ['s' => $studyId, 'u' => $userId];
+						$webPush->queueNotification($sub, json_encode($payload), ['TTL' => $ttl]);
+						if(!empty($payload['items'])) // a reminder, for the funnel (not the study-complete message)
+							$endpointMeta[$data['subscription']['endpoint']] = ['s' => $studyId, 'u' => $userId];
 						$queued++;
 					}
 					catch(Throwable $e) {
 						/* malformed subscription — skip */
 					}
 				}
-				// Advance the cursor and persist realized random times (so they stay
-				// stable across the per-minute runs) and the sent ledger (pruned to a
-				// rolling 48h window) whether or not anything was due.
+				// Persist the schedule's ledger and the sent ledger (pruned to a rolling 48h window) whether or not
+				// anything was due.
 				$sent = self::pruneSentLedger($sent, $now);
-				try { FileSystemBasics::writeFile($stateFile, json_encode(['cursor' => $now, 'realized' => $schedule['realized'], 'sent' => $sent, 'sensor' => $schedule['sensor']])); }
+				$newState = ['sent' => $sent, 'schedule' => $schedule['schedule'] ?? []];
+				if($ended > 0)
+					$newState['ended'] = $ended;
+				try { FileSystemBasics::writeFile($stateFile, json_encode($newState)); }
 				catch(Throwable $e) { /* non-fatal */ }
 			}
 		}
@@ -136,6 +171,17 @@ class PushSender {
 
 		self::writeHeartbeat($studiesProcessed, $queued);
 		return ['studies' => $studiesProcessed, 'queued' => $queued];
+	}
+
+	/** Decoded study config in one language (falls back to the main config), or null if unreadable. */
+	private static function loadStudy($studyStore, int $studyId, string $lang): ?array {
+		try {
+			$study = json_decode($studyStore->getStudyLangConfigAsJson($studyId, $lang), true);
+		}
+		catch(Throwable $e) {
+			return null;
+		}
+		return is_array($study) ? $study : null;
 	}
 
 	/**
@@ -221,6 +267,8 @@ class PushSender {
 				if(!is_array($data) || empty($data['subscription']['endpoint']))
 					continue;
 				$userId = (string) ($data['userId'] ?? $entry);
+				if(ParticipantWithdrawals::isWithdrawn($studyId, $userId) || ParticipantNotificationPrefs::isOff($studyId, $userId))
+					continue;
 				try {
 					$sub = Subscription::create([
 						'endpoint' => $data['subscription']['endpoint'],
@@ -283,9 +331,13 @@ class PushSender {
 			'privateKey' => $privateKey,
 		]]);
 
+		if(ParticipantWithdrawals::isWithdrawn($studyId, $userId))
+			return ['error' => 'This participant has left the study', 'queued' => 0, 'succeeded' => 0];
+		if(ParticipantNotificationPrefs::isOff($studyId, $userId))
+			return ['error' => 'This participant has switched notifications off', 'queued' => 0, 'succeeded' => 0];
 		$file = PathsFS::filePushSubscription($studyId, $userId);
-		$data = json_decode(@file_get_contents($file), true);
-		if(!is_array($data) || empty($data['subscription']['endpoint']))
+		$data = self::readJsonFile($file);
+		if($data === null || empty($data['subscription']['endpoint']))
 			return ['error' => 'No subscription found for this participant', 'queued' => 0, 'succeeded' => 0];
 
 		try {
@@ -322,38 +374,22 @@ class PushSender {
 	}
 
 	/**
-	 * Collapse a participant's due occurrences into a single push payload, or null if
-	 * none are due (or all were already sent). Keeps one entry per questionnaire (the most
-	 * recent occurrence), and carries per-item {qid, key, windowStart, deadline, once,
-	 * dailyOnce, onceNotif, occKey, title, body} so the service worker can drop
-	 * already-completed / already-shown questionnaires and re-render the remaining count.
+	 * Collapse a participant's due occurrences into a single push payload, or null if none are due (or all were
+	 * already sent). Keeps one entry per questionnaire (the most recent occurrence), and carries per-item {qid, key,
+	 * windowStart, deadline, occKey, limit, dayFrom, dayTo, title, body} so the service worker can drop check-ins the
+	 * participant has completed meanwhile (the schedule's rule, see Schedule::applyCompletions) and re-render the count.
 	 *
-	 * Per-occurrence de-duplication: each item's `key` is `type:qid:sendTime`, which is the
-	 * identity of one notification (a specific beep/window, or a specific reminder). Items
-	 * whose key is already in $sent are skipped so the exact same notification is never sent
-	 * twice; kept keys are recorded into $sent (updated in place).
+	 * Per-occurrence de-duplication: each item's `key` is `type:qid:sendTime`, the identity of one notification.
+	 * Items whose key is already in $sent are skipped so the exact same notification is never sent twice; kept keys
+	 * are recorded into $sent (updated in place).
 	 *
-	 * @param array $occurrences items from PushScheduler::computeDueOccurrences
+	 * @param array $occurrences items from Schedule::due
 	 * @param array $sent        key => sentAtMs ledger, mutated in place
 	 */
 	private static function buildCoalescedPayload(int $studyId, string $userId, array $study, array $occurrences, array &$sent, int $nowMs): ?array {
 		if(empty($occurrences))
 			return null;
-
-		// qid → completion-rule flags, so the service worker can suppress reminders for
-		// questionnaires already satisfied in ways windowStart alone wouldn't catch:
-		//   once     (completableOnce)              — completed on any earlier day
-		//   dailyOnce(completableOncePerDay)        — completed earlier today, before this signal
-		//   onceNotif(completableOncePerNotification)— this specific occurrence (occKey) done
-		$onceByQid = [];
-		$perDayByQid = [];
-		$onceNotifByQid = [];
-		foreach(($study['questionnaires'] ?? []) as $qi => $q) {
-			$id = (int) ($q['internalId'] ?? $qi);
-			$onceByQid[$id]      = !empty($q['completableOnce']);
-			$perDayByQid[$id]    = !empty($q['completableOncePerDay']);
-			$onceNotifByQid[$id] = !empty($q['completableOncePerNotification']);
-		}
+		$schedule = Schedule::config($study);
 
 		// One entry per questionnaire — keep the most recent (a reminder supersedes its base).
 		$byQid = [];
@@ -365,6 +401,7 @@ class PushSender {
 
 		$items = [];
 		$anyReminder = false;
+		$studyTitle = NotificationSpec::studyTitle($study);
 		foreach($byQid as $occ) {
 			$qid  = (int) ($occ['qid'] ?? 0);
 			$type = (($occ['type'] ?? '') === 'reminder') ? 'reminder' : 'availability';
@@ -377,13 +414,13 @@ class PushSender {
 			$items[] = [
 				'qid'         => $qid,
 				'key'         => $key,
-				'windowStart' => (int) ($occ['windowStart'] ?? $occ['timestamp']),
-				'deadline'    => isset($occ['deadline']) ? $occ['deadline'] : null,
-				'once'        => (bool) ($onceByQid[$qid] ?? false),
-				'dailyOnce'   => (bool) ($perDayByQid[$qid] ?? false),
-				'onceNotif'   => (bool) ($onceNotifByQid[$qid] ?? false),
-				'occKey'      => isset($occ['occKey']) ? (string) $occ['occKey'] : null,
-				'title'       => (string) ($occ['title'] ?? 'ESMira'),
+				'windowStart' => (int) $occ['windowStart'],
+				'deadline'    => (int) $occ['deadline'],
+				'occKey'      => (string) $occ['occKey'],
+				'limit'       => (string) ($schedule['checkins'][$occ['checkin']]['limit'] ?? Schedule::LIMIT_WINDOW),
+				'dayFrom'     => (int) $occ['dayFrom'],
+				'dayTo'       => (int) $occ['dayTo'],
+				'title'       => (string) ($occ['title'] ?? $studyTitle),
 				'body'        => (string) ($occ['body'] ?? ''),
 			];
 		}
@@ -391,15 +428,7 @@ class PushSender {
 		$count = count($items);
 		if($count === 0) // everything due was already sent in an earlier run — nothing new
 			return null;
-		$studyTitle = (is_string($study['title'] ?? null) && $study['title'] !== '') ? $study['title'] : 'ESMira';
-		if($count === 1) {
-			$title = $items[0]['title'];
-			$body  = $items[0]['body'];
-		}
-		else {
-			$title = $studyTitle;
-			$body  = sprintf('You have %d questionnaires to complete.', $count);
-		}
+		[$title, $body] = NotificationSpec::coalesce($items, $study);
 
 		return [
 			'title'        => $title,
@@ -413,8 +442,42 @@ class PushSender {
 			'count'        => $count,
 			'items'        => $items,
 			// The SW uses this when it drops some completed items and must re-count.
-			'bodyTemplate' => 'You have %d questionnaires to complete.',
+			'bodyTemplate' => NotificationSpec::COALESCED_BODY,
 		];
+	}
+
+	/**
+	 * The "study complete" message (Study.studyEndNotification, in the participant's language), or null when the
+	 * research team switched it off. Silent: it replaces the last reminder on the phone (same tag) without alerting,
+	 * as it can come at night when the last check-in closes. Carries no sid/uid, so it stays out of the reminder
+	 * funnel (no receipts).
+	 */
+	public static function studyEndPayload(array $study): ?array {
+		if(($study['studyEndNotificationEnabled'] ?? true) === false)
+			return null;
+		$body = is_string($study['studyEndNotification'] ?? null) ? trim($study['studyEndNotification']) : '';
+		return [
+			'title'    => NotificationSpec::studyTitle($study),
+			'body'     => $body !== '' ? $body : NotificationSpec::STUDY_END_BODY,
+			'url'      => '/pwa/',
+			'tag'      => self::REMINDER_TAG,
+			'renotify' => false,
+			'silent'   => true,
+			'type'     => 'studyEnd',
+		];
+	}
+
+	/**
+	 * How long the push service may hold a reminder for a phone that is offline: until the last of its check-ins
+	 * closes (the end of its availability), so a reminder is never delivered after it can no longer be done. The
+	 * service worker takes a shown one down at that time too (sw.ts closeExpired). Without known deadlines, the
+	 * library's default (4 weeks).
+	 */
+	public static function ttlSeconds(array $payload, int $nowMs): int {
+		$deadlines = array_map(function($it) { return (int) ($it['deadline'] ?? 0); }, $payload['items'] ?? []);
+		if(empty($deadlines) || min($deadlines) <= 0)
+			return self::DEFAULT_TTL;
+		return max(60, min(self::DEFAULT_TTL, (int) ceil((max($deadlines) - $nowMs) / 1000)));
 	}
 
 	/** Drop sent-ledger entries older than 48h so the per-participant .state stays small. */

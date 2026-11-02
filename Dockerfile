@@ -50,6 +50,12 @@ RUN printf '* * * * * www-data /usr/local/bin/php /var/www/html/cli/channels_dis
 	&& chmod 0644 /etc/cron.d/esmira-channels \
 	&& touch /var/log/esmira_channels.log && chown www-data:www-data /var/log/esmira_channels.log
 
+# Cron: file participants' error reports as GitHub issues (see cli/github_issues_send.php;
+# does nothing until cli/github_issues_setup.php configured a repository and token).
+RUN printf '* * * * * www-data /usr/local/bin/php /var/www/html/cli/github_issues_send.php >> /var/log/esmira_github_issues.log 2>&1\n' > /etc/cron.d/esmira-github-issues \
+	&& chmod 0644 /etc/cron.d/esmira-github-issues \
+	&& touch /var/log/esmira_github_issues.log && chown www-data:www-data /var/log/esmira_github_issues.log
+
 # Enable mod rewrite
 RUN a2enmod rewrite & a2enmod md & a2enmod ssl
 RUN service apache2 restart

@@ -4,7 +4,7 @@ import {Lang} from "../singletons/Lang";
 import downloadSvg from "../../imgs/icons/download.svg?raw"
 import questionnaireSvg from "../../imgs/icons/questionnaire.svg?raw"
 import backupSvg from "../../imgs/icons/backup.svg?raw"
-import {FILE_ADMIN, FILE_CREATE_MEDIA, FILE_MEDIA, FILE_RESPONSES, FILE_WEARABLE_DATA} from "../constants/urls";
+import {FILE_ADMIN, FILE_CREATE_MEDIA, FILE_MEDIA, FILE_RESPONSES, FILE_WEARABLE_DATA, FILE_PHONE_SENSING_DATA} from "../constants/urls";
 import {Study} from "../data/study/Study";
 import {TitleRow} from "../components/TitleRow";
 import {Requests} from "../singletons/Requests";
@@ -126,6 +126,16 @@ export class Content extends SectionContent {
 						<a class="spacingRight" href={FILE_WEARABLE_DATA.replace('%1', study.id.get().toString())} download="wearables.zip" title={Lang.get("download")}>
 							{m.trust(downloadSvg)}
 							<span class="spacingLeft">wearables.zip</span>
+						</a>
+					</div>
+				}
+
+				{(study.phoneSensingLight.get() || study.phoneSensingActivity.get() || study.phoneSensingAccelerometer.get() || study.phoneSensingUsage.get() !== "") &&
+					<div>
+						{TitleRow(Lang.getWithColon("phone_sensing_data"))}
+						<a class="spacingRight" href={FILE_PHONE_SENSING_DATA.replace('%1', study.id.get().toString())} download="phone_sensing.zip" title={Lang.get("download")}>
+							{m.trust(downloadSvg)}
+							<span class="spacingLeft">phone_sensing.zip</span>
 						</a>
 					</div>
 				}

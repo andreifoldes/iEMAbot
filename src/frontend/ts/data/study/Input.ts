@@ -68,6 +68,9 @@ export class Input extends DataStructure {
 	// regular weight, muted) so it reads as a helper rather than part of the question.
 	// Web/PWA client only — native apps ignore it. Empty for every item by default.
 	public description = this.translatable("description", "")
+	// Optional call to action shown after the description, on its own line in the regular text
+	// colour (e.g. "Count all times from…"). Web/PWA client only. Empty by default.
+	public instruction = this.translatable("instruction", "")
 	// Accessibility content supplied by the researcher (web/PWA client only; native apps
 	// ignore it). imageAlt: text alternative for an "image" input. screenReaderLabel:
 	// announced by screen readers in place of the question text, e.g. to describe a scale

@@ -5,64 +5,56 @@ namespace backend\notifications;
 
 use backend\fileSystem\loader\UserDataLoader;
 use backend\fileSystem\PathsFS;
-use backend\wearables\WearablesEventStore;
+use backend\schedule\Schedule;
 use Throwable;
 
 /**
- * Channel-neutral "what is due for this participant now": scheduled signal times and
- * reminders (PushScheduler) plus sensor-contingent triggers (SensorTriggerScheduler),
- * computed from the participant's join time and the per-participant schedule state.
+ * Channel-neutral "what is due for this participant now", from the study's schedule (backend/schedule/Schedule.php),
+ * the participant's enrolment and their inputs (wearable events, answers the schedule reads, completions).
  *
- * Shared by the web-push sender (PushSender) and the chat-channel dispatcher
- * (channels/dispatch/ChannelDispatcher); each keeps its own delivery ledger.
+ * Shared by the web-push sender (PushSender), the chat-channel dispatcher (channels/dispatch/ChannelDispatcher) and
+ * the Android app's server nudges (NativePending); each keeps its own delivery ledger.
  *
- * $schedule is the persisted schedule state {cursor, realized, sensor}; it is updated in
- * place (call advance() after delivering to move the cursor).
+ * $state is the persisted per-participant schedule state ({schedule: ledger}); it is updated in place.
  */
 class DueOccurrences {
 	/**
-	 * @param int   $fallbackAnchor schedule anchor used until UserData exists (e.g. subscribe time)
-	 * @return array{occurrences: array, anchor: int, lastDataSetTime: int}
+	 * @param int $fallbackAnchor enrolment used until UserData exists (e.g. subscribe time)
+	 * @return array{occurrences: array, anchor: int}
 	 */
-	public static function compute(int $studyId, string $userId, array $study, int $tzOffsetMin, int $fallbackAnchor, array &$schedule, int $nowMs): array {
-		// Prefer the participant's real join time (and read completion state) from UserData;
-		// fall back to the given anchor if they haven't submitted yet (UserData is created on
-		// first submission).
-		$anchor = $fallbackAnchor;
-		$lastDataSetTime = -1;
+	public static function compute(int $studyId, string $userId, array $study, int $tzOffsetMin, int $fallbackAnchor, array &$state, int $nowMs): array {
+		$anchor = self::anchor($studyId, $userId, $fallbackAnchor);
+		$ledger = (isset($state['schedule']) && is_array($state['schedule'])) ? $state['schedule'] : [];
+		$occurrences = Schedule::config($study) === null ? [] : Schedule::due($study, $studyId, $userId, Schedule::inputs($study, $studyId, $userId, $nowMs), $anchor, $tzOffsetMin, $nowMs, $ledger);
+		$state['schedule'] = $ledger;
+		unset($state['cursor'], $state['sensor'], $state['plan'], $state['realized']); // kept by older versions
+		return ['occurrences' => $occurrences, 'anchor' => $anchor];
+	}
+
+	/**
+	 * Has the participant's study ended (Schedule::ended: `just` yesterday or today, `long` before that, null not)?
+	 * Null for a schedule that never ends, without reading anything.
+	 * @param int $fallbackAnchor enrolment used until UserData exists (e.g. subscribe time)
+	 */
+	public static function studyEnded(int $studyId, string $userId, array $study, int $tzOffsetMin, int $fallbackAnchor, int $nowMs): ?string {
+		$schedule = Schedule::config($study);
+		if($schedule === null || !Schedule::canEnd($schedule))
+			return null;
+		$days = Schedule::days($study, $studyId, $userId, Schedule::inputs($study, $studyId, $userId, $nowMs), self::anchor($studyId, $userId, $fallbackAnchor), $nowMs, $tzOffsetMin);
+		return Schedule::ended($schedule, $days, $nowMs);
+	}
+
+	/** The participant's enrolment: their join time from UserData (created on the first upload), else the fallback. */
+	public static function anchor(int $studyId, string $userId, int $fallbackAnchor): int {
 		$userDataPath = PathsFS::fileUserData($studyId, $userId);
 		if(file_exists($userDataPath)) {
 			try {
 				$ud = UserDataLoader::import(file_get_contents($userDataPath));
 				if(!empty($ud->joinedTime))
-					$anchor = (int) $ud->joinedTime;
-				$lastDataSetTime = (int) $ud->lastDataSetTime;
+					return (int) $ud->joinedTime;
 			}
 			catch(Throwable $e) { /* corrupt/unreadable — use the fallback anchor */ }
 		}
-
-		$cursor = isset($schedule['cursor']) ? (int) $schedule['cursor'] : $nowMs;
-		$realized = (isset($schedule['realized']) && is_array($schedule['realized'])) ? $schedule['realized'] : [];
-		$occurrences = PushScheduler::computeDueOccurrences($study, $anchor, $tzOffsetMin, $cursor, $nowMs, $lastDataSetTime, $realized);
-		$schedule['realized'] = $realized;
-
-		// Sensor-contingent triggers (wearable webhooks + time fallback) carry their own
-		// idempotence ledger instead of relying on the cursor.
-		$sensorLedger = (isset($schedule['sensor']) && is_array($schedule['sensor'])) ? $schedule['sensor'] : [];
-		if(SensorTriggerScheduler::hasTriggers($study)) {
-			$events = WearablesEventStore::readSince($studyId, $userId, $nowMs - SensorTriggerScheduler::EVENT_LOOKBACK_MS);
-			$variables = !empty(SensorTriggerScheduler::variableNames($study)) ? ParticipantVariableStore::read($studyId, $userId) : [];
-			$occurrences = array_merge($occurrences, SensorTriggerScheduler::computeOccurrences(
-				$study, $events, $anchor, $tzOffsetMin, $nowMs, $lastDataSetTime, $sensorLedger, $variables
-			));
-		}
-		$schedule['sensor'] = $sensorLedger;
-
-		return ['occurrences' => $occurrences, 'anchor' => $anchor, 'lastDataSetTime' => $lastDataSetTime];
-	}
-
-	/** Move the cursor: occurrences up to $nowMs have been handled. */
-	public static function advance(array &$schedule, int $nowMs): void {
-		$schedule['cursor'] = $nowMs;
+		return $fallbackAnchor;
 	}
 }

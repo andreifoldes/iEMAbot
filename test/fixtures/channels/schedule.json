@@ -1,0 +1,4776 @@
+{
+    "windowsForDay": [
+        {
+            "name": "split-day check-ins (SSRC), evening with its own window",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 39600000,
+                    "open": 25200000,
+                    "prompt": 25200000,
+                    "close": 28800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 39600000,
+                    "end": 54000000,
+                    "open": 39600000,
+                    "prompt": 39600000,
+                    "close": 43200000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 54000000,
+                    "end": 68400000,
+                    "open": 54000000,
+                    "prompt": 54000000,
+                    "close": 57600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 82800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 79200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "split day, bedtime after midnight",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 29843456,
+                "wakeBy": 28800000,
+                "bed": 1800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 29820000,
+                    "end": 44400000,
+                    "open": 29820000,
+                    "prompt": 29820000,
+                    "close": 33420000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 44400000,
+                    "end": 58980000,
+                    "open": 44400000,
+                    "prompt": 44400000,
+                    "close": 48000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 58980000,
+                    "end": 73560000,
+                    "open": 58980000,
+                    "prompt": 58980000,
+                    "close": 62580000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 73560000,
+                    "end": 88200000,
+                    "open": 73560000,
+                    "prompt": 73560000,
+                    "close": 84360000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "wake-up not known yet: only the early wake-up check-in",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 36000000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 18000000,
+                    "end": 36000000,
+                    "open": 18000000,
+                    "prompt": 18000000,
+                    "close": 36000000,
+                    "notify": false,
+                    "early": true
+                }
+            ]
+        },
+        {
+            "name": "fixed windows, random prompts, open until the range ends",
+            "schedule": {
+                "responseMinutes": 0,
+                "checkins": [
+                    {
+                        "questionnaireId": 5,
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 5,
+                        "startType": "fixed",
+                        "startTime": 46800000,
+                        "endType": "fixed",
+                        "endTime": 57600000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 5,
+                        "startType": "fixed",
+                        "startTime": 61200000,
+                        "endType": "fixed",
+                        "endTime": 72000000,
+                        "prompt": "random",
+                        "responseOverride": true,
+                        "responseMinutes": 45
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 5,
+                    "start": 32400000,
+                    "end": 43200000,
+                    "open": 40440000,
+                    "prompt": 40440000,
+                    "close": 43200000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 5,
+                    "start": 46800000,
+                    "end": 57600000,
+                    "open": 54540000,
+                    "prompt": 54540000,
+                    "close": 57600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 5,
+                    "start": 61200000,
+                    "end": 72000000,
+                    "open": 68640000,
+                    "prompt": 68640000,
+                    "close": 71340000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "hybrid: wake-up to 11:00, a split segment, 20:00 to bedtime",
+            "schedule": {
+                "responseMinutes": 90,
+                "segments": 3,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 72000000,
+                        "endType": "bed",
+                        "endOffsetMin": -30,
+                        "prompt": "random",
+                        "responseOverride": true,
+                        "responseMinutes": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 23400000,
+                "wakeBy": 28800000,
+                "bed": 81000000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 23400000,
+                    "end": 39600000,
+                    "open": 23400000,
+                    "prompt": 23400000,
+                    "close": 28800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 42600000,
+                    "end": 61800000,
+                    "open": 46680000,
+                    "prompt": 46680000,
+                    "close": 52080000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 4,
+                    "start": 72000000,
+                    "end": 79200000,
+                    "open": 74100000,
+                    "prompt": 74100000,
+                    "close": 79200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "hybrid without a known wake-up keeps the fixed slot",
+            "schedule": {
+                "responseMinutes": 90,
+                "segments": 3,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 72000000,
+                        "endType": "bed",
+                        "endOffsetMin": -30,
+                        "prompt": "random",
+                        "responseOverride": true,
+                        "responseMinutes": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "bed": 81000000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 2,
+                    "qid": 4,
+                    "start": 72000000,
+                    "end": 79200000,
+                    "open": 74100000,
+                    "prompt": 74100000,
+                    "close": 79200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "truncate: overlapping windows close when the next prompt fires; a range past midnight",
+            "schedule": {
+                "overlap": "truncate",
+                "responseMinutes": 180,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 43200000
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 79200000,
+                        "endType": "fixed",
+                        "endTime": 3600000,
+                        "prompt": "random"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 32400000,
+                    "end": 43200000,
+                    "open": 32400000,
+                    "prompt": 32400000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 39600000,
+                    "open": 36000000,
+                    "prompt": 36000000,
+                    "close": 46800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 79200000,
+                    "end": 90000000,
+                    "open": 86640000,
+                    "prompt": 86640000,
+                    "close": 97440000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "defer (default): the next prompt waits until the previous window closes",
+            "schedule": {
+                "responseMinutes": 180,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 43200000
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 79200000,
+                        "endType": "fixed",
+                        "endTime": 3600000,
+                        "prompt": "random"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 32400000,
+                    "end": 43200000,
+                    "open": 32400000,
+                    "prompt": 32400000,
+                    "close": 43200000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 39600000,
+                    "open": 43200000,
+                    "prompt": 43200000,
+                    "close": 54000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 79200000,
+                    "end": 90000000,
+                    "open": 86640000,
+                    "prompt": 86640000,
+                    "close": 97440000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "defer with random prompts: drawn from what is left of the range; a range used up by then (open until its end) is skipped",
+            "schedule": {
+                "responseMinutes": 120,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 39600000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 50400000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 43200000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random",
+                        "responseOverride": true,
+                        "responseMinutes": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 32400000,
+                    "end": 39600000,
+                    "open": 34620000,
+                    "prompt": 34620000,
+                    "close": 41820000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 50400000,
+                    "open": 49140000,
+                    "prompt": 49140000,
+                    "close": 56340000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "in-bed event before the planned bedtime ends the evening check-in",
+            "schedule": {
+                "responseMinutes": 0,
+                "bedSensor": true,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "bed",
+                        "endOffsetMin": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [
+                    79805000,
+                    84600000
+                ],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 39600000,
+                    "open": 25200000,
+                    "prompt": 25200000,
+                    "close": 39600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 79800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 79800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "in-bed event after the planned bedtime: the fallback (planned bedtime)",
+            "schedule": {
+                "responseMinutes": 0,
+                "bedSensor": true,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "bed",
+                        "endOffsetMin": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [
+                    84600000
+                ],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 39600000,
+                    "open": 25200000,
+                    "prompt": 25200000,
+                    "close": 39600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 82800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 82800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "in-bed event outside the bed window or before wake-up is ignored",
+            "schedule": {
+                "responseMinutes": 0,
+                "bedSensor": true,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "bed",
+                        "endOffsetMin": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [
+                    21600000,
+                    54000000
+                ],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 39600000,
+                    "open": 25200000,
+                    "prompt": 25200000,
+                    "close": 39600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 82800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 82800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "bed window past midnight: going to bed at 00:40 before a 01:00 planned bedtime",
+            "schedule": {
+                "responseMinutes": 0,
+                "bedSensor": true,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "startOffsetMin": 0,
+                        "endType": "fixed",
+                        "endTime": 39600000
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "bed",
+                        "endOffsetMin": 0
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 3600000,
+                "bedEvents": [
+                    88800000
+                ],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 39600000,
+                    "open": 25200000,
+                    "prompt": 25200000,
+                    "close": 39600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 88800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 88800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "end on the next day at a clock time; an explicit next-day end later than 24 h",
+            "schedule": {
+                "responseMinutes": 0,
+                "checkins": [
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 75600000,
+                        "endType": "fixed",
+                        "endTime": 7200000,
+                        "endNextDay": true
+                    },
+                    {
+                        "questionnaireId": 5,
+                        "startType": "fixed",
+                        "startTime": 79200000,
+                        "endType": "fixed",
+                        "endTime": 82800000,
+                        "endNextDay": true,
+                        "prompt": "random"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 4,
+                    "start": 75600000,
+                    "end": 93600000,
+                    "open": 75600000,
+                    "prompt": 75600000,
+                    "close": 93600000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 5,
+                    "start": 79200000,
+                    "end": 169200000,
+                    "open": 132720000,
+                    "prompt": 132720000,
+                    "close": 169200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "until the next day's wake-up, observed",
+            "schedule": {
+                "responseMinutes": 0,
+                "overlap": "truncate",
+                "checkins": [
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 72000000,
+                        "endType": "wake",
+                        "endOffsetMin": 0,
+                        "endNextDay": true
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": 24300000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 4,
+                    "start": 72000000,
+                    "end": 110700000,
+                    "open": 72000000,
+                    "prompt": 72000000,
+                    "close": 110700000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "until the next day's wake-up, not known yet: its fallback",
+            "schedule": {
+                "responseMinutes": 0,
+                "overlap": "truncate",
+                "checkins": [
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 72000000,
+                        "endType": "wake",
+                        "endOffsetMin": 0,
+                        "endNextDay": true
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 4,
+                    "start": 72000000,
+                    "end": 115200000,
+                    "open": 72000000,
+                    "prompt": 72000000,
+                    "close": 115200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "usual wake-up range answerable throughout, prompted at the observed wake-up (SSRC)",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeDefault": 28800000,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "usualWake",
+                        "startOffsetMin": -120,
+                        "endType": "usualWake",
+                        "endOffsetMin": 120,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": 25800000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 21600000,
+                    "prompt": 25800000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 43740000,
+                    "prompt": 43740000,
+                    "close": 47340000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 50400000,
+                    "end": 61200000,
+                    "open": 57840000,
+                    "prompt": 57840000,
+                    "close": 61440000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 100800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "prompt at wake-up: nothing observed, the usual wake-up + grace",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeDefault": 28800000,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "usualWake",
+                        "startOffsetMin": -120,
+                        "endType": "usualWake",
+                        "endOffsetMin": 120,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 21600000,
+                    "prompt": 30600000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 43740000,
+                    "prompt": 43740000,
+                    "close": 47340000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 50400000,
+                    "end": 61200000,
+                    "open": 57840000,
+                    "prompt": 57840000,
+                    "close": 61440000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 100800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "prompt at wake-up: observed after the grace period, the usual wake-up + grace",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeDefault": 28800000,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "usualWake",
+                        "startOffsetMin": -120,
+                        "endType": "usualWake",
+                        "endOffsetMin": 120,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": 32400000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 21600000,
+                    "prompt": 30600000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 43740000,
+                    "prompt": 43740000,
+                    "close": 47340000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 50400000,
+                    "end": 61200000,
+                    "open": 57840000,
+                    "prompt": 57840000,
+                    "close": 61440000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 100800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "prompt at wake-up: observed before the range opens, when it opens",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeDefault": 28800000,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "usualWake",
+                        "startOffsetMin": -120,
+                        "endType": "usualWake",
+                        "endOffsetMin": 120,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": 19800000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 21600000,
+                    "prompt": 21600000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 43740000,
+                    "prompt": 43740000,
+                    "close": 47340000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 50400000,
+                    "end": 61200000,
+                    "open": 57840000,
+                    "prompt": 57840000,
+                    "close": 61440000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 100800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "usual wake-up from the participant's habitual time moves the morning range",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeDefault": 28800000,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "usualWake",
+                        "startOffsetMin": -120,
+                        "endType": "usualWake",
+                        "endOffsetMin": 120,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 25200000,
+                "wakeSeen": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 18000000,
+                    "end": 32400000,
+                    "open": 18000000,
+                    "prompt": 27000000,
+                    "close": 32400000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 43740000,
+                    "prompt": 43740000,
+                    "close": 47340000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 50400000,
+                    "end": 61200000,
+                    "open": 57840000,
+                    "prompt": 57840000,
+                    "close": 61440000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 100800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "prompt at wake-up without a usual wake-up or observation: not prompted; never prompted",
+            "schedule": {
+                "wakeDefault": -1,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "fixed",
+                        "startTime": 21600000,
+                        "endType": "fixed",
+                        "endTime": 36000000,
+                        "available": "range",
+                        "prompt": "wake"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "fixed",
+                        "startTime": 68400000,
+                        "endType": "fixed",
+                        "endTime": 82800000,
+                        "available": "range",
+                        "prompt": "none"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": null,
+                "wakeSeen": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 21600000,
+                    "prompt": 21600000,
+                    "close": 36000000,
+                    "notify": false,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 4,
+                    "start": 68400000,
+                    "end": 82800000,
+                    "open": 68400000,
+                    "prompt": 68400000,
+                    "close": 82800000,
+                    "notify": false,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "answerable throughout the range, prompted at a random time inside it",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 2,
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "available": "range",
+                        "prompt": "random"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": null,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 36000000,
+                    "prompt": 44040000,
+                    "close": 46800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "prompt at wake-up, answerable from the prompt for the response window",
+            "schedule": {
+                "responseMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "fixed",
+                        "startTime": 21600000,
+                        "endType": "fixed",
+                        "endTime": 36000000,
+                        "prompt": "wake"
+                    }
+                ]
+            },
+            "day": {
+                "index": 0,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "wake": null,
+                "wakeBy": 28800000,
+                "wakeSeen": 24300000,
+                "bed": 82800000,
+                "bedEvents": [],
+                "wakeNext": null
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 21600000,
+                    "end": 36000000,
+                    "open": 24300000,
+                    "prompt": 24300000,
+                    "close": 27900000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "parallel questionnaire open all day does not move the one-at-a-time check-ins",
+            "schedule": {
+                "dayStart": 14400000,
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 14400000,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "questionnaireId": 9,
+                        "endNextDay": true,
+                        "available": "range",
+                        "prompt": "none",
+                        "parallel": true,
+                        "limit": "once"
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 39600000,
+                        "questionnaireId": 1
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 34200000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 2,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 9,
+                    "start": 14400000,
+                    "end": 100800000,
+                    "open": 14400000,
+                    "prompt": 14400000,
+                    "close": 100800000,
+                    "notify": false,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "start": 32400000,
+                    "end": 39600000,
+                    "open": 32400000,
+                    "prompt": 32400000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "start": 34200000,
+                    "end": 43200000,
+                    "open": 36000000,
+                    "prompt": 36000000,
+                    "close": 43200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "truncate closes the previous window, parallel windows are left alone",
+            "schedule": {
+                "overlap": "truncate",
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 1,
+                        "available": "range"
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "questionnaireId": 2,
+                        "available": "range"
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 3,
+                        "available": "range",
+                        "parallel": true
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 32400000,
+                    "end": 43200000,
+                    "open": 32400000,
+                    "prompt": 32400000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 32400000,
+                    "end": 43200000,
+                    "open": 32400000,
+                    "prompt": 32400000,
+                    "close": 43200000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 36000000,
+                    "end": 46800000,
+                    "open": 36000000,
+                    "prompt": 36000000,
+                    "close": 46800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "open from the prompt until the study day ends (legacy signal time)",
+            "schedule": {
+                "dayStart": 14400000,
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 36000000,
+                        "questionnaireId": 1,
+                        "available": "day",
+                        "parallel": true
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 54000000,
+                        "endType": "fixed",
+                        "endTime": 54000000,
+                        "questionnaireId": 1,
+                        "available": "day",
+                        "parallel": true
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 32400000,
+                        "endType": "fixed",
+                        "endTime": 75600000,
+                        "questionnaireId": 2,
+                        "available": "day",
+                        "prompt": "random",
+                        "parallel": true
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 36000000,
+                    "end": 36000000,
+                    "open": 36000000,
+                    "prompt": 36000000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "start": 54000000,
+                    "end": 54000000,
+                    "open": 54000000,
+                    "prompt": 54000000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "start": 32400000,
+                    "end": 75600000,
+                    "open": 58200000,
+                    "prompt": 58200000,
+                    "close": 100800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "days: from day 2, every 2nd day, weekdays only, until day 10",
+            "schedule": {
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 39600000,
+                        "questionnaireId": 1,
+                        "dayFrom": 2,
+                        "everyDays": 2
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 43200000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "questionnaireId": 2,
+                        "weekdays": 62
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 50400000,
+                        "endType": "fixed",
+                        "endTime": 54000000,
+                        "questionnaireId": 3,
+                        "dayUntil": 2
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 57600000,
+                        "endType": "fixed",
+                        "endTime": 61200000,
+                        "questionnaireId": 4,
+                        "dayOfMonth": 27
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 43200000,
+                    "end": 46800000,
+                    "open": 43200000,
+                    "prompt": 43200000,
+                    "close": 46800000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 57600000,
+                    "end": 61200000,
+                    "open": 57600000,
+                    "prompt": 57600000,
+                    "close": 61200000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "dates: no window opens before dateFrom or after dateUntil",
+            "schedule": {
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 36000000,
+                        "endType": "fixed",
+                        "endTime": 39600000,
+                        "questionnaireId": 1,
+                        "dateFrom": 1793095200001
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 43200000,
+                        "endType": "fixed",
+                        "endTime": 46800000,
+                        "questionnaireId": 2,
+                        "dateUntil": 1793102400000
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 43200000,
+                    "end": 46800000,
+                    "open": 43200000,
+                    "prompt": 43200000,
+                    "close": 46800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "event prompt: known, at the event; unknown and only open from it: left out; open throughout its range: silent",
+            "schedule": {
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 0,
+                        "endType": "fixed",
+                        "endTime": 14400000,
+                        "questionnaireId": 1,
+                        "endNextDay": true,
+                        "prompt": "event",
+                        "available": "day",
+                        "parallel": true
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 18000000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 2,
+                        "prompt": "event",
+                        "available": "prompt"
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 46800000,
+                        "endType": "fixed",
+                        "endTime": 64800000,
+                        "questionnaireId": 3,
+                        "prompt": "event",
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 28800000,
+                "bed": 82800000,
+                "eventPrompts": [
+                    25920000,
+                    null,
+                    null
+                ]
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 0,
+                    "end": 100800000,
+                    "open": 25920000,
+                    "prompt": 25920000,
+                    "close": 86400000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 46800000,
+                    "end": 64800000,
+                    "open": 46800000,
+                    "prompt": 46800000,
+                    "close": 64800000,
+                    "notify": false,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "wake prompt without a usual wake-up is not known: left out unless open throughout",
+            "schedule": {
+                "wakeDefault": -1,
+                "checkins": [
+                    {
+                        "startType": "fixed",
+                        "startTime": 18000000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 1,
+                        "prompt": "wake"
+                    },
+                    {
+                        "startType": "fixed",
+                        "startTime": 18000000,
+                        "endType": "fixed",
+                        "endTime": 43200000,
+                        "questionnaireId": 2,
+                        "prompt": "wake",
+                        "available": "range",
+                        "parallel": true
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": null,
+                "bed": 82800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 18000000,
+                    "end": 43200000,
+                    "open": 18000000,
+                    "prompt": 18000000,
+                    "close": 43200000,
+                    "notify": false,
+                    "early": false
+                }
+            ]
+        },
+        {
+            "name": "usual sleep times: evening around the planned bedtime, morning around the usual wake-up",
+            "schedule": {
+                "segments": 4,
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "wake",
+                        "endType": "wake",
+                        "endOffsetMin": 180,
+                        "available": "range",
+                        "prompt": "wake",
+                        "promptGraceMin": 30
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startSegment": 1,
+                        "endSegment": 2,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startSegment": 2,
+                        "endSegment": 3,
+                        "prompt": "random"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "bed",
+                        "startOffsetMin": -120,
+                        "endType": "bed",
+                        "endOffsetMin": 60,
+                        "available": "range"
+                    }
+                ]
+            },
+            "day": {
+                "index": 3,
+                "weekday": 2,
+                "dayOfMonth": 27,
+                "base": 1793059200000,
+                "wake": 25200000,
+                "wakeBy": 25200000,
+                "bed": 1800000
+            },
+            "seed": "4001:p1:2026-10-27",
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "start": 25200000,
+                    "end": 36000000,
+                    "open": 25200000,
+                    "prompt": 27000000,
+                    "close": 36000000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "start": 40920000,
+                    "end": 56700000,
+                    "open": 49680000,
+                    "prompt": 49680000,
+                    "close": 53280000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "start": 56700000,
+                    "end": 72420000,
+                    "open": 71160000,
+                    "prompt": 71160000,
+                    "close": 74760000,
+                    "notify": true,
+                    "early": false
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "start": 81000000,
+                    "end": 91800000,
+                    "open": 81000000,
+                    "prompt": 81000000,
+                    "close": 91800000,
+                    "notify": true,
+                    "early": false
+                }
+            ]
+        }
+    ],
+    "resolveWakeTod": [
+        {
+            "name": "fixed fallback when nothing is observed",
+            "schedule": {
+                "checkins": [
+                    []
+                ]
+            },
+            "observed": [],
+            "fallback": 36000000,
+            "nowTod": 21600000,
+            "expected": 36000000
+        },
+        {
+            "name": "observed wake-up before the fallback wins (whole minutes)",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "observed": [
+                25920999,
+                32400000
+            ],
+            "fallback": 36000000,
+            "nowTod": 34200000,
+            "expected": 25920000
+        },
+        {
+            "name": "observed after the fallback: the fallback, once it has passed",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "observed": [
+                39600000
+            ],
+            "fallback": 36000000,
+            "nowTod": 39900000,
+            "expected": 36000000
+        },
+        {
+            "name": "nothing observed and the fallback still ahead: unknown",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "observed": [],
+            "fallback": 36000000,
+            "nowTod": 32400000,
+            "expected": null
+        },
+        {
+            "name": "outside the wake-up window is ignored",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "observed": [
+                10800000
+            ],
+            "fallback": 36000000,
+            "nowTod": 14400000,
+            "expected": null
+        },
+        {
+            "name": "past day without any observation: the fallback",
+            "schedule": {
+                "responseMinutes": 60,
+                "wakeSensor": true,
+                "wakeFromCheckin": true,
+                "wakeVariable": "habitual_wake_time",
+                "wakeOffsetMin": 60,
+                "wakeDefault": 36000000,
+                "bedVariable": "habitual_bedtime",
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "startType": "split",
+                        "startSegment": 0,
+                        "endType": "split",
+                        "endSegment": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "startType": "split",
+                        "startSegment": 1,
+                        "endType": "split",
+                        "endSegment": 2
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "startType": "split",
+                        "startSegment": 2,
+                        "endType": "split",
+                        "endSegment": 3
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "startType": "split",
+                        "startSegment": 3,
+                        "endType": "split",
+                        "endSegment": 4,
+                        "responseOverride": true,
+                        "responseMinutes": 180
+                    }
+                ]
+            },
+            "observed": [],
+            "fallback": 36000000,
+            "nowTod": 108000000,
+            "expected": 36000000
+        }
+    ],
+    "resolveEventTod": [
+        {
+            "name": "first event in the window, before the fallback",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000
+            },
+            "events": [
+                14400000,
+                25950000,
+                28800000
+            ],
+            "fallback": 36000000,
+            "nowTod": 32400000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": 25920000
+        },
+        {
+            "name": "event after the fallback: the fallback",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000
+            },
+            "events": [
+                39600000
+            ],
+            "fallback": 36000000,
+            "nowTod": 39660000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": 36000000
+        },
+        {
+            "name": "no event, fallback not reached: not known yet",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000
+            },
+            "events": [],
+            "fallback": 36000000,
+            "nowTod": 32400000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": null
+        },
+        {
+            "name": "no event, no fallback: never",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000,
+                "fallback": "none"
+            },
+            "events": [],
+            "fallback": null,
+            "nowTod": 172800000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": null
+        },
+        {
+            "name": "fixed delay",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000,
+                "eventDelayMin": 15
+            },
+            "events": [
+                25200000
+            ],
+            "fallback": 36000000,
+            "nowTod": 28800000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": 26100000
+        },
+        {
+            "name": "random delay between 10 and 30 minutes, stable per seed",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 18000000,
+                "eventUntil": 43200000,
+                "eventDelayMin": 10,
+                "eventDelayMaxMin": 30
+            },
+            "events": [
+                25200000
+            ],
+            "fallback": 36000000,
+            "nowTod": 28800000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": 26820000
+        },
+        {
+            "name": "window over midnight",
+            "checkin": {
+                "prompt": "event",
+                "eventFrom": 79200000,
+                "eventUntil": 7200000
+            },
+            "events": [
+                43200000,
+                3600000
+            ],
+            "fallback": null,
+            "nowTod": 172800000,
+            "seed": "4001:p1:2026-10-27:0",
+            "expected": 3600000
+        }
+    ],
+    "eventFallbackTod": [
+        {
+            "name": "fixed",
+            "checkin": {
+                "fallbackTime": 36000000
+            },
+            "variables": {},
+            "expected": 36000000
+        },
+        {
+            "name": "none",
+            "checkin": {
+                "fallback": "none"
+            },
+            "variables": {},
+            "expected": null
+        },
+        {
+            "name": "variable answered, with an offset",
+            "checkin": {
+                "fallback": "variable",
+                "fallbackVariable": "habitual_wake_time",
+                "fallbackOffsetMin": 90
+            },
+            "variables": {
+                "habitual_wake_time": {
+                    "v": "07:00",
+                    "t": 1
+                }
+            },
+            "expected": 30600000
+        },
+        {
+            "name": "variable unanswered: the fixed time",
+            "checkin": {
+                "fallback": "variable",
+                "fallbackVariable": "habitual_wake_time"
+            },
+            "variables": {},
+            "expected": 43200000
+        },
+        {
+            "name": "variable unanswered, no default: none",
+            "checkin": {
+                "fallback": "variable",
+                "fallbackVariable": "habitual_wake_time",
+                "fallbackDefault": false
+            },
+            "variables": {
+                "habitual_wake_time": "not a time"
+            },
+            "expected": null
+        }
+    ],
+    "runsOnDay": [
+        {
+            "name": "from day 2",
+            "checkin": {
+                "dayFrom": 2
+            },
+            "day": {
+                "index": 1,
+                "weekday": 0,
+                "dayOfMonth": 1
+            },
+            "expected": false
+        },
+        {
+            "name": "every 3rd day from day 1: day 7",
+            "checkin": {
+                "dayFrom": 1,
+                "everyDays": 3
+            },
+            "day": {
+                "index": 7,
+                "weekday": 0,
+                "dayOfMonth": 1
+            },
+            "expected": true
+        },
+        {
+            "name": "every 3rd day from day 1: day 8",
+            "checkin": {
+                "dayFrom": 1,
+                "everyDays": 3
+            },
+            "day": {
+                "index": 8,
+                "weekday": 0,
+                "dayOfMonth": 1
+            },
+            "expected": false
+        },
+        {
+            "name": "until day 7: day 8",
+            "checkin": {
+                "dayUntil": 7
+            },
+            "day": {
+                "index": 8,
+                "weekday": 0,
+                "dayOfMonth": 1
+            },
+            "expected": false
+        },
+        {
+            "name": "weekends only: Sunday",
+            "checkin": {
+                "weekdays": 65
+            },
+            "day": {
+                "index": 3,
+                "weekday": 0,
+                "dayOfMonth": 1
+            },
+            "expected": true
+        },
+        {
+            "name": "weekends only: Monday",
+            "checkin": {
+                "weekdays": 65
+            },
+            "day": {
+                "index": 3,
+                "weekday": 1,
+                "dayOfMonth": 2
+            },
+            "expected": false
+        },
+        {
+            "name": "on the 15th: the 15th",
+            "checkin": {
+                "dayOfMonth": 15
+            },
+            "day": {
+                "index": 3,
+                "weekday": 1,
+                "dayOfMonth": 15
+            },
+            "expected": true
+        },
+        {
+            "name": "before enrolment",
+            "checkin": [],
+            "day": {
+                "index": -1,
+                "weekday": 1,
+                "dayOfMonth": 15
+            },
+            "expected": false
+        }
+    ],
+    "applyCompletions": [
+        {
+            "name": "the next check-in opens and is prompted an hour after the previous one was completed",
+            "schedule": {
+                "cooldownMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": -1
+                    },
+                    {
+                        "questionnaireId": 2
+                    },
+                    {
+                        "questionnaireId": 3
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793106000000,
+                    "open": 1793095200000,
+                    "prompt": 1793098800000,
+                    "close": 1793106000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "key": "2026-10-27:2",
+                    "start": 1793106600000,
+                    "end": 1793110200000,
+                    "open": 1793106600000,
+                    "prompt": 1793106600000,
+                    "close": 1793110200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 2,
+                    "t": 1793105880000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793106000000,
+                    "open": 1793095200000,
+                    "prompt": 1793098800000,
+                    "close": 1793106000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "key": "2026-10-27:2",
+                    "start": 1793106600000,
+                    "end": 1793110200000,
+                    "open": 1793109480000,
+                    "prompt": 1793109480000,
+                    "close": 1793110200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": false,
+                    "answered": false
+                }
+            ]
+        },
+        {
+            "name": "a check-in the cool-down outlasts is missed",
+            "schedule": {
+                "cooldownMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": -1
+                    },
+                    {
+                        "questionnaireId": -1
+                    },
+                    {
+                        "questionnaireId": 3
+                    },
+                    {
+                        "questionnaireId": 2
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "key": "2026-10-27:2",
+                    "start": 1793106000000,
+                    "end": 1793107800000,
+                    "open": 1793106000000,
+                    "prompt": 1793106000000,
+                    "close": 1793107800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 2,
+                    "t": 1793105400000
+                }
+            ],
+            "expected": []
+        },
+        {
+            "name": "its own completion and others long before do not count; the same questionnaire earlier does",
+            "schedule": {
+                "cooldownMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": -1
+                    },
+                    {
+                        "questionnaireId": 2
+                    },
+                    {
+                        "questionnaireId": 2
+                    },
+                    {
+                        "questionnaireId": 4
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793109600000,
+                    "end": 1793113200000,
+                    "open": 1793109600000,
+                    "prompt": 1793109600000,
+                    "close": 1793113200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 2,
+                    "t": 1793096400000
+                },
+                {
+                    "qid": 4,
+                    "t": 1793048400000
+                },
+                {
+                    "qid": 2,
+                    "t": 1793107800000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793109600000,
+                    "end": 1793113200000,
+                    "open": 1793111400000,
+                    "prompt": 1793111400000,
+                    "close": 1793113200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": false,
+                    "answered": false
+                }
+            ]
+        },
+        {
+            "name": "answerable before its prompt: opens after the cool-down, prompt unchanged when later",
+            "schedule": {
+                "cooldownMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 4
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793080800000,
+                    "end": 1793095200000,
+                    "open": 1793080800000,
+                    "prompt": 1793089800000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 4,
+                    "t": 1793079600000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793080800000,
+                    "end": 1793095200000,
+                    "open": 1793083200000,
+                    "prompt": 1793089800000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": false,
+                    "answered": false
+                }
+            ]
+        },
+        {
+            "name": "without a cool-down, completions change nothing",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": -1
+                    },
+                    {
+                        "questionnaireId": 2
+                    },
+                    {
+                        "questionnaireId": 4
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 4,
+                    "t": 1793093400000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793059200000,
+                    "dayTo": 1793145600000,
+                    "done": false,
+                    "answered": false
+                }
+            ]
+        },
+        {
+            "name": "limits: window by key or time, day, once, none",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "day"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "limit": "none"
+                    },
+                    {
+                        "questionnaireId": 1
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "key": "2026-10-27:2",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "key": "2026-10-27:3",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 4,
+                    "qid": 1,
+                    "key": "2026-10-27:4",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 1,
+                    "t": 1793093400000,
+                    "key": "2026-10-27:4"
+                },
+                {
+                    "qid": 2,
+                    "t": 1793077200000
+                },
+                {
+                    "qid": 3,
+                    "t": 1792627200000
+                },
+                {
+                    "qid": 4,
+                    "t": 1793092200000
+                },
+                {
+                    "qid": 1,
+                    "t": 1793113500000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 2,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 2,
+                    "qid": 3,
+                    "key": "2026-10-27:2",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 3,
+                    "qid": 4,
+                    "key": "2026-10-27:3",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                },
+                {
+                    "checkin": 4,
+                    "qid": 1,
+                    "key": "2026-10-27:4",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ]
+        },
+        {
+            "name": "a completion without a key counts for one window: the earliest it falls into",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "parallel": true
+                    },
+                    {
+                        "questionnaireId": 1,
+                        "parallel": true
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793160000000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793160000000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 1,
+                    "t": 1793116800000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793160000000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793160000000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                }
+            ]
+        },
+        {
+            "name": "two completions without a key: both windows",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "parallel": true
+                    },
+                    {
+                        "questionnaireId": 1,
+                        "parallel": true
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793160000000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793160000000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 1,
+                    "t": 1793116800000
+                },
+                {
+                    "qid": 1,
+                    "t": 1793098800000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793160000000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793160000000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ]
+        },
+        {
+            "name": "minimum gap after completing the same questionnaire",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "limit": "none",
+                        "minGapMinutes": 120,
+                        "parallel": true
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 1,
+                    "t": 1793091600000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793098800000,
+                    "prompt": 1793098800000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                }
+            ]
+        },
+        {
+            "name": "the cool-down ignores parallel check-ins",
+            "schedule": {
+                "cooldownMinutes": 60,
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 9,
+                        "parallel": true,
+                        "limit": "none"
+                    },
+                    {
+                        "questionnaireId": 2
+                    }
+                ]
+            },
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 1,
+                    "qid": 9,
+                    "key": "2026-10-27:1",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793102400000,
+                    "end": 1793106000000,
+                    "open": 1793102400000,
+                    "prompt": 1793102400000,
+                    "close": 1793106000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000
+                }
+            ],
+            "completions": [
+                {
+                    "qid": 9,
+                    "t": 1793094600000
+                },
+                {
+                    "qid": 1,
+                    "t": 1793100600000
+                }
+            ],
+            "expected": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793095200000,
+                    "end": 1793098800000,
+                    "open": 1793095200000,
+                    "prompt": 1793095200000,
+                    "close": 1793098800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 9,
+                    "key": "2026-10-27:1",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": true
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793102400000,
+                    "end": 1793106000000,
+                    "open": 1793104200000,
+                    "prompt": 1793104200000,
+                    "close": 1793106000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                }
+            ]
+        }
+    ],
+    "availability": [
+        {
+            "name": "done: locked until the next window",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 1,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793092800000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "locked",
+                "occKey": null,
+                "opensAt": 1793113200000
+            }
+        },
+        {
+            "name": "the second window",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 1,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793113800000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "available",
+                "occKey": "2026-10-27:1",
+                "opensAt": null
+            }
+        },
+        {
+            "name": "after the last window",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 1,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793120400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "locked",
+                "occKey": null,
+                "opensAt": null
+            }
+        },
+        {
+            "name": "once, completed",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 2,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793102400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "completed",
+                "occKey": null,
+                "opensAt": null
+            }
+        },
+        {
+            "name": "before its first day",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 3,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793102400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "upcoming",
+                "occKey": null,
+                "opensAt": null
+            }
+        },
+        {
+            "name": "after its last day",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 4,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793102400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "ended",
+                "occKey": null,
+                "opensAt": null
+            }
+        },
+        {
+            "name": "no window today",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 5,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793102400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "locked",
+                "occKey": null,
+                "opensAt": null
+            }
+        },
+        {
+            "name": "no check-in",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 1
+                    },
+                    {
+                        "questionnaireId": 2,
+                        "limit": "once"
+                    },
+                    {
+                        "questionnaireId": 3,
+                        "dayFrom": 7
+                    },
+                    {
+                        "questionnaireId": 4,
+                        "dayUntil": 2
+                    },
+                    {
+                        "questionnaireId": 5
+                    }
+                ]
+            },
+            "qid": 6,
+            "windows": [
+                {
+                    "checkin": 0,
+                    "qid": 1,
+                    "key": "2026-10-27:0",
+                    "start": 1793091600000,
+                    "end": 1793095200000,
+                    "open": 1793091600000,
+                    "prompt": 1793091600000,
+                    "close": 1793095200000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                },
+                {
+                    "checkin": 1,
+                    "qid": 1,
+                    "key": "2026-10-27:1",
+                    "start": 1793113200000,
+                    "end": 1793116800000,
+                    "open": 1793113200000,
+                    "prompt": 1793113200000,
+                    "close": 1793116800000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": false,
+                    "answered": false
+                },
+                {
+                    "checkin": 2,
+                    "qid": 2,
+                    "key": "2026-10-27:2",
+                    "start": 1793073600000,
+                    "end": 1793160000000,
+                    "open": 1793073600000,
+                    "prompt": 1793073600000,
+                    "close": 1793160000000,
+                    "notify": true,
+                    "early": false,
+                    "base": 1793059200000,
+                    "dayFrom": 1793073600000,
+                    "dayTo": 1793160000000,
+                    "done": true,
+                    "answered": true
+                }
+            ],
+            "now": 1793102400000,
+            "dayIndex": 3,
+            "expected": {
+                "state": "locked",
+                "occKey": null,
+                "opensAt": null
+            }
+        }
+    ],
+    "notification": [
+        {
+            "name": "own title, text and reminders",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "title": " Hello ",
+                        "text": " Time to check in ",
+                        "reminderCount": 2,
+                        "reminderDelayMin": 15
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 1,
+                "key": "2026-10-27:0",
+                "start": 1793091600000,
+                "end": 1793095200000,
+                "open": 1793091600000,
+                "prompt": 1793091600000,
+                "close": 1793095200000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Hello",
+                "Time to check in",
+                2,
+                900000
+            ]
+        },
+        {
+            "name": "questionnaire title, default text, no delay: no reminders",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "reminderCount": 2,
+                        "reminderDelayMin": 0
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 1,
+                "key": "2026-10-27:0",
+                "start": 1793091600000,
+                "end": 1793095200000,
+                "open": 1793091600000,
+                "prompt": 1793091600000,
+                "close": 1793095200000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Morning",
+                "You have a questionnaire to complete.",
+                0,
+                0
+            ]
+        },
+        {
+            "name": "no questionnaire title: the study title",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 2
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 2,
+                "key": "2026-10-27:0",
+                "start": 1793091600000,
+                "end": 1793095200000,
+                "open": 1793091600000,
+                "prompt": 1793091600000,
+                "close": 1793095200000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Demo",
+                "You have a questionnaire to complete.",
+                0,
+                300000
+            ]
+        },
+        {
+            "name": "deadline at the close",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "includeDeadline": true
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 1,
+                "key": "2026-10-27:0",
+                "start": 1793091600000,
+                "end": 1793097000000,
+                "open": 1793091600000,
+                "prompt": 1793091600000,
+                "close": 1793097000000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Morning",
+                "You have a questionnaire to complete. Complete by 10:30.",
+                0,
+                300000
+            ]
+        },
+        {
+            "name": "deadline at midnight shows as 23:59",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "includeDeadline": true
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 1,
+                "key": "2026-10-27:0",
+                "start": 1793131200000,
+                "end": 1793145600000,
+                "open": 1793131200000,
+                "prompt": 1793131200000,
+                "close": 1793145600000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Morning",
+                "You have a questionnaire to complete. Complete by 23:59.",
+                0,
+                300000
+            ]
+        },
+        {
+            "name": "deadline after midnight",
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 1,
+                        "includeDeadline": true
+                    }
+                ]
+            },
+            "study": {
+                "title": "Demo",
+                "questionnaires": [
+                    {
+                        "internalId": 1,
+                        "title": "Morning"
+                    },
+                    {
+                        "internalId": 2,
+                        "title": ""
+                    }
+                ]
+            },
+            "window": {
+                "checkin": 0,
+                "qid": 1,
+                "key": "2026-10-27:0",
+                "start": 1793131200000,
+                "end": 1793152800000,
+                "open": 1793131200000,
+                "prompt": 1793131200000,
+                "close": 1793152800000,
+                "notify": true,
+                "early": false,
+                "base": 1793059200000,
+                "dayFrom": 1793073600000,
+                "dayTo": 1793160000000
+            },
+            "expected": [
+                "Morning",
+                "You have a questionnaire to complete. Complete by 02:00.",
+                0,
+                300000
+            ]
+        }
+    ]
+}

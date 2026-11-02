@@ -12,7 +12,8 @@ use Throwable;
 /**
  * Server-side SQLite database that receives a copy of everything collected from participants:
  * questionnaire and event rows, web-access hits, uploaded media (images, audio, keystroke logs),
- * web-push funnel events, client telemetry and synced wearable measurements.
+ * web-push funnel events, client telemetry, synced wearable measurements and phone sensing data.
+ * Phone sensing data is the exception to the copy rule below: it is kept only here (see PhoneSensingStore).
  *
  * The file lives in the data folder (`esmira_data/iemabot.sqlite`, denied to the web by the
  * folder's .htaccess), so it sits on the same volume as the CSV files and is covered by the same
@@ -24,7 +25,7 @@ use Throwable;
  */
 class CollectedDataDb {
 	const FILENAME = 'iemabot.sqlite';
-	const SCHEMA_VERSION = 2;
+	const SCHEMA_VERSION = 3;
 
 	const KIND_QUESTIONNAIRE = 'questionnaire';
 	const KIND_EVENT = 'event';
@@ -139,7 +140,7 @@ class CollectedDataDb {
 			$pdo = self::connection();
 			$tables = ['responses', 'web_access', 'media'];
 			if($everything)
-				array_push($tables, 'push_events', 'client_info', 'wearable_measurements', 'participant_messages');
+				array_push($tables, 'push_events', 'client_info', 'wearable_measurements', 'participant_messages', 'sensor_data', 'sensor_chunks', 'sensor_batches');
 
 			$pdo->beginTransaction();
 			foreach($tables as $table)

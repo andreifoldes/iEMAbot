@@ -74,7 +74,7 @@ abstract class ChannelFlowTestCase extends BaseDataFolderTestSetup {
 				return ['ok' => false, 'error_code' => 429, 'description' => 'Too Many Requests', 'parameters' => ['retry_after' => 3]];
 			return ['ok' => true, 'result' => ['message_id' => ++$this->messageId]];
 		};
-		$channel = new TelegramChannel(new TelegramApiClient('t', $fake));
+		$channel = new TelegramChannel(new TelegramApiClient('t', $fake), ReadingPace::off());
 		ChannelRegistry::inject(TelegramChannel::ID, $channel);
 		$this->service = new ConversationService($channel);
 	}

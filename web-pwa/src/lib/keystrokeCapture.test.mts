@@ -61,11 +61,11 @@ test('physical path records hold/release/press and dedups the covered beforeinpu
   assert.equal(
     res.csv,
     [
-      'class,hold,release,press',
-      'focus_gained,,,0',
-      'letter,0.1,0.2,0.1',
-      'letter,0.08,0.38,0.3',
-      'backspace,0.06,0.56,0.5',
+      'class,hold,release,press,source',
+      'focus_gained,,,0,dom',
+      'letter,0.1,0.2,0.1,dom',
+      'letter,0.08,0.38,0.3,dom',
+      'backspace,0.06,0.56,0.5,dom',
       '',
     ].join('\n'),
   );
@@ -86,10 +86,10 @@ test('soft path records press-only rows with blank hold/release', () => {
   assert.equal(
     res.csv,
     [
-      'class,hold,release,press',
-      'focus_gained,,,0',
-      'letter,,,0.11',
-      'backspace,,,0.3',
+      'class,hold,release,press,source',
+      'focus_gained,,,0,dom',
+      'letter,,,0.11,dom',
+      'backspace,,,0.3,dom',
       '',
     ].join('\n'),
   );
@@ -104,7 +104,7 @@ test('auto-repeat keydowns are ignored (hold measured from the first press)', ()
 
   const rows = res.csv.trim().split('\n').slice(1); // drop header
   assert.equal(rows.length, 1);
-  assert.equal(rows[0], 'letter,0.1,0.1,0'); // hold 0.1 from first keydown (t0=100), not 150
+  assert.equal(rows[0], 'letter,0.1,0.1,0,dom'); // hold 0.1 from first keydown (t0=100), not 150
 });
 
 test('paste always emits a marker even on the physical path', () => {
@@ -114,7 +114,7 @@ test('paste always emits a marker even on the physical path', () => {
   r.onKeyUp({ key: 'v', code: 'KeyV', timeStamp: 180 });
   const res = r.finish('a long pasted passage');
 
-  assert.ok(res.csv.includes('paste,,,0.01'));
+  assert.ok(res.csv.includes('paste,,,0.01,dom'));
   assert.equal(res.captureMode, 'physical');
   assert.ok(!res.csv.includes('pasted')); // pasted content never in the log
 });
@@ -131,4 +131,48 @@ test('blur drops dangling keydowns and marks the gap', () => {
 
   const classes = res.csv.trim().split('\n').slice(1).map((l) => l.split(',')[0]);
   assert.deepEqual(classes, ['focus_gained', 'focus_lost', 'focus_gained', 'letter']);
+});
+
+test('native IME rows replace the DOM soft rows; markers and physical keys stay', () => {
+  const r = new KeystrokeRecorderCore();
+  r.onFocus(1000);
+  // Soft keyboard via the DOM: composition updates arrive as beforeinput (coarse 'other').
+  r.onKeyDown({ key: 'Unidentified', code: '', keyCode: 229, timeStamp: 1150 });
+  r.onBeforeInput({ inputType: 'insertCompositionText', data: 'h', timeStamp: 1150 });
+  r.onBeforeInput({ inputType: 'insertCompositionText', data: 'hi', timeStamp: 1290 });
+  r.onBeforeInput({ inputType: 'insertFromPaste', data: 'x', timeStamp: 1400 });
+  r.onBlur(1500);
+  r.onFocus(1600);
+  // A hardware key in the same session stays on the DOM path.
+  r.onKeyDown({ key: '.', code: 'Period', timeStamp: 1700 });
+  r.onKeyUp({ key: '.', code: 'Period', timeStamp: 1760 });
+  const res = r.finish('hix.', [
+    { cls: 'letter', timeStamp: 1120 },
+    { cls: 'letter', timeStamp: 1260 },
+  ]);
+
+  assert.equal(res.captureMode, 'mixed');
+  assert.equal(
+    res.csv,
+    [
+      'class,hold,release,press,source',
+      'focus_gained,,,0,dom',
+      'letter,,,0.12,ime',
+      'letter,,,0.26,ime',
+      'paste,,,0.4,dom',
+      'focus_lost,,,0.5,dom',
+      'focus_gained,,,0.6,dom',
+      'punctuation,0.06,0.76,0.7,dom',
+      '',
+    ].join('\n'),
+  );
+});
+
+test('an empty native list keeps the DOM soft rows (hook missing or saw nothing)', () => {
+  const r = new KeystrokeRecorderCore();
+  r.onFocus(0);
+  r.onBeforeInput({ inputType: 'insertText', data: 'a', timeStamp: 100 });
+  const res = r.finish('a', []);
+  assert.equal(res.captureMode, 'soft');
+  assert.ok(res.csv.includes('letter,,,0.1,dom'));
 });

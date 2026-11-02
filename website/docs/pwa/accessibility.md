@@ -79,7 +79,8 @@ focusable, focus-visible ring on the chat log, global `prefers-reduced-motion` C
 <span className="status status--tbc">TBC</span>
 
 - Manual **VoiceOver / TalkBack** passes (recommended by the audit notes, not done).
-- Automated coverage of the lightbox, keystroke modal, other-specify modal and wearables panel.
+- Automated coverage of the lightbox, the handoff page's keystroke modal, other-specify modal and wearables
+  panel. (The chat-row keystroke writer is scanned.)
 - The cognitive-task iframe (third-party content, deliberately skipped).
 - **Likert buttons are 40 px**, under the 44 px recommended touch size, and scale anchor labels are one size
   smaller than body text.

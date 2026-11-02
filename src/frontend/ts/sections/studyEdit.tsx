@@ -7,7 +7,6 @@ import studyDescSvg from "../../imgs/dashIcons/studyDesc.svg?raw"
 import addSvg from "../../imgs/icons/add.svg?raw"
 import editSvg from "../../imgs/icons/change.svg?raw"
 import alarmsSvg from "../../imgs/dashIcons/alarms.svg?raw"
-import calendarSvg from "../../imgs/icons/calendar.svg?raw"
 import chartsSvg from "../../imgs/dashIcons/charts.svg?raw"
 import sumScoresSvg from "../../imgs/dashIcons/sumScores.svg?raw"
 import langSvg from "../../imgs/dashIcons/lang.svg?raw"
@@ -15,7 +14,9 @@ import publishSvg from "../../imgs/dashIcons/publish.svg?raw"
 import rewardsSvg from "../../imgs/dashIcons/rewards.svg?raw"
 import settingsSvg from "../../imgs/dashIcons/settings.svg?raw"
 import wearablesSvg from "../../imgs/dashIcons/participate.svg?raw"
+import phoneSensingSvg from "../../imgs/dashIcons/summary.svg?raw"
 import telegramSvg from "../../imgs/dashIcons/telegram.svg?raw"
+import calendarSvg from "../../imgs/icons/calendar.svg?raw"
 import {Study} from "../data/study/Study";
 import {ObservableLangChooser} from "../components/ObservableLangChooser";
 import {ObserverId} from "../observable/BaseObservable";
@@ -91,8 +92,20 @@ export class Content extends SectionContent {
 				{floating: true, template: {title: Lang.get("create"), icon: m.trust(addSvg) }, onclick: this.addQuestionnaire.bind(this)},
 				{template: {title: Lang.get("edit_questionnaires"), icon: m.trust(editSvg) }, href: this.getUrl("qEdit")}
 			),
-			DashElement(null, {template: {title: Lang.get("filter_and_trigger"), icon: m.trust(alarmsSvg) }, href: this.getUrl("filterTrigger"), disabled: disabled}),
-			DashElement(null, {template: {title: Lang.get("calendar"), icon: m.trust(calendarSvg) }, href: this.getUrl("calendar"), disabled: disabled}),
+			DashElement(null, {
+				template: {
+					title: Lang.get("schedule"),
+					icon: m.trust(alarmsSvg),
+					msg: this.getStudyOrThrow().schedule.checkins.get().length ? undefined : Lang.get("schedule_no_checkins_short")
+				},
+				href: this.getUrl("schedule"),
+				disabled: disabled
+			}),
+			DashElement(null, {
+				template: {title: Lang.get("calendar"), icon: m.trust(calendarSvg)},
+				href: this.getUrl("calendar"),
+				disabled: disabled || !this.getStudyOrThrow().schedule.checkins.get().length
+			}),
 			DashElement(null, {template: {title: Lang.get("create_charts"), icon: m.trust(chartsSvg) }, href: this.getUrl("charts"), disabled: disabled}),
 			DashElement(null, {template: {title: Lang.get("calculate_sumScores"), icon: m.trust(sumScoresSvg) }, href: this.getUrl("sumScores"), disabled: disabled}),
 			DashElement(null, {template: {title: Lang.get("languages_and_randomGroups"), icon: m.trust(langSvg) }, href: this.getUrl("langGroups")}),
@@ -103,6 +116,7 @@ export class Content extends SectionContent {
 			DashElement(null, {template: {title: Lang.get("reward_system"), icon: m.trust(rewardsSvg), noCompatibilityIcon: ["Web"] }, href: this.getUrl("rewards")}),
 			DashElement(null, {template: {title: Lang.get("push_notifications"), icon: m.trust(alarmsSvg) }, href: this.getUrl("pushNotifications")}),
 			DashElement(null, {template: {title: Lang.get("wearables"), icon: m.trust(wearablesSvg) }, href: this.getUrl("wearables")}),
+			DashElement(null, {template: {title: Lang.get("phone_sensing"), icon: m.trust(phoneSensingSvg), noCompatibilityIcon: ["Web", "iOS"] }, href: this.getUrl("phoneSensing")}),
 			DashElement(null, {
 				template: {
 					title: Lang.get("telegram"),

@@ -14,6 +14,9 @@ import { flushAudioQueue, markAudioReady } from './audioUploads';
 import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
 import { getApiRoot } from './serverRoot';
 import { clientAppType } from './platform';
+import { buildQuitPayload, withdrawnFromStatus } from './withdrawal';
+import { MAX_REJECTIONS, checkUploadReply, rejectionCost } from './uploadRetry';
+import type { ServerInputs } from './schedule';
 
 /**
  * Root of the ESMira backend (the PHP app + api/). The PWA is served at /pwa/ but the
@@ -82,6 +85,76 @@ export async function subscribeToPush(args: {
 }
 
 /**
+ * Tell the server to forget this device's web-push subscription (sign-out / leaving the study).
+ * The server drops the subscription together with the participant's reminder state, so the
+ * per-minute sender cannot queue one more push in the meantime. Best-effort: never throws.
+ */
+export async function unsubscribeFromPush(args: {
+  study: EsmiraStudy;
+  serverVersion: number;
+  userId: string;
+}): Promise<boolean> {
+  if (localOnly) return true;
+  try {
+    const resp = await fetch(`${getApiRoot()}api/push_subscribe.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify({
+        userId: args.userId,
+        studyId: args.study.id,
+        serverVersion: args.serverVersion,
+        unsubscribe: true,
+      }),
+    });
+    if (!resp.ok) return false;
+    const env = await resp.json();
+    return env?.success === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record that the participant left the study: the `quit` event ESMira's native apps send too.
+ * The server marks them as withdrawn (no further web push, Android nudges or chat prompts,
+ * on any device) and deletes their push subscription. Sent directly rather than through the
+ * offline queue, because sign-out wipes that queue right afterwards. Best-effort: never throws.
+ */
+export async function submitQuit(args: {
+  study: EsmiraStudy;
+  serverVersion: number;
+  accessKey: string;
+  userId: string;
+}): Promise<boolean> {
+  if (localOnly) return true;
+  const payload = buildQuitPayload({
+    studyId: args.study.id,
+    studyVersion: args.study.version,
+    studySubVersion: args.study.subVersion,
+    studyLang: args.study.lang,
+    serverVersion: args.serverVersion,
+    accessKey: args.accessKey,
+    userId: args.userId,
+    model: navigator.userAgent,
+    now: Date.now(),
+  });
+  try {
+    const resp = await fetch(`${getApiRoot()}api/datasets.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) return false;
+    const env = await resp.json();
+    return env?.success === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ask the server to send this participant an immediate welcome/test web push, right
  * after they enable notifications during onboarding. The push is sent only to this
  * user's own subscription and its title/body are generated server-side. Returns the
@@ -140,23 +213,31 @@ export async function reportClientInfo(studyId: number, userId: string): Promise
 }
 
 /**
- * Report a push funnel event from the app (as opposed to the service worker, which
- * reports 'received'/'clicked'). Used by the onboarding confirmation step to record
+ * Report a notification funnel event from the app (as opposed to the service worker, which
+ * reports web push 'received'/'clicked'). Used by the onboarding confirmation step to record
  * whether the participant actually saw the welcome notification — 'welcome_confirmed'
- * or 'welcome_missed'. A 'welcome_missed' surfaces a delivery problem in the researcher's
- * Push panel. Best-effort: never throws or blocks onboarding.
+ * or 'welcome_missed' (a 'welcome_missed' surfaces a delivery problem in the researcher's
+ * Push panel) — and by the native Android app for its device-planned notifications
+ * ('scheduled' / 'received' / 'clicked' on channel 'android', `count` at a time), so the
+ * researcher sees one funnel for every channel. Best-effort: never throws or blocks the app.
  */
 export async function reportPushEvent(args: {
   studyId: number;
   userId: string;
-  event: 'welcome_confirmed' | 'welcome_missed';
+  event: 'welcome_confirmed' | 'welcome_missed' | 'scheduled' | 'received' | 'clicked';
+  channel?: 'web' | 'android';
+  count?: number;
 }): Promise<void> {
   if (localOnly) return;
   try {
     await fetch(`${getApiRoot()}api/push_event.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studyId: args.studyId, userId: args.userId, event: args.event }),
+      body: JSON.stringify({
+        studyId: args.studyId, userId: args.userId, event: args.event,
+        ...(args.channel ? { channel: args.channel } : {}),
+        ...(args.count && args.count > 1 ? { count: args.count } : {}),
+      }),
     });
   } catch {
     /* best-effort telemetry — must not affect the participant */
@@ -168,6 +249,39 @@ export interface PushStatus {
   next: number | null;
   /** The schedule anchor the server used (join time, else subscribe time), or null. */
   joinedAt: number | null;
+  /**
+   * The participant has left the study (signed out on a device, or withdrawn by the research
+   * team): this device must stop its reminders and reset. Only an explicit server answer sets it.
+   */
+  withdrawn: boolean;
+  /** The participant switched notifications off (possibly on another device); null when the server did not say. */
+  notificationsOff: boolean | null;
+}
+
+/**
+ * Send the participant's notification switch (Settings → Notifications) to the server, which stops or
+ * resumes sending to them on every channel. Resolves whether the server stored it. Never throws.
+ */
+export async function setNotificationPreference(args: {
+  study: EsmiraStudy;
+  serverVersion: number;
+  userId: string;
+  off: boolean;
+  channel: 'web' | 'android';
+}): Promise<boolean> {
+  if (localOnly) return true;
+  try {
+    const resp = await fetch(`${getApiRoot()}api/notification_prefs.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studyId: args.study.id, userId: args.userId, serverVersion: args.serverVersion, off: args.off, channel: args.channel }),
+    });
+    if (!resp.ok) return false;
+    const env = await resp.json();
+    return env?.success === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -181,12 +295,46 @@ export async function fetchNextNotification(studyId: number, userId: string): Pr
       `${getApiRoot()}api/push_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
       { headers: { Accept: 'application/json' } },
     );
-    if (!resp.ok) return { next: null, joinedAt: null };
+    if (!resp.ok) return { next: null, joinedAt: null, withdrawn: false, notificationsOff: null };
     const env = await resp.json();
-    if (!env?.success) return { next: null, joinedAt: null };
-    return { next: env.dataset?.nextNotification ?? null, joinedAt: env.dataset?.joinedAt ?? null };
+    if (!env?.success) return { next: null, joinedAt: null, withdrawn: false, notificationsOff: null };
+    const off = env.dataset?.notificationsOff;
+    return {
+      next: env.dataset?.nextNotification ?? null,
+      joinedAt: env.dataset?.joinedAt ?? null,
+      withdrawn: withdrawnFromStatus(env),
+      notificationsOff: typeof off === 'boolean' ? off : null,
+    };
   } catch {
-    return { next: null, joinedAt: null };
+    return { next: null, joinedAt: null, withdrawn: false, notificationsOff: null };
+  }
+}
+
+/**
+ * What the app needs from the server to compute the study's schedule itself: the participant's answers it reads
+ * (usual sleep times) and the wearable events it reacts to (see api/schedule.php and lib/schedule.ts). Null when
+ * offline or on any error, so the caller keeps its cached copy. Best-effort: never throws.
+ */
+export async function fetchScheduleInputs(studyId: number, userId: string): Promise<ServerInputs | null> {
+  if (localOnly) return null;
+  try {
+    const resp = await fetch(
+      `${getApiRoot()}api/schedule.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      { headers: { Accept: 'application/json' }, cache: 'no-store' },
+    );
+    if (!resp.ok) return null;
+    const env = await resp.json();
+    if (!env?.success || typeof env.dataset !== 'object') return null;
+    const d = env.dataset;
+    return {
+      variables: d.variables && typeof d.variables === 'object' && !Array.isArray(d.variables) ? d.variables : {},
+      events: Array.isArray(d.events)
+        ? d.events.filter((e: { t?: unknown }) => typeof e?.t === 'number')
+          .map((e: { t: number; provider?: unknown; kind?: unknown }) => ({ t: e.t, provider: String(e.provider ?? ''), kind: String(e.kind ?? '') }))
+        : [],
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -222,6 +370,7 @@ export async function logEvent(args: {
       questionnaireInternalId: null,
       eventType: args.eventType,
       responseTime: now,
+      ...timezoneFields(now),
       responses: {},
     }],
   };
@@ -330,6 +479,17 @@ export interface SubmitArgs {
   keystrokeIdentifiers?: number[];
 }
 
+/**
+ * The device's time zone, stored with each response (`timezone`, `timezoneOffset` columns): the researcher's calendar
+ * shows each participant's windows in their own time from it. Offset in the getTimezoneOffset() convention (UTC − local,
+ * minutes), as for push subscriptions.
+ */
+export function timezoneFields(now: number): { timezone: string; timezoneOffset: number } {
+  let timezone = '';
+  try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''; } catch { /* no Intl time zones */ }
+  return { timezone, timezoneOffset: new Date(now).getTimezoneOffset() };
+}
+
 interface DatasetEntry {
   dataSetId: number;
   studyId: number;
@@ -341,6 +501,8 @@ interface DatasetEntry {
   questionnaireInternalId: number | null;
   eventType: 'joined' | 'questionnaire';
   responseTime: number;
+  timezone: string;
+  timezoneOffset: number;
   responses: Record<string, string | boolean | number>;
 }
 
@@ -361,6 +523,7 @@ function buildPayload(args: SubmitArgs): DatasetPayload {
     studySubVersion: args.study.subVersion ?? 0,
     studyLang: args.study.lang ?? 'en',
     accessKey: args.accessKey,
+    ...timezoneFields(now),
   };
   const dataset: DatasetEntry[] = [];
   if (args.newParticipant) {
@@ -408,13 +571,15 @@ const PROTOCOL_MAX = 200; // keep the log bounded
 export interface UploadProtocolEntry {
   /** Stable id, used to flip a queued entry's status once it actually sends. */
   id: string;
-  /** Upload time (epoch ms). */
+  /** When the data was handed over for upload, i.e. when the questionnaire was completed (epoch ms). */
   time: number;
+  /** When the server accepted it (epoch ms); later than `time` when it waited offline in the queue. */
+  sentAt?: number;
   /** Survey name, or a label for non-questionnaire uploads. */
   label: string;
   eventType: 'joined' | 'questionnaire' | 'cognitive';
-  /** 'sent' once the server accepted it; 'pending' while queued offline. */
-  status: 'sent' | 'pending';
+  /** 'sent' once the server accepted it; 'pending' while queued offline; 'failed' if the server kept refusing it. */
+  status: 'sent' | 'pending' | 'failed';
 }
 
 let protocolSeq = 0;
@@ -456,14 +621,15 @@ function appendProtocol(studyId: number, userId: string, entries: UploadProtocol
   saveProtocol(studyId, userId, list);
 }
 
-function markProtocolSent(studyId: number, userId: string, ids: string[]): void {
+function markProtocol(studyId: number, userId: string, ids: string[], status: 'sent' | 'failed'): void {
   if (!ids.length) return;
   const wanted = new Set(ids);
   const list = loadRawProtocol(studyId, userId);
   let changed = false;
   for (const e of list) {
-    if (wanted.has(e.id) && e.status !== 'sent') {
-      e.status = 'sent';
+    if (wanted.has(e.id) && e.status !== status) {
+      e.status = status;
+      if (status === 'sent') e.sentAt = Date.now();
       changed = true;
     }
   }
@@ -472,11 +638,12 @@ function markProtocolSent(studyId: number, userId: string, ids: string[]): void 
 
 function questionnaireProtocolEntries(args: SubmitArgs, status: UploadProtocolEntry['status']): UploadProtocolEntry[] {
   const time = Date.now();
+  const sentAt = status === 'sent' ? time : undefined;
   const entries: UploadProtocolEntry[] = [];
   if (args.newParticipant) {
-    entries.push({ id: newProtocolId(), time, label: 'Joined study', eventType: 'joined', status });
+    entries.push({ id: newProtocolId(), time, sentAt, label: 'Joined study', eventType: 'joined', status });
   }
-  entries.push({ id: newProtocolId(), time, label: args.questionnaireName, eventType: 'questionnaire', status });
+  entries.push({ id: newProtocolId(), time, sentAt, label: args.questionnaireName, eventType: 'questionnaire', status });
   return entries;
 }
 
@@ -486,6 +653,7 @@ const QUEUE_KEY = 'esmira_submit_queue';
 
 interface QueuedSubmit {
   payload: DatasetPayload;
+  /** Times the server refused it (see uploadRetry); failures while offline don't count. */
   attempts: number;
   /** Links this queued payload back to its pending upload-protocol entries. */
   protocol?: { studyId: number; userId: string; ids: string[] };
@@ -519,9 +687,7 @@ async function postDataset(payload: DatasetPayload): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!resp.ok) throw new Error(`datasets.php returned ${resp.status}`);
-  const env = await resp.json();
-  if (!env.success) throw new Error(env.error || 'Submission rejected');
+  await checkUploadReply(resp, 'datasets.php');
 }
 
 /**
@@ -548,13 +714,13 @@ export async function submitQuestionnaire(args: SubmitArgs): Promise<boolean> {
       void flushKeystrokeQueue();
     }
     return true;
-  } catch {
+  } catch (err) {
     const entries = questionnaireProtocolEntries(args, 'pending');
     appendProtocol(args.study.id, args.userId, entries);
     const queue = loadQueue();
     queue.push({
       payload,
-      attempts: 1,
+      attempts: rejectionCost(err),
       protocol: { studyId: args.study.id, userId: args.userId, ids: entries.map((e) => e.id) },
       ...(audioIds.length ? { audio: { studyId: args.study.id, userId: args.userId, identifiers: audioIds } } : {}),
       ...(keystrokeIds.length ? { keystrokes: { studyId: args.study.id, userId: args.userId, identifiers: keystrokeIds } } : {}),
@@ -591,6 +757,7 @@ function buildJoinPayload(args: JoinArgs): DatasetPayload {
       questionnaireInternalId: null,
       eventType: 'joined',
       responseTime: args.joinedAt,
+      ...timezoneFields(args.joinedAt),
       responses: { model },
     }],
   };
@@ -609,11 +776,11 @@ export async function submitJoined(args: JoinArgs): Promise<boolean> {
   const id = newProtocolId();
   try {
     await postDataset(payload);
-    appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, label: 'Joined study', eventType: 'joined', status: 'sent' }]);
+    appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, sentAt: Date.now(), label: 'Joined study', eventType: 'joined', status: 'sent' }]);
     return true;
-  } catch {
+  } catch (err) {
     const queue = loadQueue();
-    queue.push({ payload, attempts: 1, protocol: { studyId: args.study.id, userId: args.userId, ids: [id] } });
+    queue.push({ payload, attempts: rejectionCost(err), protocol: { studyId: args.study.id, userId: args.userId, ids: [id] } });
     saveQueue(queue);
     appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, label: 'Joined study', eventType: 'joined', status: 'pending' }]);
     return false;
@@ -689,6 +856,7 @@ export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<
       questionnaireInternalId: args.trialsInternalId,
       eventType: 'questionnaire' as const,
       responseTime: now + i,
+      ...timezoneFields(now),
       responses: { ...r, model },
     })),
   };
@@ -697,14 +865,14 @@ export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<
   };
   try {
     await postDataset(payload);
-    appendProtocol(args.study.id, args.userId, [entry]);
+    appendProtocol(args.study.id, args.userId, [{ ...entry, sentAt: Date.now() }]);
     return true;
-  } catch {
+  } catch (err) {
     appendProtocol(args.study.id, args.userId, [{ ...entry, status: 'pending' }]);
     const queue = loadQueue();
     queue.push({
       payload,
-      attempts: 1,
+      attempts: rejectionCost(err),
       protocol: { studyId: args.study.id, userId: args.userId, ids: [entry.id] },
     });
     saveQueue(queue);
@@ -712,22 +880,29 @@ export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<
   }
 }
 
-/** Retry any queued submissions. */
-export async function flushSubmitQueue(): Promise<void> {
+/**
+ * Retry any queued submissions. Returns how many are still waiting to be sent. A submission is only
+ * dropped after the server refused it MAX_REJECTIONS times; being offline never counts toward that,
+ * so answers given without a connection wait for as long as it takes.
+ */
+export async function flushSubmitQueue(): Promise<number> {
   let queue = loadQueue();
-  if (queue.length === 0) return;
+  if (queue.length === 0) return 0;
   const remaining: QueuedSubmit[] = [];
   for (const item of queue) {
-    if (item.attempts >= 20) continue; // give up after many tries
+    if (item.attempts >= MAX_REJECTIONS) { // the server keeps refusing it: give up, and say so in the protocol
+      if (item.protocol) markProtocol(item.protocol.studyId, item.protocol.userId, item.protocol.ids, 'failed');
+      continue;
+    }
     try {
       await postDataset(item.payload);
-      if (item.protocol) markProtocolSent(item.protocol.studyId, item.protocol.userId, item.protocol.ids);
+      if (item.protocol) markProtocol(item.protocol.studyId, item.protocol.userId, item.protocol.ids, 'sent');
       // This dataset's pending-upload markers now exist server-side → release
       // any voice memos / keystroke logs that were waiting on it.
       if (item.audio) await markAudioReady(item.audio.studyId, item.audio.userId, item.audio.identifiers);
       if (item.keystrokes) await markKeystrokesReady(item.keystrokes.studyId, item.keystrokes.userId, item.keystrokes.identifiers);
-    } catch {
-      remaining.push({ ...item, attempts: item.attempts + 1 });
+    } catch (err) {
+      remaining.push({ ...item, attempts: item.attempts + rejectionCost(err) });
     }
   }
   queue = remaining;
@@ -735,6 +910,7 @@ export async function flushSubmitQueue(): Promise<void> {
   // Whether or not the queue drained fully, try uploading any ready recordings/logs.
   void flushAudioQueue();
   void flushKeystrokeQueue();
+  return queue.length;
 }
 
 export function pendingSubmitCount(): number {

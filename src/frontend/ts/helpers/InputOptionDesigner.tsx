@@ -616,6 +616,11 @@ export class InputOptionDesigner {
 								{ObservableLangChooser(this.study)}
 							</div>
 							<div class="fakeLabel line">
+								<small>{Lang.get("input_instruction")}{NotCompatibleIcon("Android", "iOS")}</small>
+								{RichText(this.input.instruction)}
+								{ObservableLangChooser(this.study)}
+							</div>
+							<div class="fakeLabel line">
 								<small>{Lang.get("input_screen_reader_label")}{NotCompatibleIcon("Android", "iOS")}</small>
 								<input type="text" class="big" {...BindObservable(this.input.screenReaderLabel)} />
 								{ObservableLangChooser(this.study)}

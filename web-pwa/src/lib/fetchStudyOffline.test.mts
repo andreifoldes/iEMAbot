@@ -16,18 +16,24 @@ const ok = () => new Response(JSON.stringify(env), { status: 200 });
 test('a good response is returned and kept for offline use', async () => {
   store.clear();
   globalThis.fetch = (async () => ok()) as typeof fetch;
-  assert.equal((await fetchStudy('k')).study.id, 7);
+  const fetched = await fetchStudy('k');
+  assert.equal(fetched.study.id, 7);
+  assert.equal(fetched.fromCache, undefined);
   assert.equal([...store.keys()].some((k) => k.startsWith('esmira_study_env:')), true);
 });
 
-test('offline: the last good copy is served', async () => {
+test('offline: the last good copy is served, marked as such', async () => {
   globalThis.fetch = (async () => { throw new TypeError('Failed to fetch'); }) as typeof fetch;
-  assert.equal((await fetchStudy('k')).study.id, 7);
+  const fetched = await fetchStudy('k');
+  assert.equal(fetched.study.id, 7);
+  assert.equal(fetched.fromCache, true);
 });
 
 test('server error: the last good copy is served', async () => {
   globalThis.fetch = (async () => new Response('x', { status: 503 })) as typeof fetch;
-  assert.equal((await fetchStudy('k')).study.id, 7);
+  const fetched = await fetchStudy('k');
+  assert.equal(fetched.study.id, 7);
+  assert.equal(fetched.fromCache, true);
 });
 
 test('offline with no copy: the network error surfaces', async () => {

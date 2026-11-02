@@ -1,150 +1,208 @@
 ---
 title: "Scheduling"
 sidebar_label: "Scheduling"
-description: "How prompts are scheduled in ESMira and which parts are actually executed by this fork's push scheduler and PWA."
+description: "The one schedule of a study: which check-ins open when, when participants are prompted, and how every channel uses it."
 ---
 
 # Scheduling
 
-A questionnaire has `actionTriggers[]`. Each **action trigger** combines a **when** with an **action**:
+<span className="status status--partial">Partial</span> Implemented and unit-tested on every channel; not yet run in a live study.
+
+A study has **one schedule** (`Study.schedule`, edited under **Edit study → Schedule**). It is the only place that
+says when a questionnaire can be answered and when participants are prompted, for every channel:
 
 ```mermaid
 flowchart LR
-  AT[ActionTrigger] --> SCH["schedules[]<br/>(time-based)"]
-  AT --> EV["eventTriggers[]<br/>(cue-based)"]
-  AT --> ACT["actions[]<br/>invitation / message / notification"]
-  SCH -->|executed| PS["PushScheduler.php<br/>+ availability.ts"]
-  EV -->|"cue wearable_event: executed"| SS["SensorTriggerScheduler.php"]
-  EV -.->|"other cues: saved, NOT executed here"| X["native ESMira apps only"]
+  CFG["Study.schedule<br/>(anchors + check-ins)"] --> ENG["Schedule engine<br/>Schedule.php = schedule.ts"]
+  IN["participant: enrolment, time zone,<br/>usual sleep times, wearable events,<br/>completions"] --> ENG
+  ENG --> W["check-in windows<br/>open · prompt · close · reminders"]
+  W --> AV["what can be answered now<br/>(app list, Telegram /checkin)"]
+  W --> N["what to notify<br/>(web push, Telegram, Android alarms,<br/>server nudges, researcher preview)"]
 ```
 
-The designer creates **one schedule or one event (or sensor trigger) per trigger**, although the data model allows more.
+The engine exists twice, as a line-by-line port: `src/backend/schedule/Schedule.php` on the server and
+`web-pwa/src/lib/schedule.ts` in the participant app (web and Android, which always ship together). Both run
+`test/fixtures/channels/schedule.json`, so they cannot drift apart. Channels only deliver what the engine says: none
+of them has scheduling rules of its own.
 
-## Schedules {/* #schedules */}
+Questionnaires carry no scheduling settings. A questionnaire without a check-in is never open and never prompted.
+Older study configs (per-questionnaire schedules, sensor triggers, completion filters, active periods and the earlier
+daily check-in plan) are upgraded into this schema once (see [Upgrading older configs](#upgrade)).
 
-<span className="status status--shipped">Shipped</span>
+## The schedule {/* #schedule */}
 
-| Field | Meaning |
-| --- | --- |
-| `dailyRepeatRate` | Every N days. |
-| `skipFirstInLoop` | Wait N days before the first occurrence. |
-| `startDayOne` | Start on the join day. |
-| `weekdays` | Bitmask (Sunday = bit 0); `0` means all days. |
-| `dayOfMonth` | `0` = all, or 1–31. |
-| `userEditable` | Participant may change the times. |
-| `signalTimes[]` | One or more times per day, see below. |
+Study-wide fields (all optional; omitted means the default):
 
-### Signal times
-
-- **Fixed:** a single `startTimeOfDay`.
-- **Random:** within `startTimeOfDay`–`endTimeOfDay`, `frequency` times per day with at least
-  `minutesBetween` minutes apart. `randomFixed` chooses whether the random points are drawn **once for the whole
-  study** or **re-drawn** each time. The designer warns if the window cannot fit `frequency × minutesBetween`.
-
-Several signal times per day give **multi-point daily sampling**, the basis for capturing diurnal
-trajectories. <span className="status status--shipped">Shipped</span>
-
-`Study.legacyScheduling` switches day offsets from calendar days to 24-hour periods.
-
-### Actions
-
-| `type` | Name | Behaviour |
+| Field | Default | Meaning |
 | --- | --- | --- |
-| 1 | Invitation | Notification inviting to the questionnaire; supports `reminder_count` and `reminder_delay_minu`. |
-| 2 | Message | Message to the participant. |
-| 3 | Simple notification | Plain notification. |
+| `checkins[]` | `[]` | The check-ins, see below. |
+| `dayStart` | `0` | When a study day starts, ms after midnight (e.g. 04:00). "Until the end of the day" and "once per day" use study days. |
+| `overlap` | `defer` | Check-ins are open one at a time: `defer` opens the next one no earlier than the previous window closes; `truncate` closes the previous window when the next opens. Check-ins marked `parallel` are left out. |
+| `responseMinutes` | `60` | Response window after a prompt (`available: prompt`); 0 = until the range ends. |
+| `cooldownMinutes` | `0` | A check-in opens, and is prompted, no earlier than this long after another check-in was completed (check-ins that are not `parallel`). |
+| `segments` | `0` | Parts the waking day is split into for `split` boundaries; 0 = one per check-in. |
+| wake-up and bedtime anchors | | See [Anchors](#anchors). |
 
-Only types 1 and 3 produce a Web Push.
+### Check-ins {/* #checkins */}
 
-### Where schedules run in this fork
+Each check-in is one questionnaire with a daily window. A questionnaire can have several check-ins (e.g. two daytime
+check-ins of the same questionnaire).
 
-| Layer | Component | Role |
-| --- | --- | --- |
-| Server | `PushScheduler::computeDueOccurrences` | Builds due occurrences each minute, in the participant's local time (stored `tzOffset`). Honours `dailyRepeatRate`, weekdays, day of month, `skipFirstInLoop`, and the duration fields. |
-| Client | `web-pwa/src/lib/availability.ts` | Computes when a questionnaire is open or locked, and why, re-evaluated every 60 s. |
-| Service worker | `sw.ts` | Drops notifications that are stale, done or duplicated before showing them. |
+| Group | Field | Default | Meaning |
+| --- | --- | --- | --- |
+| | `questionnaireId` | | The questionnaire. |
+| **Days** | `dayFrom` | `0` | First day, counted from the enrolment day (day 0). |
+| | `dayUntil` | `-1` | Last day (inclusive); -1 = no end. |
+| | `everyDays` | `1` | Every N days from `dayFrom`. |
+| | `weekdays` | `0` | Bitmask, Sunday = bit 0; 0 = every day. |
+| | `dayOfMonth` | `0` | Only on this day of the month; 0 = any. |
+| | `dateFrom` / `dateUntil` | `0` | Absolute dates (ms): no window opens before / after; 0 = none. |
+| **Range** | `startType` / `endType` | `split` | `fixed` clock time, `wake` / `usualWake` / `bed` plus an offset, or `split` point (see [Boundaries](#boundaries)). |
+| | `startTime`, `startOffsetMin`, `startSegment`, `startNextDay` (and `end…`) | | The boundary's value. |
+| **Prompt** | `prompt` | `start` | `start` of the range, `random` minute inside it, `wake` when the participant gets up, `event` when a wearable reports something, or `none`. At most once a day. |
+| | `promptGraceMin` | `0` | `wake`: minutes after the usual wake-up before the fallback prompt. |
+| | `event…`, `fallback…` | | `event`: see [Event prompts](#event-prompts). |
+| **Open** | `available` | `prompt` | `prompt`: from the prompt for the response window; `range`: throughout the range, also before the prompt; `day`: from the prompt until the study day ends. |
+| | `responseOverride`, `responseMinutes` | `false`, `60` | This check-in's own response window. |
+| **Completion** | `limit` | `window` | `window`: once per window; `day`: once per study day; `once`: once in the whole study; `none`: as often as the participant likes while it is open. |
+| | `minGapMinutes` | `0` | After completing this questionnaire, it opens again no earlier than this. |
+| | `parallel` | `false` | Open alongside the other check-ins: it neither waits for nor shortens them and takes no part in the cool-down (e.g. a questionnaire open any time). |
+| | `autoStart` | `false` | The participant app starts it by itself when the participant reaches the study while it is open (e.g. usual sleep times on day zero). |
+| **Notification** | `title` | `''` | Notification title; empty = the questionnaire title (else the study title). |
+| | `text` | `''` | Notification text; empty = "You have a questionnaire to complete." |
+| | `reminderCount`, `reminderDelayMin` | `0`, `5` | Reminders after the prompt, while the window is open and the check-in not done. |
+| | `includeDeadline` | `false` | Appends "Complete by HH:MM" (the window's close). |
 
-Details: [Web Push](./web-push.md), [Participant flow](../pwa/participant-flow.md#availability).
+Common patterns:
 
-## Sensor triggers {/* #sensor-triggers */}
-
-<span className="status status--partial">Partial</span> Implemented end to end; **not yet tested against live
-Withings or Google Health accounts** beyond a single Withings test participant.
-
-*If the wearable reports new data, then send the prompt; otherwise send it at a fixed time anyway.* Add one
-with **Add sensor trigger** in the questionnaire's *Filter and trigger* section (or pick *Wearable sensor event*
-as the cue of an event trigger).
-
-| Setting | Meaning |
+| Pattern | Check-in |
 | --- | --- |
-| Provider | `any` connected wearable, `withings` or `googlehealth` (which also carries Fitbit and Pixel Watch data; see [Wearables](./wearables.md#google-health-api)). |
-| New data of type | `sleep`, `activity`, `weight`, plus Withings-only events: `bed_in`, `bed_out`, `sleep_sensor_ready`, `bed_occupied`, `bed_empty`, `bed_occupied_or_empty`, `blood_pressure`, `temperature`, `glucose`, `hrv`, `ecg`, `ecg_failed`, `stethoscope`, `urine`. The designer warns when the chosen provider has no webhook for the type. |
-| Only within a daily window | Ignore events outside `wearableWindowStart`–`wearableWindowEnd` (participant-local; may wrap midnight), e.g. 05:00–12:00 for a wake-up prompt. |
-| Max. prompts per day | `wearableMaxPerDay` (default 1) per participant and local day. |
-| Delay | The existing delay fields: fixed, or a stable pseudo-random value between `delayMinimumSec` and `delaySec`. |
-| Fallback | `fallbackEnabled` + `fallbackTimeOfDay`: at that local time, send the prompt if no qualifying event arrived earlier that day. This also covers participants who never linked a device. |
-| Fallback time from | `fallbackMode`: `fixed` (default, the time above) or `variable`: *participant variable + offset*. The fallback then fires at the participant's latest answer to the time item `fallbackVariable` (for example `habitual_wake_time` from an intake questionnaire) plus `fallbackOffsetMin` (may be negative; wraps over midnight). |
-| If the variable is not set, send at | `fallbackDefaultEnabled` (default on): while a participant has not answered that item (or the answer is not a time), the fixed `fallbackTimeOfDay` is the second fallback. Off: no fallback for them until they answer. |
+| Fixed EMA beep, open 30 min | `fixed` 10:00–10:00 range, `prompt: start`, `available: prompt`, response 30 |
+| Stratified random EMA | `fixed` 10:00–12:00, `prompt: random` |
+| Diary open all evening | `fixed` 19:00 – `fixed` 04:00, `available: range` |
+| Morning when getting out of bed | `wake` + 0 – `wake` + 180, `prompt: wake`, `available: range` |
+| Questionnaire open any time | `fixed` 00:00 – `fixed` 00:00 next day, `prompt: none`, `available: range`, `limit: none`, `parallel` |
+| Once, at onboarding | as above with `limit: once`, `autoStart: true` |
+| Weekly, from week 2 | `dayFrom: 7`, `everyDays: 7` |
 
-Behaviour worth knowing:
+### Boundaries {/* #boundaries */}
 
-- A participant variable is the participant's **latest answer in `HH:MM` form** (what clock-time items save) to
-  that item; other answers (empty, free text, or the minutes a *how long …* duration picker saves) are ignored and
-  keep the previous value. The designer only suggests clock-time items. The server keeps only the items an enabled
-  fallback names, in `.participant_variables/<user>.json` in the study folder (emptied with the study's data); the
-  answers themselves stay in the response files as usual.
-- A variable fallback that was due **before** the participant gave that answer is skipped rather than sent late
-  (answering the intake at 08:00 with wake 07:00 + 30 min starts the next day). Changing the answer moves later
-  fallbacks, never a second one on the same day.
-- The fallback ignores the sensor window, and it uses up the daily cap. If a participant's variable + offset falls
-  before the window (or wraps past midnight), their fallback fires first and a sensor prompt cannot follow that day.
-- The fallback **counts against the daily cap**: a sensor event that arrives after the fallback fired does not
-  prompt a second time (with the default cap of 1).
-- Reminders (`reminder_count`, `reminder_delay_minu`) follow a sensor or fallback prompt and stop once the
-  participant submits anything.
-- Prompts older than **2 hours** are dropped rather than sent (no back-filling after downtime). On a
-  participant's first run, a fallback time that already passed is skipped too; a fresh sensor event is not.
-- The daily cap counts on the day the prompt is *shown* (after any delay), not the day the sensor reported.
-- The PWA treats a questionnaire that has only sensor triggers as always available, so a "complete by" time
-  shown in the notification (`completableOncePerNotification`) is not enforced in the app.
-- The questionnaire's own duration fields (start/end date, activation and expiry days after joining) still apply.
-- Delivery is by **Web Push** only, from the same per-minute sender as time-based schedules, and needs push
-  enabled for the study.
-- A webhook says only that *new data of a category exists*. There is **no value condition** (for example
-  "slept under six hours") and no real wake-up detection; "new sleep data synced" is the proxy.
+Each end of a range is
 
-Server setup and the webhook endpoint: [Wearables](./wearables.md#webhooks-and-sensor-triggers).
+- `fixed`: a clock time; with `…NextDay` on the next calendar day (e.g. until 02:00 tomorrow);
+- `wake`: the participant's wake-up plus an offset; with `…NextDay` the next day's wake-up;
+- `usualWake`: the usual wake-up (the wake-up fallback, tiers 1–2, never the observed one) plus an offset, known before
+  the participant gets up;
+- `bed`: the participant's bedtime plus an offset;
+- `split`: point k of the waking day (wake-up to the planned bedtime) divided into `segments` equal parts.
 
-## Event triggers {/* #event-triggers */}
+A clock-time end before the start is the next day's. A range that needs a wake-up not known yet has no window yet.
 
-<span className="status status--partial">Partial</span> Configurable, not executed (except the sensor cue above).
+### Anchors {/* #anchors */}
 
-An event trigger is a **cue**, not a free-form condition. The designer's `cueCode` options are exactly:
+Wake-up and going to bed have tiered fallbacks:
 
-`actions_executed`, `invitation`, `invitation_missed`, `joined`, `quit`, `questionnaire`, `rejoined`,
-`reminder`, `schedule_changed`, `statistic_viewed`, `study_message`, `study_updated`, and, added by this fork,
-`wearable_event` (see above).
+| Tier | Wake-up | Going to bed |
+| --- | --- | --- |
+| Observed | earliest wearable event in the window (`wakeSensor`, `wakeProvider`, `wakeEvent` e.g. Withings `bed_out`, `wakeWindowStart`–`wakeWindowEnd`), or the answer to the wake-up check-in (`wakeFromCheckin`) | first wearable event of the night in the window (`bedSensor`, `bedProvider`, `bedEvent` e.g. `bed_in`, `bedWindowStart`–`bedWindowEnd`), after waking up |
+| 1, person-specific | latest answer to `wakeVariable` (e.g. `habitual_wake_time`) + `wakeOffsetMin`; on Saturdays and Sundays `wakeVariableWeekend` first | latest answer to `bedVariable` (e.g. `habitual_bedtime`) + `bedOffsetMin`; on Friday and Saturday nights `bedVariableWeekend` first |
+| 2, fixed | `wakeDefault` (08:00) | `bedDefault` (23:00) |
 
-Plus a delay (fixed, or random between `delayMinimumSec` and `delaySec`), "skip this questionnaire"
-(only events from other questionnaires), and an optional filter to events from one specific questionnaire.
+An observation counts only when it comes before the fallback, which is therefore the latest the anchor can be. With
+`wakeFromCheckin`, the first check-in starting at wake-up (`wake` + 0 or split point 0) can be answered from the start
+of the wake-up window, before any prompt; answering it marks wake-up and re-plans the day, also offline in the app.
+Split points always use the planned bedtime.
 
-:::warning[Not executed by this fork's web path]
-Apart from `wearable_event`, a search of `src/backend`, `src/api`, `src/cli` and `web-pwa/src` found **no code
-that fires event triggers**. `PushScheduler` skips event-triggered questionnaires in its window-opening pass, and the PWA has no
-executor. Event execution is a behaviour of ESMira's native apps, which this repository does not contain.
-This is an inference from reading the code; it has not been tested end to end.
-:::
+### Event prompts {/* #event-prompts */}
 
-There is **no general "if-this-then-that" condition builder**: the sensor trigger is a fixed *event + window + cap + fallback* form. The `Conditions` structure (key, value,
-equal/unequal/greater/less, AND/OR) is used only for chart axes, not scheduling.
+`prompt: event` prompts when a wearable reports an event (`eventProvider`, `eventKind`, e.g. Withings `bed_out` or
+Fitbit `sleep`), the first of the day between `eventFrom` and `eventUntil` (-1 = the whole range), after a delay of
+`eventDelayMin` (or a stable random delay up to `eventDelayMaxMin`). Without an event by the fallback time, it prompts
+at the fallback: `fallback: fixed` at `fallbackTime`; `variable` at the participant's answer to `fallbackVariable` plus
+`fallbackOffsetMin` (else `fallbackTime` if `fallbackDefault`); `none` never. Until then the window is not open (with
+`available: range` it is, without a prompt). Events only reach the server; the app learns them when it is online.
 
-<span className="status status--tbc">TBC</span> Event-contingent and adaptive designs: see
-[Current status](../current-status.md).
+## How windows are worked out {/* #windows */}
 
-## Questionnaire filters and availability windows
+For each day (yesterday, today and the days ahead) and each check-in whose days include it:
 
-Independent of triggers, a questionnaire can be limited by `durationStart`/`durationEnd`,
-`durationStartingAfterDays`, `durationPeriodDays`, `completableOnce`, `completableOncePerDay` (fork),
-`completableOncePerNotification` with `completableMinutesAfterNotification`,
-`completableAtSpecificTime`, and `limitCompletionFrequency`. A questionnaire with **no signals** is
-*passive* and is gated only by its duration fields.
+1. The range from its two boundaries.
+2. With `overlap: defer`, the earliest it can open is when the previous window closes (not for `parallel` check-ins).
+3. The prompt (`start`, `random`, `wake`, `event` or `none`), inside the range.
+4. When it is open, from `available`.
+5. A window closes when the next one opens, also across midnight (not for `parallel` check-ins).
+6. Completions: the cool-down and `minGapMinutes` move a window's opening later; `limit` marks a window **done**.
+
+Each window has a key (`YYYY-MM-DD:<check-in index>`) and belongs to the study day it opens in. The app records a
+completion against that key; a completion the server learns from an upload (without a key) counts for the earliest
+window of its questionnaire it falls into that is not done yet.
+
+From the windows:
+
+- **Open now**: the first window that is open and not done. Every channel shows exactly these.
+- **Prompts**: each window with a prompt that is not done, plus its reminders while it is open and nothing has been
+  completed for that questionnaire since it opened. One notification per minute; several check-ins in the same
+  minute share one ("You have 2 questionnaires to complete"). Never sent more than 2 h late or after the window
+  closed, and never twice. A participant's first run sends nothing that was already due, except a prompt that follows
+  a wearable event or wake-up.
+
+## Channels {/* #channels */}
+
+| Channel | Uses |
+| --- | --- |
+| Web push (`PushSender`, cron every minute) | due prompts; the service worker drops items whose window the participant has completed meanwhile |
+| Telegram (`ChannelDispatcher`) | due prompts start a conversation; `/checkin` offers the open windows |
+| Android app | plans prompts as local alarms (offline, on the minute); prompts that depend on a wearable come from the server (`api/native_pending.php`) |
+| App list (web and Android) | open windows, computed on the device from `api/schedule.php` (events, usual sleep times), so it works offline |
+| Researcher preview (Push panel) | prompts of the first days for a sample participant |
+| Calendar (editor) | a sample participant's windows (plan), each participant's windows and compliance (monitoring) |
+
+The server learns completions from uploads (`ParticipantVariableStore`, `@completions`), the device from its own.
+
+## Calendar {/* #calendar */}
+
+**Edit study → Calendar** shows the windows day by day, from the same engine (`backend/schedule/ScheduleCalendar.php`):
+
+- **Plan**: a sample participant who joins on a chosen day, with sample answers to the questions the schedule reads
+  (usual wake-up and bedtime, weekday and weekend, event fallbacks), for the schedule as it is being edited (unsaved
+  changes are posted to `GetSchedulePlan`). Wake-up and events come at their fallback, as for a participant without a
+  wearable; random prompts are drawn for the sample participant. Each window runs from when it opens to when it
+  closes, with its prompt and reminders; the night between bedtime and wake-up is shaded.
+- **Participants** (needs read permission, `GetScheduleMonitor`): every participant's compliance so far, and per
+  participant their windows from enrolment (at most 120 days back) to a week ahead, in their own time. A window is
+  **completed** (answered inside it), **done elsewhere** (a check-in answerable once per day or once in the study that
+  was answered outside this window), **missed**, **open now** or **upcoming**; windows after a participant left the
+  study are greyed out.
+
+Compliance counts each closed window of a check-in answerable once per window, and each study day of a check-in
+answerable once per day, against the ones completed; check-ins answerable any number of times or once in the study
+are shown but not counted. Completions are read from the study's response files (every uploaded questionnaire, so the
+whole history, also from before the schedule existed), wearable events from the participant's event store. The time
+zone is the one saved with the participant's latest response (`timezone`, else `timezoneOffset`, sent by the web and
+Android app since 3.7.1), else their Telegram binding, else their push subscription; without any the calendar shows UTC.
+
+## Upgrading older configs {/* #upgrade */}
+
+`ScheduleUpgrade` turns an older study into this schema. It runs once for every study when the server is updated to
+3.7.0 (`admin/updateScripts/3.7.0.php`, after a backup of each study's config to `backups/schedule-upgrade/`), and on
+every save of a config that is still in the old form (e.g. an imported file). Per questionnaire:
+
+| Older setting | Becomes |
+| --- | --- |
+| Earlier daily check-in plan (`dailyPlan`) | the schedule's anchors and check-ins (those questionnaires' own schedules were already ignored) |
+| Fixed signal time | a check-in prompted at that time, open until the end of the day (or "visible for" minutes) |
+| Random signal time, N times in a window | N check-ins, one per equal part of the window, each prompted at random |
+| Fixed completion window without signals (`completableAtSpecificTime`) | a check-in open in that window, prompted when it opens |
+| Wearable sensor trigger | an `event` check-in with the same event, window, delay and fallback |
+| No schedule at all | a check-in open any time |
+| Active period (`durationStartingAfterDays`, `durationPeriodDays`, `durationStart`, `durationEnd`) | each check-in's days |
+| `completableOnce` / `completableOncePerDay` / otherwise | `limit: once` / `day` / `window` (`none` for questionnaires without a schedule) |
+| `limitCompletionFrequency` | `minGapMinutes` |
+| Notification text, title, reminders, `notificationIncludeDeadline` | the check-in's notification |
+| `dayStartTimeOfDay` | `dayStart` |
+| `askAtOnboarding` | `autoStart` |
+
+Check-ins converted from per-questionnaire settings are `parallel`, as those were independent of each other; the earlier
+daily plan's check-ins stay one at a time. The old fields are removed. A sensor trigger with more than one prompt a day keeps one; a fixed completion window
+combined with signal times keeps the window and prompts when it opens. Other ESMira event cues were never run by this
+server and are left as they were.

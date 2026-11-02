@@ -13,6 +13,8 @@ use backend\channels\store\JsonFile;
 use backend\fileSystem\PathsFS;
 use backend\Main;
 use backend\notifications\DueOccurrences;
+use backend\notifications\ParticipantWithdrawals;
+use backend\schedule\Schedule;
 use Throwable;
 
 /**
@@ -45,6 +47,8 @@ class ChannelDispatcher {
 								$state = null; // drop the state file the lock just re-created
 								return;
 							}
+							if(ParticipantWithdrawals::isWithdrawn((int) $current['studyId'], (string) $current['userId']))
+								return; // left the study (quit event from any channel, or a researcher): nothing is sent
 							self::tick($service, $current, $state, $defaultStudy, $nowMs, $stats);
 							if($service->recipientGone) { // bot blocked / chat deleted: pause until they write again
 								$current['blocked'] = true;
@@ -70,6 +74,7 @@ class ChannelDispatcher {
 	/** One participant: expire, compute due occurrences, start or queue them. */
 	public static function tick(ConversationService $service, array $binding, array &$state, array $defaultStudy, int $nowMs, array &$stats): void {
 		$study = ChannelStudies::load((int) $binding['studyId'], (string) ($binding['lang'] ?? '')) ?? $defaultStudy;
+		$service->channel()->paceFor((string) $binding['chatRef'], $study);
 		if(!empty($state['outbox']))
 			(new SubmissionOutbox($service->channel()))->flush($study, $binding, $state);
 		$service->resendPromptIfNeeded($binding, $state, $study, $nowMs);
@@ -79,11 +84,10 @@ class ChannelDispatcher {
 			$service->deliver($binding, $state, $expired);
 		}
 
-		$schedule = is_array($state['schedule'] ?? null) ? $state['schedule'] : [];
+		$scheduleState = is_array($state['schedule'] ?? null) ? $state['schedule'] : [];
 		$tz = ChannelStudies::tzOffsetMin($binding, $nowMs);
-		$due = DueOccurrences::compute((int) $binding['studyId'], (string) $binding['userId'], $defaultStudy, $tz, (int) $binding['joinedAt'], $schedule, $nowMs);
-		DueOccurrences::advance($schedule, $nowMs);
-		$state['schedule'] = $schedule;
+		$due = DueOccurrences::compute((int) $binding['studyId'], (string) $binding['userId'], $defaultStudy, $tz, (int) $binding['joinedAt'], $scheduleState, $nowMs);
+		$state['schedule'] = $scheduleState;
 
 		$sent = is_array($state['sent'] ?? null) ? $state['sent'] : [];
 		foreach(self::latestPerQuestionnaire($due['occurrences']) as $occ) {
@@ -112,23 +116,28 @@ class ChannelDispatcher {
 		$state['sent'] = self::prune($sent, $nowMs);
 	}
 
-	/** Completion rules the scheduler itself does not know about (it only sees lastDataSetTime). */
+	/**
+	 * The schedule's completion rule (Schedule::applyCompletions) for what the chat state knows and the server's
+	 * completions may not yet: the window was completed in the chat, or by the check-in's limit (once, per study day).
+	 */
 	public static function shouldOffer(array $study, array $state, array $occ, int $nowMs, int $tzOffsetMin): bool {
 		$q = ChannelStudies::questionnaire($study, (int) $occ['qid']);
-		if($q === null)
+		$schedule = Schedule::config($study);
+		if($q === null || $schedule === null)
 			return false;
-		if(!empty($occ['deadline']) && (int) $occ['deadline'] <= $nowMs)
+		if((int) $occ['deadline'] <= $nowMs)
 			return false;
-		if(!empty($occ['occKey']) && isset($state['done'][(int) $occ['qid'] . '|' . $occ['occKey']]))
+		if(isset($state['done'][(int) $occ['qid'] . '|' . $occ['occKey']]))
 			return false;
 		$completions = $state['qdone'][(string) $occ['qid']] ?? [];
-		if(!empty($q['completableOnce']) && $completions)
+		$limit = $schedule['checkins'][$occ['checkin']]['limit'] ?? Schedule::LIMIT_WINDOW;
+		if($limit === Schedule::LIMIT_ONCE && $completions)
 			return false;
-		if(!empty($q['completableOncePerDay']) && $completions) {
-			$offset = $tzOffsetMin * 60000;
-			$today = intdiv($nowMs - $offset, 86400000);
-			if(intdiv((int) end($completions) - $offset, 86400000) === $today)
-				return false;
+		if($limit === Schedule::LIMIT_DAY) {
+			foreach($completions as $t) {
+				if((int) $t >= (int) $occ['dayFrom'] && (int) $t < (int) $occ['dayTo'])
+					return false;
+			}
 		}
 		return true;
 	}

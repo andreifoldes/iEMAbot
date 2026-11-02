@@ -7,7 +7,7 @@ set -euo pipefail
 # Set DEMO_REBUILD=1 to force `npm run build:all` even if dist/ already exists.
 
 cd "$(dirname "$0")/../.."
-COMPOSE=(docker compose -f docker-compose.demo.yml -p esmira-demo)
+COMPOSE=(docker compose -f scripts/demo/docker-compose.demo.yml -p esmira-demo)
 PORT="${DEMO_PORT:-8080}"
 
 if [ "${1:-}" = "--down" ]; then

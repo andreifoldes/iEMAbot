@@ -144,7 +144,7 @@ notifier, next to Web Push.
 | `backend/channels/conversation/AnswerEncoder.php`, `RelevanceEvaluator.php` | Parity with the PWA |
 | `backend/channels/conversation/EnrollmentFlow.php`, `ConversationService.php` | Joining, routing, saving |
 | `backend/channels/dispatch/ChannelDispatcher.php` | Cron: due questionnaires |
-| `backend/channels/QuestionnaireAvailability.php` | `/checkin` gating (port of `availability.ts`) |
+| `backend/schedule/Schedule.php` | `/checkin` gating and the prompts the dispatcher sends (the study's schedule, as in every channel) |
 | `backend/channels/handoff/` | Signed links and results of the web handoff |
 | `backend/channels/telegram/` | Bot API client, renderer, update parser, poller, setup |
 | `web-pwa/src/handoff/` | The handoff page |

@@ -2,6 +2,7 @@ import { SectionContent } from "../site/SectionContent";
 import m, { Vnode } from "mithril";
 import { Lang } from "../singletons/Lang";
 import { BindObservable } from "../components/BindObservable";
+import { ObservableLangChooser } from "../components/ObservableLangChooser";
 import { Study } from "../data/study/Study";
 import { DashRow } from "../components/DashRow";
 import { DashElement } from "../components/DashElement";
@@ -15,12 +16,39 @@ interface PushStats {
 	subscriptions: number
 	clients: { installed: number, browser: number, total: number, devices: Record<string, number> }
 	events: {
-		totals: { sent: number, failed: number, received: number, clicked: number }
+		totals: FunnelCounts
+		/** The same funnel per delivery channel (rows logged before channels existed count as web). */
+		channels?: Record<"web" | "android", FunnelCounts>
+		/** Onboarding: did the welcome notification show up? (participant's answer) */
+		welcome?: { confirmed: number, missed: number }
 		series: { day: number, sent: number, received: number, clicked: number }[]
-		participants: { u: string, sent: number, received: number, clicked: number }[]
+		participants: { u: string, channel?: "web" | "android", scheduled?: number, sent: number, received: number, clicked: number, welcome?: "confirmed" | "missed" | null, off?: boolean }[]
 	}
+	/** The first days after enrolment as participants get them, on every channel (NotificationPreview.php). */
+	preview?: PreviewNotification[]
+	/** Icon, badge and accent every channel uses (NotificationSpec.php). */
+	look?: { icon: string, badge: string, accent: string }
 	sender: { lastRunMs: number, studies: number, queued: number } | null
+	/** Participants who left the study (sign-out / quit event, or withdrawn here); nothing is sent to them. */
+	withdrawn: { userId: string, at: number, source: string }[]
+	/** Participants who switched notifications off in the app; they stay in the study. */
+	notificationsOff?: { userId: string, at: number, channel: "web" | "android" }[]
 	nowMs: number
+}
+
+interface FunnelCounts { scheduled?: number, sent: number, failed: number, received: number, clicked: number }
+
+interface PreviewNotification {
+	day: number
+	timeOfDay: number
+	title: string
+	body: string
+	items: { qid: number, type: "availability" | "reminder", title: string, body: string }[]
+}
+
+function formatTimeOfDay(ms: number): string {
+	const mins = Math.floor(ms / 60000)
+	return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`
 }
 
 /** Percentage helper, guarding divide-by-zero. */
@@ -29,15 +57,17 @@ function pct(part: number, whole: number): string {
 }
 
 /**
- * Dedicated study-level admin panel for web push: enable reminders and monitor the full
- * delivery funnel — sent (accepted by the push service) → arrived (the device's service
- * worker received it) → opened (the participant tapped it) — with a per-day series,
- * per-participant breakdown, and an installed-app-vs-browser + device split. Plus a test push.
+ * Dedicated study-level admin panel for notifications on every channel (web push for the browser PWA, the
+ * Android app): enable reminders, preview exactly what participants will get (the same on each channel), and
+ * monitor the delivery funnel per channel — sent → arrived (shown on the device) → opened (tapped) — with a
+ * per-day series, per-participant breakdown, and an installed-app-vs-browser + device split. Plus a test push.
  */
 export class Content extends SectionContent {
 	private stats: PushStats | null
 	private pushTestResult: string | null = null
 	private participantTestResults: Record<string, string> = {}
+	private withdrawUserId = ""
+	private withdrawResult: string | null = null
 
 	public static preLoad(sectionData: SectionData): Promise<any>[] {
 		return [
@@ -83,6 +113,64 @@ export class Content extends SectionContent {
 		setTimeout(() => { delete this.participantTestResults[userId]; m.redraw() }, 4000)
 	}
 
+	private isWithdrawn(userId: string): boolean {
+		return !!this.stats?.withdrawn?.some(w => w.userId === userId)
+	}
+
+	/**
+	 * Withdraw one participant: the server deletes their push subscription, refuses a new one, stops
+	 * the native app's nudges and the chat dispatcher for them, and the app resets itself on next open.
+	 * Covers participants who uninstalled without signing out (the server cannot see an uninstall).
+	 */
+	private async withdrawParticipant(study: Study, userId: string): Promise<void> {
+		userId = userId.trim()
+		if(!userId || !confirm(Lang.get("withdraw_participant_confirm", userId)))
+			return
+		this.withdrawResult = "…"
+		m.redraw()
+		try {
+			await this.sectionData.loader.loadJson(
+				`${FILE_ADMIN}?type=WithdrawParticipant&study_id=${study.id.get()}`,
+				"post",
+				`user_id=${encodeURIComponent(userId)}`
+			)
+			this.withdrawResult = `✅ ${userId}`
+			this.withdrawUserId = ""
+		} catch(e) {
+			this.withdrawResult = `❌ ${userId}`
+		}
+		await this.reload(study)
+	}
+
+	private withdrawnView(s: PushStats, study: Study): Vnode<any, any> {
+		const list = s.withdrawn ?? []
+		return <div>
+			<div class="center"><small>{Lang.get("withdraw_participant_info")}</small></div>
+			<div class="center verticalPadding">
+				<input
+					type="text"
+					placeholder={Lang.get("withdraw_participant_id")}
+					value={this.withdrawUserId}
+					oninput={(e: InputEvent) => { this.withdrawUserId = (e.target as HTMLInputElement).value }}
+					onkeydown={(e: KeyboardEvent) => { if(e.key === "Enter") this.withdrawParticipant(study, this.withdrawUserId) }}
+				/>
+				&nbsp;
+				<button type="button" onclick={() => this.withdrawParticipant(study, this.withdrawUserId)}>{Lang.get("withdraw_participant")}</button>
+				{this.withdrawResult && <small>&nbsp;{this.withdrawResult}</small>}
+			</div>
+			{list.length === 0
+				? <div class="center"><small>{Lang.get("withdrawn_none")}</small></div>
+				: <table class="boxStyle" style="width:100%"><tbody>
+					<tr><th>{Lang.get("participant")}</th><th>{Lang.get("withdrawn")}</th><th></th></tr>
+					{list.map(w => <tr>
+						<td style="font-family:monospace;word-break:break-all">{w.userId}</td>
+						<td class="center"><small>{w.at ? new Date(w.at).toLocaleString() : "—"}</small></td>
+						<td class="center"><small>{w.source === "admin" ? Lang.get("withdrawn_source_admin") : w.source === "quit" ? Lang.get("withdrawn_source_quit") : ""}</small></td>
+					</tr>)}
+				</tbody></table>}
+		</div>
+	}
+
 	/**
 	 * Sender liveness. Delivery counts can look "stuck" for many reasons, but a heartbeat
 	 * that hasn't advanced in minutes means the per-minute cron itself is dead — a distinct,
@@ -102,19 +190,73 @@ export class Content extends SectionContent {
 		</div>
 	}
 
+	/**
+	 * One funnel row per channel. Web push counts what the push service accepted; the Android app counts what
+	 * it handed to the phone's alarm service plus the server nudges it fetched. "Arrived" and "Opened" mean the
+	 * same on both: shown on the device, tapped by the participant.
+	 */
 	private funnelView(s: PushStats): Vnode<any, any> {
 		const t = s.events.totals
+		const channels = s.events.channels ?? { web: t, android: { sent: 0, failed: 0, received: 0, clicked: 0 } }
+		const row = (label: string, c: FunnelCounts) => {
+			const out = c.sent + (c.scheduled ?? 0)
+			return <tr>
+				<td class="verticalPadding"><b>{label}</b></td>
+				<td class="verticalPadding center">{out}</td>
+				<td class="verticalPadding center"><small>{pct(c.received, out)}</small></td>
+				<td class="verticalPadding center">{c.received}</td>
+				<td class="verticalPadding center"><small>{pct(c.clicked, c.received)}</small></td>
+				<td class="verticalPadding center">{c.clicked}</td>
+			</tr>
+		}
 		return <div class="center">
 			<table class="boxStyle"><tbody>
 				<tr>
-					<td class="verticalPadding"><b>{Lang.get("web_push_sent")}</b><br />{t.sent}</td>
-					<td class="verticalPadding">→<br /><small>{pct(t.received, t.sent)}</small></td>
-					<td class="verticalPadding"><b>{Lang.get("web_push_arrived")}</b><br />{t.received}</td>
-					<td class="verticalPadding">→<br /><small>{pct(t.clicked, t.received)}</small></td>
-					<td class="verticalPadding"><b>{Lang.get("web_push_opened")}</b><br />{t.clicked}</td>
+					<th></th>
+					<th>{Lang.get("web_push_sent")}</th><th>→</th>
+					<th>{Lang.get("web_push_arrived")}</th><th>→</th>
+					<th>{Lang.get("web_push_opened")}</th>
 				</tr>
+				{row(Lang.get("notification_channel_web"), channels.web)}
+				{row(Lang.get("notification_channel_android"), channels.android)}
 			</tbody></table>
-			{t.failed > 0 && <small>{Lang.getWithColon("web_push_failed")} {t.failed}</small>}
+			<small>{Lang.get("notification_channel_android_info")}</small>
+			{t.failed > 0 && <div><small>{Lang.getWithColon("web_push_failed")} {t.failed}</small></div>}
+			{s.events.welcome && (s.events.welcome.confirmed + s.events.welcome.missed) > 0 && <div class="verticalPadding">
+				<small>{Lang.getWithColon("welcome_notification")} {Lang.get("welcome_notification_counts", s.events.welcome.confirmed, s.events.welcome.missed)}</small>
+				{s.events.welcome.missed > 0 && <div><small class="highlight">⚠ {Lang.get("welcome_notification_missed_info")}</small></div>}
+			</div>}
+			{(s.notificationsOff?.length ?? 0) > 0 && <div><small>{Lang.get("notifications_off_count", s.notificationsOff!.length)}</small></div>}
+		</div>
+	}
+
+	/**
+	 * What participants will be sent, computed on the server by the code that sends it. The content is written
+	 * once (questionnaire title, each trigger's notification text) and is the same on every channel.
+	 */
+	private previewView(s: PushStats): Vnode<any, any> {
+		const list = s.preview ?? []
+		const look = s.look
+		if(list.length === 0)
+			return <div class="center"><small>{Lang.get("notification_preview_none")}</small></div>
+		return <div>
+			<div class="center"><small>{Lang.get("notification_preview_info")}</small></div>
+			<table class="boxStyle" style="width:100%"><tbody>
+				<tr><th>{Lang.get("notification_preview_day")}</th><th>{Lang.get("notification_preview_time")}</th><th>{Lang.get("notification_preview_notification")}</th></tr>
+				{list.map(n => <tr>
+					<td class="center">{n.day + 1}</td>
+					<td class="center" style="white-space:nowrap">
+						{formatTimeOfDay(n.timeOfDay)}
+						{n.items.some(i => i.type === "reminder") && <div><small>{Lang.get("notification_preview_reminder")}</small></div>}
+					</td>
+					<td>
+						<div style="display:flex;gap:8px;align-items:flex-start">
+							{look && <img src={look.icon} alt="" width="32" height="32" style={`border-radius:50%;outline:2px solid ${look.accent}`} />}
+							<div><b>{n.title}</b><br />{n.body}</div>
+						</div>
+					</td>
+				</tr>)}
+			</tbody></table>
 		</div>
 	}
 
@@ -139,31 +281,49 @@ export class Content extends SectionContent {
 		return <table class="boxStyle" style="width:100%"><tbody>
 			<tr>
 				<th>{Lang.get("participant")}</th>
+				<th>{Lang.get("notification_channel")}</th>
 				<th>{Lang.get("web_push_sent")}</th>
 				<th>{Lang.get("web_push_arrived")}</th>
 				<th>{Lang.get("web_push_opened")}</th>
+				<th>{Lang.get("welcome_notification")}</th>
 				<th></th>
 			</tr>
 			{rows.map(p => {
 				const result = this.participantTestResults[p.u]
+				const withdrawn = this.isWithdrawn(p.u)
 				return <tr>
 					<td style="font-family:monospace;word-break:break-all">{p.u}</td>
-					<td class="center">{p.sent}</td>
+					<td class="center"><small>{p.channel === "android" ? Lang.get("notification_channel_android") : Lang.get("notification_channel_web")}</small></td>
+					<td class="center">{p.sent + (p.scheduled ?? 0)}</td>
 					<td class="center">{p.received}</td>
 					<td class="center">{p.clicked}</td>
+					<td class="center"><small>
+						{p.welcome === "confirmed" ? `✓ ${Lang.get("welcome_confirmed")}` : p.welcome === "missed" ? <span class="highlight">⚠ {Lang.get("welcome_missed")}</span> : "—"}
+						{p.off && <div>{Lang.get("notifications_off_by_participant")}</div>}
+					</small></td>
 					<td class="center" style="white-space:nowrap">
-						{result
-							? <small>{result}</small>
-							: <button
-								type="button"
-								style="padding:2px 8px;font-size:0.8em"
-								onclick={() => this.sendTestPushToParticipant(study, p.u)}
-							>{Lang.get("send_test_notification")}</button>}
+						{withdrawn
+							? <small>{Lang.get("withdrawn")}</small>
+							: result
+								? <small>{result}</small>
+								: <span>
+									{p.channel !== "android" && !p.off && <button
+										type="button"
+										style="padding:2px 8px;font-size:0.8em"
+										onclick={() => this.sendTestPushToParticipant(study, p.u)}
+									>{Lang.get("send_test_notification")}</button>}
+									&nbsp;
+									<button
+										type="button"
+										style="padding:2px 8px;font-size:0.8em"
+										onclick={() => this.withdrawParticipant(study, p.u)}
+									>{Lang.get("withdraw_participant")}</button>
+								</span>}
 					</td>
 				</tr>
 			})}
 			{s.events.participants.length > rows.length &&
-				<tr><td colspan="5"><small>{Lang.get("web_push_more_participants", s.events.participants.length - rows.length)}</small></td></tr>}
+				<tr><td colspan="7"><small>{Lang.get("web_push_more_participants", s.events.participants.length - rows.length)}</small></td></tr>}
 		</tbody></table>
 	}
 
@@ -181,6 +341,35 @@ export class Content extends SectionContent {
 								<span>{Lang.get('enable_web_push')}</span>
 								<small>{Lang.get('enable_web_push_info')}</small>
 							</label>
+						</div>
+				}),
+				DashElement("stretched", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.androidNotificationsEnabled)} />
+								<span>{Lang.get('enable_android_notifications')}</span>
+								<small>{Lang.get('enable_android_notifications_info')}</small>
+							</label>
+						</div>
+				})
+			)}
+
+			{study.webPushEnabled.get() && DashRow(
+				DashElement("stretched", {
+					content:
+						<div>
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.studyEndNotificationEnabled)} />
+								<span>{Lang.get('study_end_notification')}</span>
+								<small>{Lang.get('study_end_notification_info')}</small>
+							</label>
+							{study.studyEndNotificationEnabled.get() &&
+								<label class="line spacingTop">
+									<small>{Lang.getWithColon('study_end_notification_text')} ({Lang.get('can_be_left_empty')})</small>
+									<input type="text" placeholder={Lang.get('default_study_end_notification')} {...BindObservable(study.studyEndNotification)} />
+									{ObservableLangChooser(study)}
+								</label>}
 						</div>
 				})
 			)}
@@ -205,6 +394,11 @@ export class Content extends SectionContent {
 				)}
 
 				{DashRow(DashElement("stretched", { content: this.senderView(s) }))}
+			</div>}
+
+			{s && <div>
+				{TitleRow(Lang.getWithColon("notification_preview"))}
+				{DashRow(DashElement("stretched", { content: this.previewView(s) }))}
 
 				{TitleRow(Lang.get("web_push_funnel"))}
 				{DashRow(DashElement("stretched", { content: this.funnelView(s) }))}
@@ -217,12 +411,17 @@ export class Content extends SectionContent {
 
 				{DashRow(DashElement("stretched", {
 					content: <div class="center verticalPadding">
-						<button type="button" onclick={() => this.sendTestPush(study)}>{Lang.get("send_test_notification")}</button>
+						{study.webPushEnabled.get() && <button type="button" onclick={() => this.sendTestPush(study)}>{Lang.get("send_test_notification")}</button>}
 						{this.pushTestResult && <small>&nbsp;{this.pushTestResult}</small>}
 						&nbsp;
 						<button type="button" onclick={() => this.reload(study)}>{Lang.get("reload")}</button>
 					</div>
 				}))}
+			</div>}
+
+			{s && <div>
+				{TitleRow(Lang.getWithColon("withdrawn_participants"))}
+				{DashRow(DashElement("stretched", { content: this.withdrawnView(s, study) }))}
 			</div>}
 		</div>
 	}

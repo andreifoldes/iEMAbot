@@ -198,7 +198,7 @@ flowchart LR
   W[Provider] -->|"webhook: new sleep data for user X"| E["api/wearables_webhook.php"]
   E -->|"every notification"| A[".wearables_event_archive/&lt;user&gt;.&lt;provider&gt;.events.csv"]
   E -->|"only if a sensor trigger wants it"| L[".wearables_events/&lt;user&gt;.jsonl"]
-  L --> S["PushSender (every minute)<br/>SensorTriggerScheduler"]
+  L --> S["PushSender (every minute)<br/>Schedule (event check-ins)"]
   S -->|"Web Push"| P[Participant]
   S -.->|"fallback time reached,<br/>no event that day"| P
 ```
@@ -300,7 +300,7 @@ What is and is not done:
 - Ceilings: the provider decides when to call the webhook (devices must sync first), so latency is not under
   ESMira's control.
 
-Designer settings and exact semantics: [Scheduling](./scheduling.md#sensor-triggers).
+Designer settings and exact semantics: [Scheduling](./scheduling.md#event-prompts).
 
 ## Researcher panel
 

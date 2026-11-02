@@ -1,0 +1,168 @@
+name: Android app (APK)
+
+# Builds the Android app (android-app/, Capacitor wrapper around the participant PWA) with the same
+# script used locally (android-app/scripts/build.sh), and attaches the APK to the run as an artifact.
+#
+# - On demand: Actions tab > "Android app (APK)" > Run workflow, pick debug or release.
+#   A release build is also published on the Releases page (tag android-v<version>-<run>), so the
+#   .apk can be downloaded and installed straight from a phone.
+# - Pull requests that touch the app or the PWA it ships get a debug build, so a broken Android build
+#   shows up before merge. GitHub-hosted runner only (see the note in ci.yml).
+# - Every deploy (deploy.yml) calls this workflow for a release build of the same commit, which the server then
+#   serves at app/iemabot.apk with app/android.json, so the app and the server always ship together. The app
+#   offers the update when the server holds a newer build (web-pwa/src/lib/appUpdate.ts).
+#
+# Version codes are minutes since 1970 at build time, so every build (deploy or manual) is newer than the ones
+# before it and installs over them.
+#
+# Release builds are signed when these repository secrets are set; otherwise the APK is unsigned and
+# Android will refuse to install it:
+#   ANDROID_KEYSTORE_BASE64   base64 of the upload/release keystore (.jks)
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# Debug builds are signed with a throwaway key generated on the runner, so a newer debug APK will not
+# install over an older one: uninstall first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Build type
+        type: choice
+        options: [debug, release]
+        default: debug
+      server:
+        description: Server pre-filled on first run (blank = build.sh default)
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      variant:
+        type: string
+        default: release
+      for_server:
+        description: Built for a deploy (served by the server, so it must be signed; not put on the Releases page)
+        type: boolean
+        default: true
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android-app/**'
+      - 'web-pwa/**'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Called from a deploy, github.* is the deploy's: never cancel one deploy's build for the next.
+  group: android-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VARIANT: ${{ inputs.variant || 'debug' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Capacitor 8 needs JDK 21. The Android SDK is preinstalled on ubuntu-latest (ANDROID_HOME).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Set version and server
+        env:
+          SERVER: ${{ inputs.server }}
+        run: |
+          echo "ESMIRA_VERSION_NAME=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          echo "ESMIRA_VERSION_CODE=$(( $(date +%s) / 60 ))" >> "$GITHUB_ENV"
+          if [ -n "$SERVER" ]; then echo "ESMIRA_DEFAULT_SERVER=$SERVER" >> "$GITHUB_ENV"; fi
+
+      - name: Load signing key
+        if: env.VARIANT == 'release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "${{ inputs.for_server }}" = "true" ]; then
+              echo "::error::ANDROID_KEYSTORE_BASE64 is not set: a deploy cannot ship an app that does not install."
+              exit 1
+            fi
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: the release APK will be unsigned and cannot be installed."
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: android-app/scripts/build.sh "$VARIANT"
+
+      - name: Name the APK
+        run: |
+          mkdir -p out
+          cp "$(find android-app/android/app/build/outputs/apk -name '*.apk' | head -1)" \
+            "out/iemabot-${ESMIRA_VERSION_NAME}-${GITHUB_RUN_NUMBER}-${VARIANT}.apk"
+          # What the server tells the app about this build (api/app_version.php).
+          printf '{"versionCode":%s,"versionName":"%s","sha":"%s","apk":"app/iemabot.apk"}\n' \
+            "$ESMIRA_VERSION_CODE" "$ESMIRA_VERSION_NAME" "$GITHUB_SHA" > out/android.json
+
+      # The deploy builds the iEMAbot F-Droid repo from its APK (deploy.yml, job fdroid). Try the same on pull
+      # requests with a throwaway key, so a broken android-app/fdroid/ shows up before merge.
+      - name: Check the F-Droid repo builds
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -keystore "$RUNNER_TEMP/throwaway.jks" -storepass throwaway -alias repo \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=throwaway" >/dev/null
+          pipx install fdroidserver==2.4.5
+          FDROID_REPO_URL=https://example.invalid/fdroid/repo FDROID_KEYSTORE_PATH="$RUNNER_TEMP/throwaway.jks" \
+            FDROID_KEYSTORE_PASSWORD=throwaway FDROID_KEY_ALIAS=repo \
+            android-app/fdroid/build-repo.sh "$(ls out/*.apk | head -1)" "$RUNNER_TEMP/fdroid"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iemabot-${{ env.VARIANT }}-${{ env.ESMIRA_VERSION_NAME }}-${{ github.run_number }}
+          path: |
+            out/*.apk
+            out/android.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # Release builds also go on the Releases page, where the .apk is a plain file a phone can download
+  # and install directly (artifacts above are always zipped). Separate job so only it gets write access.
+  publish:
+    needs: apk
+    if: inputs.variant == 'release' && !inputs.for_server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Create GitHub release with the APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls out/*.apk)
+          VERSION=$(basename "$APK" | cut -d- -f2)
+          gh release create "android-v${VERSION}-${GITHUB_RUN_NUMBER}" "$APK" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "iEMAbot Android ${VERSION} (build ${GITHUB_RUN_NUMBER})" \
+            --notes "Signed release APK built from ${GITHUB_SHA::7}. On the phone: tap the .apk below, then allow the install."

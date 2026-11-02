@@ -17,6 +17,7 @@ import { motion } from 'motion/react';
 import { X, Pause, Play, Mic, Square, RotateCcw, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
 import { useDialogA11y } from '../lib/useDialogA11y';
+import { PromptImage } from './PromptImage';
 import { newAudioIdentifier } from '../lib/audioUploads';
 import type { PreloadedQuestion } from '../types';
 
@@ -281,20 +282,24 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
         aria-label={title}
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        // With a prompt image the sheet goes full-height and lays out as a flex
-        // column: controls pin to the bottom and the picture absorbs all leftover
-        // space (flex-1) — as large as the screen allows for older participants.
+        // With a prompt image the sheet fills the whole screen height on phones and
+        // lays out as a flex column: the instructions and controls keep their natural
+        // size and the picture absorbs whatever space is left (flex-1, shrinking as
+        // needed) — the instructions must always be fully readable without scrolling.
         className={cn(
-          'relative w-full sm:max-w-md flex flex-col max-h-[94dvh] overflow-y-auto bg-white dark:bg-surface-container-lowest rounded-t-3xl sm:rounded-3xl shadow-2xl px-6 pt-4 pb-7',
-          promptImage && 'h-[94dvh] sm:h-auto',
+          'relative w-full sm:max-w-md flex flex-col overflow-y-auto bg-white dark:bg-surface-container-lowest shadow-2xl px-6 pb-7',
+          promptImage
+            ? 'h-dvh max-h-dvh sm:h-auto sm:max-h-[94dvh] sm:rounded-3xl pt-[max(1rem,env(safe-area-inset-top))]'
+            : 'max-h-[94dvh] rounded-t-3xl sm:rounded-3xl pt-4',
         )}
       >
         {/* Grab handle + header */}
-        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-outline-variant/50 sm:hidden" />
+        {!promptImage && <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-outline-variant/50 sm:hidden" />}
         {/* Title centered relative to the modal width; close button overlaid at the
-            right so it doesn't offset the centering. px-9 keeps a long title clear of it. */}
+            right so it doesn't offset the centering. px-9 keeps a long title clear of it; it
+            wraps rather than truncating, so the prompt is always readable in full. */}
         <div className="relative flex items-center justify-center min-h-8">
-          <h2 className="text-lg font-bold text-on-surface text-center truncate px-9">{title}</h2>
+          <h2 className="text-lg font-bold text-on-surface text-center leading-snug px-9">{title}</h2>
           <button
             onClick={onCancel}
             aria-label="Close"
@@ -338,20 +343,18 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
             {promptImage && (
               // Full-bleed (-mx-6 cancels the card padding) so the picture reaches
               // the width-bound maximum its 4:3 aspect allows on a phone.
-              <div className="esmira-rich mt-2 -mx-6 flex-1 min-h-0 flex justify-center">
-                <img
-                  src={promptImage.src}
-                  alt={promptImage.alt}
-                  draggable={false}
-                  className="w-full max-h-full self-center object-contain"
-                />
-              </div>
+              <PromptImage
+                src={promptImage.src}
+                alt={promptImage.alt}
+                className="mt-2 -mx-6 flex-1 min-h-0"
+                imgClassName="w-full max-h-full self-center object-contain"
+              />
             )}
             {detail && (
-              // Capped + scrollable so long instructions never squeeze the picture
-              // or push the recording controls off-screen.
+              // Centred, never capped or scrolled: the instructions are shown in full
+              // and the picture above shrinks to make room for them.
               <div
-                className="mt-3 max-h-16 overflow-y-auto shrink-0 text-sm text-on-surface-variant leading-relaxed esmira-rich"
+                className="mt-3 shrink-0 text-center text-sm text-on-surface-variant leading-relaxed esmira-rich"
                 dangerouslySetInnerHTML={{ __html: detail }}
               />
             )}

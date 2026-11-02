@@ -39,7 +39,7 @@ jobs:
 
       - name: Dump container logs on failure
         if: failure()
-        run: docker compose -f docker-compose.demo.yml -p esmira-demo logs --no-color --tail=200
+        run: docker compose -f scripts/demo/docker-compose.demo.yml -p esmira-demo logs --no-color --tail=200
 
       - name: Tear down
         if: always()

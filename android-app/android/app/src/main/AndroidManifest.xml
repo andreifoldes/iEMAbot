@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="false"
@@ -32,6 +33,28 @@
 
         </activity>
 
+        <!-- Reminders planned on the phone (ReminderStore): due alarms, and re-arming after reboot / update. -->
+        <receiver android:name=".ReminderReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Phone sensing (sensing/), only active in studies that enable it -->
+        <service
+            android:name=".sensing.AccelerometerService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+        <receiver android:name=".sensing.AccelerometerService$AlarmReceiver" android:exported="false" />
+        <receiver android:name=".sensing.ActivityTracker$Receiver" android:exported="false" />
+        <receiver android:name=".sensing.PhoneSensing$BootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -46,11 +69,26 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Voice-memo (record_audio) questions; requested at runtime, only when such a question is shown -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Reminders: the plugin adds POST_NOTIFICATIONS, boot and wake-lock permissions. USE_EXACT_ALARM
-         (API 33+) is granted automatically, so a signal at 20:00 fires at 20:00 and the plugin never has
-         to send the participant to a system settings screen. -->
+    <!-- Reminders: @capacitor/local-notifications adds POST_NOTIFICATIONS (its permission prompt is used).
+         USE_EXACT_ALARM (API 33+) is granted automatically, so a signal at 20:00 fires at 20:00 and the app
+         never has to send the participant to a system settings screen (ReminderStore). -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Phone sensing, used only when a study enables it (see sensing/). Activity recognition: runtime
+         permission on Android 10+, Play services' install-time permission before. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" android:maxSdkVersion="28" />
+    <!-- App usage: a special permission the participant switches on in Settings > Usage access -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <!-- Accelerometer windows around prompts: a short "health" foreground service started by an exact alarm.
+         HIGH_SAMPLING_RATE_SENSORS is that service type's prerequisite on Android 14+ (we sample at most 100 Hz). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Re-arm the planned reminders after a reboot (ReminderReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>

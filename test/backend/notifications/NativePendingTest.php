@@ -9,59 +9,55 @@ require_once __DIR__ . '/../../autoload.php';
 class NativePendingTest extends TestCase {
 	const NOW = 1741600000000;
 
-	private function occ(string $type, int $qid, int $ts, string $occKey, string $body = 'b'): array {
-		return ['type' => $type, 'qid' => $qid, 'title' => 'Q' . $qid, 'body' => $body, 'timestamp' => $ts, 'windowStart' => $ts, 'deadline' => null, 'occKey' => $occKey];
+	/** Check-in 0 is prompted at a fixed time (the device plans it), check-in 1 by a wearable event (the server does). */
+	private function study(array $extra = []): array {
+		return array_merge(['title' => 'My study', 'questionnaires' => [['internalId' => 1, 'title' => 'Q1'], ['internalId' => 2, 'title' => 'Q2']], 'schedule' => ['checkins' => [
+			['questionnaireId' => 1, 'startType' => 'fixed', 'startTime' => 9 * 3600000, 'endType' => 'fixed', 'endTime' => 10 * 3600000, 'reminderCount' => 1],
+			['questionnaireId' => 2, 'parallel' => true, 'startType' => 'fixed', 'startTime' => 0, 'endType' => 'fixed', 'endTime' => 0, 'endNextDay' => true,
+				'prompt' => 'event', 'available' => 'day'],
+		]]], $extra);
 	}
 
-	function test_plain_signal_times_are_left_to_the_device() {
-		$out = NativePending::select([$this->occ('availability', 1, self::NOW, '0:3600000')], ['title' => 'S']);
-		$this->assertSame([], $out);
+	private function occ(string $type, int $qid, int $checkin, int $ts, string $body = 'b'): array {
+		return ['type' => $type, 'qid' => $qid, 'checkin' => $checkin, 'title' => 'Q' . $qid, 'body' => $body, 'timestamp' => $ts,
+			'windowStart' => $ts, 'deadline' => $ts + 3600000, 'occKey' => "2025-03-10:$checkin", 'dayFrom' => 0, 'dayTo' => 0];
 	}
 
-	function test_reminders_and_sensor_prompts_are_returned() {
+	function test_only_check_ins_that_depend_on_a_wearable_are_returned() {
 		$out = NativePending::select([
-			$this->occ('reminder', 1, self::NOW, '0:3600000', 'Please answer'),
-			$this->occ('availability', 2, self::NOW + 5, 'sensor:123', 'How did you sleep?'),
-		], ['title' => 'My study']);
-		$this->assertCount(2, $out);
-		$this->assertSame('reminder:1:' . self::NOW, $out[0]['key']);
-		$this->assertSame('My study', $out[0]['title']);
-		$this->assertSame('Please answer', $out[0]['body']);
-		$this->assertSame('availability:2:' . (self::NOW + 5), $out[1]['key']);
+			$this->occ('availability', 1, 0, self::NOW), // the device plans it
+			$this->occ('reminder', 1, 0, self::NOW + 600000),
+			$this->occ('availability', 2, 1, self::NOW + 5, 'How did you sleep?'),
+		], $this->study());
+		$this->assertCount(1, $out);
+		$this->assertSame(['availability:2:' . (self::NOW + 5), 2, 'Q2', 'How did you sleep?', self::NOW + 3600005],
+			[$out[0]['key'], $out[0]['qid'], $out[0]['title'], $out[0]['body'], $out[0]['deadline']]);
 	}
 
 	function test_keeps_only_the_latest_occurrence_per_questionnaire() {
 		$out = NativePending::select([
-			$this->occ('reminder', 1, self::NOW, 'a'),
-			$this->occ('reminder', 1, self::NOW + 600000, 'a'),
-		], []);
+			$this->occ('availability', 2, 1, self::NOW),
+			$this->occ('reminder', 2, 1, self::NOW + 600000),
+		], $this->study());
 		$this->assertCount(1, $out);
-		$this->assertSame(self::NOW + 600000, $out[0]['at']);
-		$this->assertSame('ESMira', $out[0]['title']); // no study title -> default
+		$this->assertSame(['reminder', self::NOW + 600000], [$out[0]['type'], $out[0]['at']]);
 	}
 
-	function test_clamp_since() {
-		$this->assertSame(self::NOW, NativePending::clampSince(0, self::NOW));                              // first poll: no backfill
-		$this->assertSame(self::NOW, NativePending::clampSince(self::NOW + 1000, self::NOW));              // clock skew: never the future
-		$this->assertSame(self::NOW - 1000, NativePending::clampSince(self::NOW - 1000, self::NOW));
-		$this->assertSame(self::NOW - NativePending::MAX_LOOKBACK_MS, NativePending::clampSince(1, self::NOW)); // long offline: capped
-	}
-
-	function test_is_needed_only_with_sensor_triggers_or_reminders() {
-		$plain = ['questionnaires' => [['internalId' => 1, 'actionTriggers' => [['actions' => [['msgText' => 'x']]]]]]];
-		$this->assertFalse(NativePending::isNeeded($plain));
+	function test_is_needed_only_when_a_check_in_depends_on_a_wearable() {
+		$this->assertTrue(NativePending::isNeeded($this->study()));
 		$this->assertFalse(NativePending::isNeeded([]));
-		$withReminder = ['questionnaires' => [['internalId' => 1, 'actionTriggers' => [['actions' => [['msgText' => 'x', 'reminder_count' => 2, 'reminder_delay_minu' => 10]]]]]]];
-		$this->assertTrue(NativePending::isNeeded($withReminder));
-		$noDelay = ['questionnaires' => [['internalId' => 1, 'actionTriggers' => [['actions' => [['reminder_count' => 2]]]]]]];
-		$this->assertFalse(NativePending::isNeeded($noDelay));
-		$sensor = ['questionnaires' => [['internalId' => 1, 'actionTriggers' => [['actions' => [['msgText' => 'x']], 'eventTriggers' => [['cueCode' => 'wearable_event']]]]]]];
-		$this->assertTrue(NativePending::isNeeded($sensor));
+		$fixedOnly = $this->study();
+		array_pop($fixedOnly['schedule']['checkins']);
+		$this->assertFalse(NativePending::isNeeded($fixedOnly));
+		// A wake-up from the wearable makes check-ins anchored to it the server's.
+		$fixedOnly['schedule']['wakeSensor'] = true;
+		$fixedOnly['schedule']['checkins'][0]['prompt'] = 'wake';
+		$this->assertTrue(NativePending::isNeeded($fixedOnly));
 	}
 
 	function test_run_reports_inactive_without_touching_state() {
 		$state = ['keep' => 1];
-		$res = NativePending::run(1, 'u', ['questionnaires' => []], 0, self::NOW, 0, self::NOW, $state);
+		$res = NativePending::run(1, 'u', ['questionnaires' => []], 0, self::NOW, self::NOW, $state);
 		$this->assertSame(['active' => false, 'items' => []], $res);
 		$this->assertSame(['keep' => 1], $state);
 	}

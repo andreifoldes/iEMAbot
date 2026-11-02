@@ -299,6 +299,8 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		$cache->addToEventCache($studyId1, 111, []);
 		$this->saveDataSetCache($cache);
 		
+		// PHP caches the last stat(): without this, filemtime() can return the time from before the write.
+		clearstatcache();
 		$timeStudy1 = filemtime(PathsFS::fileResponses($studyId1, PathsFS::FILENAME_EVENTS));
 		
 		$responsesStore = Configs::getDataStore()->getResponsesStore();

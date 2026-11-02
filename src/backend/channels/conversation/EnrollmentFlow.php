@@ -41,6 +41,7 @@ class EnrollmentFlow {
 		}
 		$lang = ChannelStudies::pickLang($study, $ev->langHint);
 		$study = ChannelStudies::load($invite['studyId'], $lang) ?? $study;
+		$this->channel->paceFor($ev->chatRef, $study);
 		if(!ChannelStudies::isChannelEnabled($study, $this->channel->id())) {
 			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('join_not_enabled', $lang)));
 			return;
@@ -167,6 +168,8 @@ class EnrollmentFlow {
 		$lang = (string) $enrol['lang'];
 		$studyId = (int) $enrol['studyId'];
 		$study = ChannelStudies::load($studyId, $lang);
+		if($study !== null)
+			$this->channel->paceFor($chatRef, $study);
 		if($study === null || !ChannelStudies::isJoinable($studyId, (string) $enrol['accessKey'])) {
 			$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('join_closed', $lang)));
 			return;

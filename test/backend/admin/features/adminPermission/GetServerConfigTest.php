@@ -56,7 +56,8 @@ class GetServerConfigTest extends BaseAdminPermissionTestSetup {
 					'privacyPolicy' => $this->privacyPolicyContent,
 					'homeMessage' => $this->homeMessageContent
 				]
-			]
+			],
+			'webOnlyMode' => false
 		];
 		$this->assertEquals($serverSettings, $obj->exec());
 		

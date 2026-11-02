@@ -53,6 +53,9 @@ $classIndex = [
 	'GetMedia' => 'backend\admin\features\readPermission\GetMedia',
 	'GetWearableDataZip' => 'backend\admin\features\readPermission\GetWearableDataZip',
 	'GetWearableInfo' => 'backend\admin\features\readPermission\GetWearableInfo',
+	'GetScheduleMonitor' => 'backend\admin\features\readPermission\GetScheduleMonitor',
+	'GetPhoneSensingDataZip' => 'backend\admin\features\readPermission\GetPhoneSensingDataZip',
+	'GetPhoneSensingInfo' => 'backend\admin\features\readPermission\GetPhoneSensingInfo',
 	'ListMerlinLogs' => 'backend\admin\features\readPermission\ListMerlinLogs',
 	'DeleteMerlinLog' => 'backend\admin\features\readPermission\DeleteMerlinLog',
 	'ChangeMerlinLog' => 'backend\admin\features\readPermission\ChangeMerlinLog',
@@ -73,8 +76,10 @@ $classIndex = [
 	'BackupStudy' => 'backend\admin\features\writePermission\BackupStudy',
 	'GetPushInfo' => 'backend\admin\features\writePermission\GetPushInfo',
 	'GetPushStats' => 'backend\admin\features\writePermission\GetPushStats',
+	'GetSchedulePlan' => 'backend\admin\features\writePermission\GetSchedulePlan',
 	'SendTestPush' => 'backend\admin\features\writePermission\SendTestPush',
 	'SendTestPushToParticipant' => 'backend\admin\features\writePermission\SendTestPushToParticipant',
+	'WithdrawParticipant' => 'backend\admin\features\writePermission\WithdrawParticipant',
 	'SaveStudy' => 'backend\admin\features\writePermission\SaveStudy',
 	'MarkStudyAsUpdated' => 'backend\admin\features\writePermission\MarkStudyAsUpdated',
 	'GetOutboundFallbackUrls' => 'backend\admin\features\writePermission\GetOutboundFallbackUrls',
@@ -149,4 +154,4 @@ catch(CriticalException $e) {
 }
 catch(PageFlowException $e) {
 	echo JsonOutput::error($e->getMessage());
-}
+}

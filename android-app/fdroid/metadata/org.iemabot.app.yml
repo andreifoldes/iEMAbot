@@ -1,0 +1,20 @@
+# F-Droid metadata for the iEMAbot repository (android-app/fdroid/build-repo.sh). Binary-only repo: the APK comes
+# from the deploy's signed release build, so there are no build recipes here, only what the F-Droid client shows.
+Categories:
+  - Science & Education
+License: AGPL-3.0-only
+AuthorName: iEMAbot
+WebSite: https://github.com/andreifoldes/iEMAbot
+SourceCode: https://github.com/andreifoldes/iEMAbot
+IssueTracker: https://github.com/andreifoldes/iEMAbot/issues
+
+Name: iEMAbot
+Summary: Take part in iEMAbot experience-sampling studies
+Description: |-
+  The participant app for iEMAbot studies: join a study, get reminders when a questionnaire is due, and answer it on your phone.
+
+  This repository carries the build the iEMAbot server is running, so F-Droid offers each update as soon as it is deployed.
+
+# play-services-location (activity recognition, only when a study enables it).
+AntiFeatures:
+  NonFreeDep: {}

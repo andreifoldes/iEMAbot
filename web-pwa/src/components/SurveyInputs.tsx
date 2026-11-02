@@ -11,6 +11,7 @@ import { motion } from 'motion/react';
 import { ChevronRight, Check, Play, Mic, PenLine, Volume2, Square } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
 import { speak, speechAvailable, stopSpeaking } from '../lib/speech';
+import { PromptImage } from './PromptImage';
 import type { PreloadedQuestion } from '../types';
 
 const OPTION_ICONS: Record<string, string> = {
@@ -68,8 +69,10 @@ interface Props {
   onOpenRecorder: () => void;
   /** Skip a voice memo — reveals its keystroke-text fallback if it has one, else plain skip. */
   onSkipAudio: () => void;
-  /** Open the keystroke-logging writing modal for a `keystroke_text` question. */
+  /** Start writing a `keystroke_text` answer in the chat row (KeystrokeComposer). */
   onOpenKeystroke: () => void;
+  /** A `keystroke_text` answer is being written in the chat row. */
+  writing?: boolean;
   /** Study option `webTaskActions`: a task card also offers Remind me later and Skip check-in. */
   taskActions?: TaskActions;
 }
@@ -90,6 +93,7 @@ export function SurveyInputs({
   onOpenRecorder,
   onSkipAudio,
   onOpenKeystroke,
+  writing = false,
   taskActions,
 }: Props) {
   return (
@@ -141,7 +145,8 @@ export function SurveyInputs({
             // every input type's label, not just voice memos.
             // Audio/typed questions with an embedded image (picture-description
             // tasks) show only the pitch before the image here — the picture and
-            // the detailed instructions live inside the recorder/writing modal.
+            // the detailed instructions live inside the recorder modal, or (typed)
+            // appear on this card once writing starts in the chat row.
             <div
               className={cn('font-semibold text-on-surface leading-snug mb-2 esmira-rich', textSizeClass)}
               dangerouslySetInnerHTML={{
@@ -165,6 +170,14 @@ export function SurveyInputs({
               dangerouslySetInnerHTML={{ __html: question.subtext }}
             />
           )}
+          {question.type !== 'info' && question.instruction && (
+            // Call to action after the helper text ("Count all times from…"): its own line, in the
+            // regular text colour so it stands apart from the muted explanation above.
+            <div
+              className={cn('text-on-surface font-medium leading-relaxed esmira-rich mb-2', subtextClass(textSizeClass))}
+              dangerouslySetInnerHTML={{ __html: question.instruction }}
+            />
+          )}
           {question.spoken_text && <ListenButton key={question.id} text={question.spoken_text} />}
           {question.type !== 'info' && !question.required && (
             <p className="text-xs text-on-surface-variant italic mb-2">(Optional)</p>
@@ -180,7 +193,7 @@ export function SurveyInputs({
           {question.type === 'date' && <DateInput question={question} onRespond={onRespond} />}
           {question.type === 'va_scale' && <VaScale question={question} onRespond={onRespond} labelSizeClass={anchorLabelClass(textSizeClass)} />}
           {question.type === 'audio' && <AudioCard question={question} onOpenRecorder={onOpenRecorder} onSkip={onSkipAudio} />}
-          {question.type === 'keystroke_text' && <KeystrokeCard question={question} onWrite={onOpenKeystroke} onSkip={onContinueInfo} />}
+          {question.type === 'keystroke_text' && <KeystrokeCard question={question} writing={writing} onWrite={onOpenKeystroke} onSkip={onContinueInfo} />}
           {question.type === 'text' && (
             <p className="text-sm text-on-surface-variant mt-2">Type your response below.</p>
           )}
@@ -316,27 +329,56 @@ function AudioCard({
   );
 }
 
-// KeystrokeCard — launches the writing modal (KeystrokeRecorder via onWrite) for a
-// `record_keystrokes` answer, mirroring AudioCard. Usually shown as a voice-memo skip
-// fallback; still skippable when optional (onSkip → engine.skip()).
+// KeystrokeCard — starts writing a `record_keystrokes` answer in the chat row (the footer
+// turns into KeystrokeComposer via onWrite), mirroring AudioCard. While writing, a
+// picture-description task's picture and instructions appear here (tap the picture or its
+// zoom button for the lightbox) in place of the button. Usually shown as a voice-memo skip fallback; still
+// skippable when optional (onSkip → engine.skip()).
 function KeystrokeCard({
   question,
+  writing,
   onWrite,
   onSkip,
 }: {
   question: PreloadedQuestion;
+  writing: boolean;
   onWrite: () => void;
   onSkip: () => void;
 }) {
+  const { image, detail } = question.is_html
+    ? splitQuestionHtml(question.text)
+    : { image: null, detail: '' };
   return (
     <div className="mt-4 flex flex-col gap-2.5">
-      <button
-        onClick={onWrite}
-        className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
-      >
-        <PenLine size={18} aria-hidden="true" />
-        Write your answer
-      </button>
+      {writing ? (
+        <>
+          {image && (
+            <PromptImage
+              src={image.src}
+              alt={image.alt}
+              imgClassName="w-full max-h-[45dvh] object-contain rounded-lg"
+            />
+          )}
+          {detail && (
+            <div
+              className="text-center text-on-surface-variant leading-relaxed esmira-rich"
+              dangerouslySetInnerHTML={{ __html: detail }}
+            />
+          )}
+          <p className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <PenLine size={16} aria-hidden="true" className="shrink-0" />
+            Write your answer in the box below, then tap Send.
+          </p>
+        </>
+      ) : (
+        <button
+          onClick={onWrite}
+          className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
+        >
+          <PenLine size={18} aria-hidden="true" />
+          Write your answer
+        </button>
+      )}
       {!question.required && (
         <button
           onClick={onSkip}

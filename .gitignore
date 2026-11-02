@@ -26,3 +26,14 @@ android-app/.test-build-number
 android-app/.last-shipped-hash
 android-app/.ship.lock
 android-app/ship-test.log
+
+# Local agent tooling (not part of the product)
+/.agents/
+
+# Signing keystores (never commit)
+*.jks
+*.keystore
+
+# Local-only notes and project instructions
+/notes.md
+/CLAUDE.md

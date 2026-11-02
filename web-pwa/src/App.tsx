@@ -3,7 +3,7 @@
  * iEMAbot PWA, served by ESMira's PHP backend. Pull-driven: the participant
  * opens /pwa/?key=ACCESSKEY and the "conversation" plays out locally.
  *
- * Flow: load study -> (consent) -> participant name -> questionnaire list ->
+ * Flow: load study -> (consent) -> questionnaire list ->
  * chat-style survey (one question per bubble, engine-driven) -> submit to
  * api/datasets.php -> thank-you -> back to list.
  */
@@ -14,7 +14,7 @@ import {
   Settings, Info, X, Grid, SkipForward, PlayCircle,
   Sun, Moon, Contrast, Type, Send, ChevronRight, ChevronLeft, CheckCircle, RotateCcw, LogOut,
   FileText, ShieldCheck, Bell, BellRing, BellOff, MessageSquare, UploadCloud, Clock, RefreshCw,
-  Download, Bug, ExternalLink, Watch, Lock, Check,
+  Download, Bug, ExternalLink, Watch, Lock, Check, Mic, Activity, XCircle,
 } from 'lucide-react';
 import { cn, splitQuestionHtml } from './lib/utils';
 import { OfflineSurveyEngine } from './lib/surveyEngine';
@@ -24,26 +24,33 @@ import {
   buildEsmiraResponses, fetchStudy, installSubmitQueueFlusher, submitQuestionnaire,
   submitCognitiveTrials, serverRootUrl, sendParticipantMessage, loadUploadProtocol,
   flushSubmitQueue, pendingSubmitCount, loadErrorLog, clearErrorLog, installErrorLogger,
-  subscribeToPush, fetchNextNotification, logEvent, reportClientInfo, sendWelcomePush, reportPushEvent,
+  subscribeToPush, unsubscribeFromPush, submitQuit, fetchNextNotification, fetchScheduleInputs, logEvent, reportClientInfo, sendWelcomePush, reportPushEvent,
+  setNotificationPreference,
   submitJoined, setLocalOnly,
   startWearableConnect, fetchWearableStatus, disconnectWearable,
   claimPidLock, releasePidLock, getOrCreateDeviceToken,
 } from './lib/esmiraApi';
 import type { UploadProtocolEntry } from './lib/esmiraApi';
-import { ensurePushSubscription, isPushSupported, showLocalNotification } from './lib/push';
-import {
-  computeAvailability, summarize, ensureEnrollment, loadCompletions, recordCompletion,
-  type Availability,
-} from './lib/availability';
+import { closeExpiredNotifications, ensurePushSubscription, isPushSupported, showLocalNotification } from './lib/push';
+import { summarize, ensureEnrollment, loadCompletions, recordCompletion } from './lib/availability';
 import { mirrorCompletion, backfillCompletions } from './lib/completionMirror';
-import { planReminders, hasScheduledSignals } from './lib/notificationPlan';
-import { syncReminders, clearReminders, requestReminderPermission } from './lib/nativeReminders';
+import { autoStartIds, hasPrompts, saveServerInputs, scheduleConfig, studyAvailability, studyDayLabel, studyPeriod, type Availability } from './lib/schedule';
+import { planReminders } from './lib/notificationPlan';
+import { tutorialQuestionnaires } from './lib/tutorial';
+import { syncReminders, clearReminders, requestReminderPermission, reminderPermission, openNotificationSettings } from './lib/nativeReminders';
+import { markNudgeShown, nudgeEnabled, nudgeKind, nudgeShownToday, type NudgeKind, type NudgePermission } from './lib/notificationNudge';
+import { micOnboardedKey, micOnboardingWanted, microphonePermission, requestMicrophone } from './lib/permissions';
 import { configureServerNudges, cancelServerNudges } from './lib/serverNudges';
+import {
+  configurePhoneSensing, cancelPhoneSensing, recordPromptEvent, sensingSettings, missingPermissions, chooseUploadNetwork,
+  phoneSensingStatus, requestActivityPermission, openUsageAccessSettings, type PhoneSensingStatus,
+} from './lib/phoneSensing';
+import { withTimeout } from './lib/withdrawal';
 import { syncStudyTasks, resolveTaskUrl } from './lib/taskCache';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
-import { KeystrokeRecorder } from './components/KeystrokeRecorder';
+import { KeystrokeComposer } from './components/KeystrokeComposer';
 import {
   cognitiveSummaryValue, cognitiveTrialRows, newCognitiveSession, TRIALS_QN_TITLE, type M2c2Complete,
 } from './lib/cognitiveTrials';
@@ -52,22 +59,31 @@ import { InviteCodeNote } from './components/InviteCodeNote';
 import { PhoneOnlyInvite } from './components/PhoneOnlyInvite';
 import { isMobileOrTablet, isPhone, isStandalone, usePwaInstall } from './lib/pwaInstall';
 import { isNativeApp } from './lib/platform';
+import { checkAppUpdate, notifyAppUpdate, openAppUpdate, type AppUpdate } from './lib/appUpdate';
+import { channelEnabled, hasUnsyncedChoice, notificationsActive, participantOff, setParticipantOff } from './lib/notificationSwitch';
 import { getApiRoot, getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
-import { clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
-import { readingPauseMs } from './lib/pacing';
+import { canResume, clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
+import { updateReload } from './lib/reloadGate';
+import { revealDelayMs, studyPacingWpm, waitsToBeRead } from './lib/pacing';
 import { useDialogA11y } from './lib/useDialogA11y';
 import { loadA11yPrefs, saveA11yPrefs, TEXT_SIZE_ROOT_PERCENT, type TextSize } from './lib/a11yPrefs';
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
+import { PhoneSensingPanel } from './components/PhoneSensingPanel';
 import { saveRecording } from './lib/audioUploads';
 import { saveKeystrokes } from './lib/keystrokeUploads';
 import type { CaptureMode } from './lib/keystrokeCapture';
 
-type Phase = 'loading' | 'error' | 'consent' | 'name' | 'notifications' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
+type Phase = 'loading' | 'error' | 'consent' | 'notifications' | 'microphone' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
+
+/** Whether the onboarding microphone step is still to come for this study (see continueAfterNotifications). */
+function micPending(s: EsmiraStudy): boolean {
+  return micOnboardingWanted(s) && localStorage.getItem(micOnboardedKey(s.id)) !== '1';
+}
 
 /** localStorage key holding the last study invite code that loaded successfully,
  *  so an installed home-screen launch (which carries no ?key=) reopens it. */
@@ -85,6 +101,8 @@ interface ChatMsg {
   html?: boolean;
   /** Question id this message belongs to (set on settled Q&A pairs). */
   qid?: string;
+  /** Shown without pacing (the conversation a returning participant reopens). */
+  instant?: boolean;
 }
 
 
@@ -94,7 +112,7 @@ interface ChatMsg {
 const TEXT_SIZE_CLASS = 'text-lg';
 
 const TEXT_SIZE_LABEL: Record<TextSize, string> = {
-  normal: 'Normal',
+  normal: 'Default',
   large: 'Large',
   xlarge: 'X-Large',
   xxlarge: 'XX-Large',
@@ -203,16 +221,23 @@ export default function App() {
   // display-mode changes so the funnel unlocks if the app becomes standalone in-session.
   const { standalone, installed: justInstalled, ios: onIOS } = usePwaInstall();
 
-  const [participant, setParticipant] = useState(''); // display name (username)
   const [userId, setUserId] = useState('');           // stable backend identifier
   const [messages, setMessages] = useState<ChatMsg[]>([]);
-  // Paced messages (webPacedMessages): from message `from` on, only `shown` messages are on screen
-  // while a batch of bubbles is revealed one by one; null = show every message. See lib/pacing.ts.
-  const [pace, setPace] = useState<{ from: string; shown: number } | null>(null);
+  // Paced messages: the first `shown` messages are on screen; the rest appear one by one, each
+  // after the previous bubble's reading time, with typing dots in between. See lib/pacing.ts.
+  const [shown, setShown] = useState(0);
+  // When the last revealed message appeared (ms), so a late message is not held back again.
+  const shownAtRef = useRef(0);
+  // While true, new messages are marked `instant`: set while a returning participant's
+  // conversation is rebuilt on launch, so reopening the app never replays the pauses.
+  const instantRef = useRef(false);
   // Questionnaire to open as soon as the list phase has rendered (see enterList); null = none.
   const [autoStartId, setAutoStartId] = useState<number | null>(null);
-  const paceStart = pace ? messages.findIndex((m) => m.id === pace.from) : -1;
-  const visibleCount = paceStart >= 0 ? Math.min(messages.length, paceStart + pace!.shown) : messages.length;
+  const pacingWpm = studyPacingWpm(study);
+  let visibleCount = Math.min(shown, messages.length);
+  // Bubbles that never wait (the participant's own, settled answers, ...) show in the same render,
+  // so the question card does not blink out while an answer is added.
+  while (visibleCount < messages.length && !waitsToBeRead(messages[visibleCount - 1], messages[visibleCount], pacingWpm)) visibleCount++;
   const pacing = visibleCount < messages.length;
   const [footerValue, setFooterValue] = useState('');
 
@@ -220,6 +245,7 @@ export default function App() {
   const initedRef = useRef(false);
   const surveyStartRef = useRef(0);
   const activeQRef = useRef<{ id: number; name: string; changeMode: 'previous' | 'any' | 'none' } | null>(null);
+  const activeOccKeyRef = useRef<string | undefined>(undefined);
   // True while a no-submit tutorial practice run is in progress (gates all network writes).
   const practiceRef = useRef(false);
   const [currentQuestion, setCurrentQuestion] = useState<PreloadedQuestion | null>(null);
@@ -240,12 +266,24 @@ export default function App() {
     // Scale from the root so rem-based text, spacing and tap targets all grow together.
     document.documentElement.style.fontSize = `${TEXT_SIZE_ROOT_PERCENT[textSize]}%`;
   }, [textSize]);
+  useEffect(() => {
+    // Theme the page behind the app shell too (body background on overscroll, native form
+    // controls via color-scheme) and the browser / status bar, which follows the header.
+    const root = document.documentElement.classList;
+    root.toggle('dark', dark);
+    root.toggle('high-contrast', highContrast);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',
+      highContrast ? (dark ? '#000000' : '#ffffff') : dark ? '#26292b' : '#075E54');
+  }, [dark, highContrast]);
 
   const [gridMenuOpen, setGridMenuOpen] = useState(false);
   const [a11yOpen, setA11yOpen] = useState(false);
   // Settings modal nested navigation: appearance (main) + the app-level features.
-  const [settingsView, setSettingsView] = useState<'main' | 'about' | 'notifications' | 'errorReport' | 'wearables'>('main');
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'updating' | 'done' | 'error'>('idle');
+  const [settingsView, setSettingsView] = useState<'main' | 'about' | 'notifications' | 'errorReport' | 'wearables' | 'sensing'>('main');
+  // 'offline': the server could not be reached, so the study stays as saved on the device.
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'updating' | 'done' | 'offline' | 'error'>('idle');
+  // Answers still waiting in the offline queue after the last "Update studies".
+  const [updatePending, setUpdatePending] = useState(0);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
   );
@@ -265,8 +303,14 @@ export default function App() {
   // While the mandatory notifications step is showing the "did the welcome arrive?"
   // confirmation (Yes/No), after a welcome push has been dispatched.
   const [awaitingWelcomeConfirm, setAwaitingWelcomeConfirm] = useState(false);
+  // Microphone onboarding step (studies with voice-recording items): busy while the system
+  // prompt is open; status is the outcome of the last attempt ('ask' = not tried yet).
+  const [micBusy, setMicBusy] = useState(false);
+  const [micStatus, setMicStatus] = useState<'ask' | 'denied' | 'error' | 'unsupported'>('ask');
   // Next scheduled reminder (UTC ms) shown in the Details panel; null = none/unknown.
   const [nextNotification, setNextNotification] = useState<number | null>(null);
+  // The participant's own notification switch (Settings → Notifications), per study; see lib/notificationSwitch.
+  const [notifOff, setNotifOff] = useState(false);
   // Result of the on-demand "send a test notification" button in Settings → Notifications.
   const [testPushStatus, setTestPushStatus] = useState<'idle' | 'sending' | 'sent' | 'local' | 'error'>('idle');
   const [errorText, setErrorText] = useState('');
@@ -279,6 +323,8 @@ export default function App() {
   const [enrolledAt, setEnrolledAt] = useState<number | null>(null);
   // Ticks once a minute so availability windows re-evaluate while the app is open.
   const [nowTick, setNowTick] = useState(0);
+  // Set while the chat's last word on the list is that nothing is open (see the effect after questionnaireAvailability).
+  const awaitingOpenRef = useRef(false);
   // PID assigned via invite link that is already locked on another device.
   const [pidConflict, setPidConflict] = useState<string | null>(null);
   const [activeQTitle, setActiveQTitle] = useState('');
@@ -292,7 +338,7 @@ export default function App() {
   // captured in the active questionnaire (released for upload after submission).
   const [recorder, setRecorder] = useState<PreloadedQuestion | null>(null);
   const audioIdsRef = useRef<number[]>([]);
-  // record_keystrokes: the question whose writing modal is open, plus per-questionnaire
+  // record_keystrokes: the question being written in the chat row, plus per-questionnaire
   // buffers for the log identifiers and the sibling columns (typed transcript, capture mode).
   const [keystroker, setKeystroker] = useState<PreloadedQuestion | null>(null);
   const keystrokeIdsRef = useRef<number[]>([]);
@@ -316,7 +362,8 @@ export default function App() {
   // StrictMode double-invokes updaters, which would otherwise dupe ids/keys).
   const pushBot = useCallback((content: string, html = false, qid?: string): string => {
     const id = mkId();
-    setMessages((prev) => [...prev, { id, sender: 'bot', kind: 'text', content, html, qid }]);
+    const instant = instantRef.current;
+    setMessages((prev) => [...prev, { id, sender: 'bot', kind: 'text', content, html, qid, instant }]);
     return id;
   }, []);
   const pushUser = useCallback((content: string, qid?: string) => {
@@ -325,7 +372,8 @@ export default function App() {
   }, []);
   const pushSection = useCallback((content: string) => {
     const id = mkId();
-    setMessages((prev) => [...prev, { id, sender: 'bot', kind: 'section', content }]);
+    const instant = instantRef.current;
+    setMessages((prev) => [...prev, { id, sender: 'bot', kind: 'section', content, instant }]);
   }, []);
 
   // ── Tutorial-mode helpers ────────────────────────────────────
@@ -339,7 +387,7 @@ export default function App() {
 
   const pushTutorialIntro = useCallback((s: EsmiraStudy) => {
     pushBot(s.tutorialIntro?.trim()
-      || "Here's a quick tour. Below is every questionnaire this study uses — you can try a practice run of any of them (nothing you enter is saved). When you're ready, continue to the study.");
+      || "Here's a quick tour. Below are the questionnaires this study uses — you can try a practice run of each (nothing you enter is saved). When you're ready, continue to the study.");
     if (s.postInstallInstructions) pushBot(s.postInstallInstructions);
   }, [pushBot]);
 
@@ -354,15 +402,34 @@ export default function App() {
     // questionnaires are suppressed even for participants who joined before it existed.
     void backfillCompletions(s.id, uid, loadCompletions(s.id, uid));
     const visible = s.questionnaires.filter((q) => q.title !== TRIALS_QN_TITLE);
-    const completions = loadCompletions(s.id, uid);
-    const open = visible.filter((q) => computeAvailability(q, joined, now, completions).state === 'available');
-    // A one-questionnaire check-in with an end snapshot (checkin-readout) starts straight away, like the
-    // Telegram bot, instead of offering a list with a single card.
-    const autoStart = !!s.webSnapshot && open.length === 1;
-    const { message } = summarize(visible, joined, now, completions);
-    const greeting = autoStart ? "Let's go!" : message;
+    const availability = studyAvailability(s, uid, joined, now, loadCompletions(s.id, uid));
+    const open = visible.filter((q) => availability(q).state === 'available');
+    // A check-in saved on this device (lib/pausedCheckin.ts) carries on while its window is open; once that has
+    // closed the saved answers are dropped. One the app was closed in reopens by itself, before anything else;
+    // one parked with "Remind me later" waits on the list.
+    let interrupted: EsmiraQuestionnaire | undefined;
+    let interruptedAt = 0;
+    for (const q of visible) {
+      const saved = loadPaused(s.id, uid, q.internalId);
+      if (!saved) continue;
+      if (!canResume(saved, availability(q))) clearPaused(s.id, uid, q.internalId);
+      else if (!saved.remindLater && saved.pausedAt >= interruptedAt) {
+        interrupted = q;
+        interruptedAt = saved.pausedAt;
+      }
+    }
+    // A check-in the app starts by itself (autoStart, e.g. usual sleep times on day zero) starts straight away
+    // while it is open, so it comes before the regular check-ins. So does a one-questionnaire check-in with an end
+    // snapshot (checkin-readout), like the Telegram bot, instead of a list with a single card.
+    const autoStarting = autoStartIds(s);
+    const onboarding = open.find((q) => autoStarting.has(q.internalId));
+    const autoStart = interrupted ?? onboarding ?? (s.webSnapshot && open.length === 1 ? open[0] : undefined);
+    const { anyAvailable, message } = summarize(visible, now, availability);
+    const greeting = interrupted ? 'Your answers so far were saved on this phone.'
+      : onboarding ? 'First, a few questions to set up the study for you.' : autoStart ? "Let's go!" : message;
+    awaitingOpenRef.current = !anyAvailable && !autoStart;
     pushBot(lead ? `${lead} ${greeting}` : greeting);
-    if (autoStart) setAutoStartId(open[0].internalId);
+    if (autoStart) setAutoStartId(autoStart.internalId);
     setPhase('list');
   }, [pushBot]);
 
@@ -420,9 +487,57 @@ export default function App() {
       void reportClientInfo(study.id, userId);
     }
   }, [study, userId]);
+  // The study's schedule: refresh the server's inputs (the participant's usual sleep times, wearable events) every
+  // 5 minutes, on return to the app and after each uploaded questionnaire (the answers can be the usual sleep
+  // times). The windows are computed on the device from the cached copy (lib/schedule.ts), so they keep working
+  // offline.
+  const [planRefreshTick, setPlanRefreshTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setNowTick((t) => t + 1), 60000);
-    return () => clearInterval(id);
+    if (!study || !userId || !scheduleConfig(study)) return;
+    let cancelled = false;
+    const refresh = () => {
+      void fetchScheduleInputs(study.id, userId).then((inputs) => {
+        if (cancelled || !inputs) return;
+        saveServerInputs(study.id, userId, inputs);
+        setNowTick((t) => t + 1);
+      });
+    };
+    refresh();
+    const id = setInterval(refresh, 5 * 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', refresh);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', refresh);
+    };
+  }, [study, userId, planRefreshTick]);
+  // Browser: take down web-push reminders whose check-in has closed (a web notification cannot expire by itself;
+  // the service worker also does this on every push). The Android app's expire on their own (setTimeoutAfter).
+  useEffect(() => {
+    if (isNativeApp()) return;
+    const sweep = () => { if (document.visibilityState === 'visible') void closeExpiredNotifications(); };
+    sweep();
+    document.addEventListener('visibilitychange', sweep);
+    return () => document.removeEventListener('visibilitychange', sweep);
+  }, []);
+  // Native app: the server ships the matching app build; offer it when it is newer than this one (banner and one
+  // notification per build, never blocking). Checked on start and whenever the app returns to the foreground.
+  const [appUpdate, setAppUpdate] = useState<AppUpdate | null>(null);
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      void checkAppUpdate(getApiRoot()).then((u) => {
+        setAppUpdate(u);
+        if (u) void notifyAppUpdate(u);
+      });
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
   }, []);
   // Native app: keep the OS reminder schedule in line with the study. Re-planned when the study or
   // enrollment changes, after each completion, and whenever the app returns to the foreground, which
@@ -436,6 +551,7 @@ export default function App() {
       if (document.visibilityState !== 'visible') return;
       setNowTick((t) => t + 1);
       setReminderSyncTick((t) => t + 1);
+      refreshNotifPerm(); // permission may have been changed in Android's settings meanwhile
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -444,15 +560,42 @@ export default function App() {
     if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
     const plan = planReminders(study, enrolledAt, Date.now(), loadCompletions(study.id, userId), {
       exclude: (q) => q.title === TRIALS_QN_TITLE,
+      userId,
     });
-    void syncReminders(plan, study.id);
-  }, [study, userId, enrolledAt, reminderSyncTick]);
+    // Phone sensing gets the same prompt times: the accelerometer records around them (lib/phoneSensing.ts).
+    // Independent of the notification switches below. Also re-run on return to the foreground, which picks up
+    // a permission granted in Android's settings.
+    void configurePhoneSensing({
+      server: getApiRoot(), study, userId, accessKey: accessKey || localStorage.getItem(LAST_KEY_STORE) || '',
+      promptTimes: plan.map((r) => r.at),
+    }).then((st) => { if (st) setSensingStatus(st); });
+    // Switched off by the research team (per study) or by the participant: take down what is planned.
+    if (!notificationsActive(study, userId, true)) { void clearReminders(); return; }
+    void syncReminders(plan, study.id).then((res) => {
+      // Same funnel as web push, on the 'android' channel (researcher's Notifications panel).
+      if (res?.added) void reportPushEvent({ studyId: study.id, userId, event: 'scheduled', channel: 'android', count: res.added });
+      if (res?.fired) void reportPushEvent({ studyId: study.id, userId, event: 'received', channel: 'android', count: res.fired });
+    });
+  }, [study, userId, enrolledAt, reminderSyncTick, notifOff]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (Taps on Android notifications are reported natively, MainActivity.reportNotificationTap.)
   // Native app: arm the background poll for server-driven nudges. Re-armed on every app start, so a poll
   // that stopped itself (study had nothing to nudge about) picks up a later study change.
   useEffect(() => {
     if (!isNativeApp() || !study || !userId || enrolledAt == null) return;
-    void configureServerNudges(getApiRoot(), study.id, userId, enrolledAt);
-  }, [study?.id, userId, enrolledAt]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!notificationsActive(study, userId, true)) { void cancelServerNudges(); return; }
+    void configureServerNudges(getApiRoot(), study.id, userId, enrolledAt, study.lang);
+  }, [study?.id, study?.androidNotificationsEnabled, userId, enrolledAt, notifOff]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The participant's switch: read it for this study, and send a choice the server has not confirmed yet
+  // (made offline) as soon as the study is open again.
+  useEffect(() => {
+    if (!study || !userId) return;
+    const off = participantOff(study.id, userId);
+    setNotifOff(off);
+    if (hasUnsyncedChoice(study.id, userId)) {
+      void setNotificationPreference({ study, serverVersion, userId, off, channel: isNativeApp() ? 'android' : 'web' })
+        .then((ok) => { if (ok) setParticipantOff(study.id, userId, off, false); });
+    }
+  }, [study?.id, userId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keep an offline copy of the study's interactive tasks (device storage in the native app, Cache API
   // in the browser PWA). Runs after sign-up, on every app start and whenever the connection returns,
   // so a download that was cut short is picked up again.
@@ -480,16 +623,35 @@ export default function App() {
   const questionnaireAvailability = useMemo(() => {
     const map = new Map<number, Availability>();
     if (!study || enrolledAt == null) return map;
-    const completions = loadCompletions(study.id, userId);
-    const now = Date.now();
+    const availability = studyAvailability(study, userId, enrolledAt, Date.now(), loadCompletions(study.id, userId));
     for (const q of study.questionnaires) {
       if (q.title === TRIALS_QN_TITLE) continue;
-      map.set(q.internalId, computeAvailability(q, enrolledAt, now, completions));
+      map.set(q.internalId, availability(q));
     }
     return map;
     // nowTick forces re-evaluation each minute.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [study, userId, enrolledAt, nowTick]);
+  // Re-evaluate each minute, and right when the next window opens: windows can open mid-minute, and the list
+  // should not lag behind it.
+  useEffect(() => {
+    const now = Date.now();
+    let delay = 60000;
+    for (const av of questionnaireAvailability.values())
+      if (av.opensAt != null && av.opensAt > now) delay = Math.min(delay, av.opensAt - now + 250);
+    const id = setTimeout(() => setNowTick((t) => t + 1), delay);
+    return () => clearTimeout(id);
+  }, [questionnaireAvailability]);
+  // The list's greeting is a snapshot ("Nothing is open right now — … opens at 16:44"), while the cards follow the
+  // schedule live. When a questionnaire opens after the chat said nothing was open, say so, so the chat does not
+  // contradict the open card below it.
+  useEffect(() => {
+    if (phase !== 'list' || !awaitingOpenRef.current || !study) return;
+    const open = study.questionnaires.filter((q) => questionnaireAvailability.get(q.internalId)?.state === 'available');
+    if (!open.length) return;
+    awaitingOpenRef.current = false;
+    pushBot(open.length === 1 ? `${open[0].title} is open now — tap below to begin.` : 'Questionnaires are open now — choose one below to begin.');
+  }, [phase, study, questionnaireAvailability, pushBot]);
 
   // ── Retry queue flusher (re-installs cleanly on remount) ─────
   useEffect(() => installSubmitQueueFlusher(), []);
@@ -535,6 +697,10 @@ export default function App() {
         // Assign/restore the stable user id (invite-link param > stored > random).
         const uid = resolveUserId(study.id, params);
         setUserId(uid);
+        // The ref normally follows the state on the next render, but a returning participant can go straight on to
+        // the list in this same tick (enterList reads the ref): without this the list ran for user '' and anchored
+        // the schedule to a fresh enrollment on the first return visit.
+        userIdRef.current = uid;
         // If the PID was pre-assigned via an invite link, check whether another device
         // has already claimed it. Fail open (network errors let the participant through).
         const invitedPid = (
@@ -554,20 +720,35 @@ export default function App() {
             return;
           }
         }
-        const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
-        setParticipant(savedName);
+        // The app no longer asks for a display name: forget one an earlier version stored here.
+        localStorage.removeItem(`esmira_participant_${study.id}`);
+        const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
+        // A returning participant sees the opening bubbles at once; pacing is for first reads
+        // (cleared as soon as the app leaves the loading phase, see below).
+        instantRef.current = consented;
         // A description that greets the participant itself replaces the generic welcome line.
-        const welcomeId = /^welcome\b/i.test(headerText(study.studyDescription))
-          ? null : pushBot(`Welcome to ${study.title}.`);
+        if (!/^welcome\b/i.test(headerText(study.studyDescription))) pushBot(`Welcome to ${study.title}.`);
         // studyDescription is rich text (HTML) in ESMira; render it formatted.
         // informedConsentForm is a plain-text field — keep it plain (line breaks preserved).
-        const descriptionId = study.studyDescription ? pushBot(study.studyDescription, true) : null;
-        // A first visit to a paced study sees welcome, description and consent appear one by one
-        // (set in the same batch as the pushes, so nothing flashes up early).
-        const firstId = welcomeId ?? descriptionId;
-        if (firstId && study.webPacedMessages && study.informedConsentForm
-          && localStorage.getItem(`esmira_consent_${study.id}`) !== '1') setPace({ from: firstId, shown: 1 });
-        const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
+        if (study.studyDescription) pushBot(study.studyDescription, true);
+        // Left the study elsewhere? (Signed out on another device, or withdrawn by the research
+        // team.) Then this device must not carry on: the Android app would otherwise keep
+        // firing the reminders it scheduled itself. Asked in the background so a slow server
+        // never delays the start; only an explicit answer counts, so being offline, or an
+        // older server, changes nothing.
+        if (consented && uid && study.webLocalOnly !== true) {
+          void fetchNextNotification(study.id, uid).then((status) => {
+            // Switched on/off on another device: follow it here, unless this device has a newer, unsent choice.
+            if (status.notificationsOff !== null && !hasUnsyncedChoice(study.id, uid) && status.notificationsOff !== participantOff(study.id, uid)) {
+              setParticipantOff(study.id, uid, status.notificationsOff, false);
+              setNotifOff(status.notificationsOff);
+            }
+            if (!status.withdrawn) return;
+            pushBot(`You have left ${study.title}. Reminders are switched off and this device is being reset.`);
+            setPhase('loading'); // no further actions
+            setTimeout(() => { void resetDevice({ notifyServer: false, study, userId: uid }); }, 2500);
+          });
+        }
         // Resolve enrollment for an already-consented participant before entering the study
         // (new participants are handled at consent in onConsent). Adopt the SERVER's anchor
         // (join time, else subscribe time) when it already has one, so a returning device's
@@ -593,11 +774,7 @@ export default function App() {
         if (study.informedConsentForm && !consented) {
           pushBot(study.informedConsentForm);
           setPhase('consent');
-        } else if (!savedName && !study.webSkipName) {
-          pushBot('Before we begin — what name would you like to go by? (Just for display; your study id is assigned automatically.)');
-          setPhase('name');
         } else {
-          if (savedName) pushBot(`Welcome back, ${savedName}!`);
           enterStudyGated(study);
         }
       })
@@ -612,17 +789,13 @@ export default function App() {
   }, []);
 
   // ── Auto-scroll to bottom ────────────────────────────────────
-  useEffect(() => {
+  // Choice lists render full-height (no nested scrollbox), so a question card can be
+  // taller than the viewport (e.g. the 9-option KSS). Scrolling to the bottom would
+  // push the question text off-screen — align the card's top instead so the
+  // participant reads the question first, then scrolls down through the options.
+  const scrollToLive = useCallback((behavior: ScrollBehavior) => {
     const el = scrollRef.current;
     if (!el) return;
-    // The smartphone-only invite page is read from the top: its heading and the top of the
-    // QR code would otherwise sit under the fixed header on a short laptop screen.
-    if (phase === 'phone-only') { el.scrollTo({ top: 0 }); return; }
-    const behavior = reduceMotion ? ('auto' as const) : ('smooth' as const);
-    // Choice lists render full-height (no nested scrollbox), so a question card can be
-    // taller than the viewport (e.g. the 9-option KSS). Scrolling to the bottom would
-    // push the question text off-screen — align the card's top instead so the
-    // participant reads the question first, then scrolls down through the options.
     const live = el.querySelector<HTMLElement>('[data-live-question]');
     if (live && live.offsetHeight > el.clientHeight) {
       const delta = live.getBoundingClientRect().top - el.getBoundingClientRect().top;
@@ -630,16 +803,46 @@ export default function App() {
     } else {
       el.scrollTo({ top: el.scrollHeight, behavior });
     }
-  }, [messages, visibleCount, currentQuestion, phase, reduceMotion]);
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // The smartphone-only invite page is read from the top: its heading and the top of the
+    // QR code would otherwise sit under the fixed header on a short laptop screen.
+    if (phase === 'phone-only') { el.scrollTo({ top: 0 }); return; }
+    scrollToLive(reduceMotion ? 'auto' : 'smooth');
+  }, [messages, visibleCount, currentQuestion, keystroker, phase, reduceMotion, scrollToLive]);
+
+  // While a typed answer is written in the chat row, the conversation shrinks as the keyboard
+  // opens and the composer grows: keep the question (its prompt first) in view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!keystroker || !el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => scrollToLive('auto'));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [keystroker, scrollToLive]);
+
+  // The writer belongs to its question: once that question is answered, skipped or rewound
+  // past (or the questionnaire is left), close it.
+  useEffect(() => {
+    if (keystroker && (phase !== 'survey' || currentQuestion?.id !== keystroker.id)) setKeystroker(null);
+  }, [keystroker, currentQuestion, phase]);
 
   // ── Paced messages: reveal the next bubble once the previous one has had time to be read ──
+  useEffect(() => { shownAtRef.current = Date.now(); }, [visibleCount]);
   useEffect(() => {
-    if (!pace) return;
-    if (!pacing) { setPace(null); return; }
-    const prev = messages[visibleCount - 1];
-    const t = setTimeout(() => setPace({ ...pace, shown: pace.shown + 1 }), readingPauseMs(prev.content, prev.html));
+    // A rewound thread ("Change response") got shorter: carry on from its new end.
+    if (shown > messages.length) { setShown(messages.length); return; }
+    if (visibleCount === messages.length) return;
+    const delay = revealDelayMs(messages[visibleCount - 1], messages[visibleCount], shownAtRef.current, Date.now(), pacingWpm);
+    const t = setTimeout(() => setShown(visibleCount + 1), delay);
     return () => clearTimeout(t);
-  }, [pace, pacing, messages, visibleCount]);
+  }, [shown, messages, visibleCount, pacingWpm]);
+  // The launch of a returning participant is over once the app shows its first step.
+  useEffect(() => {
+    if (phase !== 'loading') instantRef.current = false;
+  }, [phase]);
 
   // ── Consent ──────────────────────────────────────────────────
   const onConsent = (agree: boolean) => {
@@ -664,66 +867,79 @@ export default function App() {
       ensureEnrollment(study.id, uid, joinedAt);
       void submitJoined({ study, serverVersion, accessKey, userId: uid, joinedAt });
     }
-    const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
-    if (!savedName && !study.webSkipName) {
-      pushBot('Thank you. What name would you like to go by?');
-      setPhase('name');
-    } else {
-      enterStudyGated(study);
-    }
+    enterStudyGated(study);
   };
 
-  // ── Sign out: a COMPLETE reset of this device back to first-visit state ──
+  // ── Leaving the study: a COMPLETE reset of this device back to first-visit state ──
   // Wipes all local ESMira data (identity, consent, onboarding flags, enrollment,
   // completions, queues, appearance prefs), unsubscribes push, and drops the IndexedDB
   // completion mirror, every Cache Storage entry, and the service worker itself. This
   // guarantees the next sign-up runs the full onboarding again (notifications gate +
   // welcome push + tutorial) instead of being treated as a returning device.
+  //
+  // With `notifyServer`, the server is told first that the participant has left: it deletes
+  // the push subscription (so the per-minute sender stops at once) and records the `quit`
+  // event, which withdraws the participant — no web push, Android nudge or chat prompt is
+  // sent to them again, on any device, until they re-enrol. Both calls are bounded so a dead
+  // connection cannot hold up the reset. Not needed when the server itself reported the
+  // withdrawal (see the check in the study-load effect).
+  const resetDevice = async (opts: { notifyServer: boolean; study?: EsmiraStudy | null; userId?: string }) => {
+    const s = opts.study ?? study;
+    const uid = opts.userId ?? userIdRef.current;
+    const sid = s ? String(s.id) : '';
+    const deviceToken = localStorage.getItem('esmira_device_token') || '';
+    const effectiveKey = accessKey || localStorage.getItem(LAST_KEY_STORE) || '';
+    if (opts.notifyServer && s && uid) {
+      await withTimeout(unsubscribeFromPush({ study: s, serverVersion, userId: uid }), 6000, false);
+      await withTimeout(submitQuit({ study: s, serverVersion, accessKey: effectiveKey, userId: uid }), 6000, false);
+    }
+    // Free the PID lock server-side before wiping the identity it belongs to.
+    if (sid && uid && deviceToken) await withTimeout(releasePidLock(sid, uid, deviceToken), 6000, undefined);
+    // Drop the push subscription (bound to the SW registration) so no stale endpoint lingers.
+    // Not `serviceWorker.ready`: it never settles when no worker is registered (the native
+    // Android app ships without one), which would hang sign-out here and never reach the reload.
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await withTimeout(navigator.serviceWorker.getRegistrations(), 4000, [] as readonly ServiceWorkerRegistration[]);
+        for (const reg of regs) {
+          const sub = await withTimeout(reg.pushManager?.getSubscription() ?? Promise.resolve(null), 4000, null);
+          if (sub) await withTimeout(sub.unsubscribe(), 4000, false);
+        }
+      }
+    } catch { /* best-effort */ }
+    // Native app: cancel the on-device reminders too.
+    await clearReminders();
+    await cancelServerNudges();
+    await cancelPhoneSensing();
+    // Clear all web storage.
+    try { localStorage.clear(); } catch { /* ignore */ }
+    try { sessionStorage.clear(); } catch { /* ignore */ }
+    // Delete the completion-mirror IndexedDB.
+    try { indexedDB.deleteDatabase('esmira_state'); } catch { /* ignore */ }
+    // Delete every Cache Storage entry (app-shell precache, study definition, fonts).
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch { /* ignore */ }
+    // Unregister the service worker so it re-installs clean on next load.
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch { /* ignore */ }
+    // Restart on the bare app path: a fresh navigation with no SW/caches/storage and no
+    // ?key= = first-visit state (the invite-code screen). A plain reload would keep the
+    // invite link's key and start the same study again.
+    window.location.replace(signedOutUrl(window.location.pathname));
+  };
+
+  // ── Sign out = leave the study on this device (and tell the server so). ──
   const signOut = () => {
     if (!window.confirm("Sign out and reset this device? This clears everything stored here — you'll start sign-up again from the beginning.")) return;
-    // Capture identity before wiping so we can free the PID lock server-side.
-    const sid = study ? String(study.id) : '';
-    const uid = userIdRef.current;
-    const deviceToken = localStorage.getItem('esmira_device_token') || '';
-    void (async () => {
-      if (sid && uid && deviceToken) {
-        try { await releasePidLock(sid, uid, deviceToken); } catch { /* best-effort */ }
-      }
-      // Drop the push subscription (bound to the SW registration) so no stale endpoint lingers.
-      try {
-        if ('serviceWorker' in navigator) {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) await sub.unsubscribe();
-        }
-      } catch { /* best-effort */ }
-      // Native app: cancel the on-device reminders too.
-      await clearReminders();
-      await cancelServerNudges();
-      // Clear all web storage.
-      try { localStorage.clear(); } catch { /* ignore */ }
-      try { sessionStorage.clear(); } catch { /* ignore */ }
-      // Delete the completion-mirror IndexedDB.
-      try { indexedDB.deleteDatabase('esmira_state'); } catch { /* ignore */ }
-      // Delete every Cache Storage entry (app-shell precache, study definition, fonts).
-      try {
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        }
-      } catch { /* ignore */ }
-      // Unregister the service worker so it re-installs clean on next load.
-      try {
-        if ('serviceWorker' in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
-        }
-      } catch { /* ignore */ }
-      // Restart on the bare app path: a fresh navigation with no SW/caches/storage and no
-      // ?key= = first-visit state (the invite-code screen). A plain reload would keep the
-      // invite link's key and start the same study again.
-      window.location.replace(signedOutUrl(window.location.pathname));
-    })();
+    void resetDevice({ notifyServer: true });
   };
 
   // ── Contact: send an anonymous message to the research team ──
@@ -752,7 +968,7 @@ export default function App() {
     setErrorStatus('idle');
     setErrorText('');
     setTestPushStatus('idle');
-    if (typeof Notification !== 'undefined') setNotifPerm(Notification.permission);
+    refreshNotifPerm();
     setA11yOpen(true);
   };
   const closeSettings = () => {
@@ -760,10 +976,33 @@ export default function App() {
     setSettingsView('main');
     setUpdateStatus('idle');
   };
-  // Open the Settings modal straight onto the wearables panel (from the grid menu tile).
+  // Open the Settings modal straight onto the wearables panel (its only entry point is the grid menu tile).
   const openWearables = () => {
     setSettingsView('wearables');
     setA11yOpen(true);
+  };
+
+  // Phone sensing (Android app): what the study collects from the phone and the permissions it needs.
+  const [sensingStatus, setSensingStatus] = useState<PhoneSensingStatus | null>(null);
+  const sensing = useMemo(() => (isNativeApp() ? sensingSettings(study) : null), [study]);
+  // Opened from Settings (which then offers Back) or straight from its grid tile (which doesn't).
+  const [sensingViaSettings, setSensingViaSettings] = useState(false);
+  const openSensing = (viaSettings = false) => {
+    setSensingViaSettings(viaSettings);
+    setSettingsView('sensing');
+    setA11yOpen(true);
+    void phoneSensingStatus().then((st) => { if (st) setSensingStatus(st); });
+  };
+  // "Wait for Wi-Fi" in the Phone sensing panel: shown at once, confirmed by the phone's status.
+  const changeWaitForWifi = async (on: boolean) => {
+    if (!sensing || !study) return;
+    setSensingStatus((prev) => (prev ? { ...prev, uploadNetwork: on ? 'wifi_preferred' : 'any' } : prev));
+    const st = await chooseUploadNetwork(sensing, study.id, userId, on);
+    if (st) setSensingStatus(st);
+  };
+  const allowActivity = async () => {
+    const st = await requestActivityPermission();
+    if (st) setSensingStatus(st);
   };
 
   // Dialog accessibility: Escape-to-close, focus trap, focus restore (see useDialogA11y).
@@ -781,8 +1020,10 @@ export default function App() {
     if (!effectiveKey) { setUpdateStatus('error'); return; }
     setUpdateStatus('updating');
     try {
-      await flushSubmitQueue();
-      const { study: fresh, serverVersion: sv, vapidPublicKey, wearableProviders: wp } = await fetchStudy(effectiveKey, studyIdParam);
+      const pending = await flushSubmitQueue();
+      const { study: fresh, serverVersion: sv, vapidPublicKey, wearableProviders: wp, fromCache } = await fetchStudy(effectiveKey, studyIdParam);
+      setUpdatePending(pending);
+      if (fromCache) { setUpdateStatus('offline'); return; } // nothing new was downloaded: don't claim it was
       setLocalOnly(fresh.webLocalOnly === true);
       setStudy(fresh);
       setServerVersion(sv);
@@ -859,7 +1100,22 @@ export default function App() {
   }, [subscribePush, deliverWelcome]);
 
   // ── Notifications: ask the browser for permission, then subscribe to push ──
+  // Settings → Notifications status. The Android app's WebView has no Notification API: there the
+  // permission is Android's own (shown as 'default' while the system dialog has not been answered).
+  const refreshNotifPerm = () => {
+    if (isNativeApp()) {
+      void reminderPermission().then((p) => setNotifPerm(p === 'prompt' ? 'default' : p));
+      return;
+    }
+    if (typeof Notification !== 'undefined') setNotifPerm(Notification.permission);
+  };
   const requestNotifications = async () => {
+    if (isNativeApp()) {
+      const p = await requestReminderPermission();
+      setNotifPerm(p === 'prompt' ? 'default' : p);
+      setReminderSyncTick((t) => t + 1);
+      return;
+    }
     if (typeof Notification === 'undefined') return;
     try {
       const perm = await Notification.requestPermission();
@@ -879,11 +1135,125 @@ export default function App() {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') void subscribePush();
   }, [phase, study, vapidKey, subscribePush]);
 
+  // Daily reminder to turn notifications on (lib/notificationNudge.ts): a card above the questionnaire list, at
+  // most once a day, while this study sends notifications to the participant but the device does not allow them.
+  const [notifNudge, setNotifNudge] = useState<NudgeKind | null>(null);
+  const [nudgeBusy, setNudgeBusy] = useState(false);
+  const currentNotifPerm = useCallback(async (): Promise<NudgePermission> => {
+    if (isNativeApp()) {
+      const p = await reminderPermission();
+      return p === 'prompt' ? 'default' : p;
+    }
+    return isPushSupported() && typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+  }, []);
+  const nudgeInstallable = !isNativeApp() && onIOS && !standalone;
+  useEffect(() => { setNotifNudge(null); }, [study?.id, userId]);
+  useEffect(() => {
+    if (phase !== 'list' || !study || !userId || notifNudge) return;
+    if (!nudgeEnabled(study) || !notificationsActive(study, userId, isNativeApp()) || !hasPrompts(study)) return;
+    if (nudgeShownToday(study.id, userId)) return;
+    let cancelled = false;
+    void currentNotifPerm().then((perm) => {
+      const kind = nudgeKind(perm, nudgeInstallable);
+      if (cancelled || !kind) return;
+      markNudgeShown(study.id, userId);
+      setNotifNudge(kind);
+    });
+    return () => { cancelled = true; };
+  }, [phase, study, userId, notifOff, nowTick, notifNudge, nudgeInstallable, currentNotifPerm]);
+  // Notifications are on now (from the card, Settings, or the phone's / browser's settings): plan or subscribe.
+  const nudgeGranted = useCallback(() => {
+    if (!study) return;
+    setNotifNudge(null);
+    setNotifPerm('granted');
+    localStorage.removeItem(`esmira_push_optout_${study.id}`);
+    if (isNativeApp()) setReminderSyncTick((t) => t + 1);
+    else void subscribePush();
+    pushBot("✅ Notifications are on — I'll remind you when a questionnaire is ready.");
+  }, [study, subscribePush, pushBot, setReminderSyncTick]);
+  // The permission may change in the settings while the app is in the background: re-check on return.
+  useEffect(() => {
+    if (!notifNudge) return;
+    if (notifPerm === 'granted') { setNotifNudge(null); return; }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void currentNotifPerm().then((perm) => {
+        if (perm === 'granted') nudgeGranted();
+        else setNotifNudge(nudgeKind(perm, nudgeInstallable));
+      });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [notifNudge, notifPerm, nudgeInstallable, currentNotifPerm, nudgeGranted]);
+  // The card's main button while the system dialog can still be shown.
+  const nudgeAllow = useCallback(async () => {
+    if (nudgeBusy) return;
+    setNudgeBusy(true);
+    try {
+      let perm: NudgePermission = 'unsupported';
+      if (isNativeApp()) {
+        const p = await requestReminderPermission();
+        perm = p === 'prompt' ? 'default' : p;
+      } else if (typeof Notification !== 'undefined') {
+        perm = await Notification.requestPermission();
+      }
+      if (perm === 'granted') nudgeGranted();
+      else {
+        setNotifPerm(perm);
+        if (perm === 'denied') setNotifNudge('blocked');
+      }
+    } catch {
+      /* dismissed / unsupported */
+    } finally {
+      setNudgeBusy(false);
+    }
+  }, [nudgeBusy, nudgeGranted]);
+  // Blocked: the Android app opens its notification settings; the browser can only be re-checked.
+  const nudgeRecheck = useCallback(async () => {
+    if (isNativeApp()) { await openNotificationSettings(); return; }
+    const perm = await currentNotifPerm();
+    if (perm === 'granted') nudgeGranted();
+    else if (perm === 'default') void nudgeAllow();
+  }, [currentNotifPerm, nudgeGranted, nudgeAllow]);
+
+  // After the notifications step: studies with voice-recording items explain why the app needs
+  // the microphone, and only a tap on "Allow microphone" shows the system prompt (see
+  // lib/permissions.ts). Asked once per study; skipped when the researcher turned the step off
+  // or access is already granted.
+  const continueAfterNotifications = useCallback((s: EsmiraStudy) => {
+    void (async () => {
+      // Phone sensing (Android app): the Physical activity dialog now; Usage access lives in Android's
+      // settings, so it is explained here and offered from the Phone sensing tile (see PhoneSensingPanel).
+      const sense = isNativeApp() ? sensingSettings(s) : null;
+      if (sense) {
+        const missing = missingPermissions(sense, await phoneSensingStatus());
+        if (missing.activity) {
+          pushBot('This study also notes whether you are still, walking or travelling around your questionnaires. Please tap Allow when Android asks about physical activity.');
+          const st = await requestActivityPermission();
+          if (st) setSensingStatus(st);
+        }
+        if (missing.usage) {
+          pushBot('This study also looks at which apps you use (app names only, never what you do in them). To allow this, open the menu, tap "Phone sensing" and switch on Usage access for iEMAbot.');
+        }
+      }
+      if (!micPending(s)) { enterStudy(s); return; }
+      if ((await microphonePermission()) === 'granted') {
+        localStorage.setItem(micOnboardedKey(s.id), '1');
+        enterStudy(s);
+        return;
+      }
+      pushBot("Some questions in this study ask you to record a short voice answer, so the app needs your microphone. It's only used while you're recording, and you can listen back before you save.");
+      setMicStatus('ask');
+      setPhase('microphone');
+    })();
+  }, [enterStudy, pushBot]);
+
   // Whether the mandatory notifications step is already settled for this study/user:
   // push is off for the study, permission is granted + subscribed, or the participant
   // has taken the "continue without notifications" escape hatch.
   const notificationsSettled = useCallback((s: EsmiraStudy): boolean => {
     if (!s.webPushEnabled) return true;
+    if (participantOff(s.id, userIdRef.current)) return true; // switched off in Settings: don't ask again
     // Native app: reminders do not use Web Push (the WebView has none), and there is no Home
     // Screen to add the app to. Android notification permission is handled natively instead.
     if (isNativeApp()) return true;
@@ -898,32 +1268,58 @@ export default function App() {
   // (e.g. a returning device), subscribe + welcome silently and continue; otherwise
   // show the step. Non-push studies (or already-settled ones) go straight through.
   const enterStudyGated = useCallback((s: EsmiraStudy) => {
-    // Native app: reminders are scheduled on the device, so ask for Android's notification permission
-    // (a system dialog on Android 13+) once, then go straight in. Declining is allowed: the help panel
-    // explains how to turn reminders on later, and the questionnaires stay reachable from the list.
+    // Native app: reminders are scheduled on the device. While Android's notification permission
+    // is undecided (and the participant hasn't tapped "Not now"), the notifications step explains
+    // it first and its button shows the system dialog (Android 13+). Declining is allowed: the
+    // help panel explains how to turn reminders on later, and the questionnaires stay reachable.
     if (isNativeApp()) {
       void (async () => {
-        if (hasScheduledSignals(s.questionnaires)) {
-          pushBot("I'll remind you when a questionnaire is ready. Please tap Allow when Android asks about notifications.");
-          await requestReminderPermission();
+        if (notificationsActive(s, userIdRef.current, true) && hasPrompts(s)
+          && localStorage.getItem(`esmira_push_optout_${s.id}`) !== '1'
+          && (await reminderPermission()) === 'prompt') {
+          pushBot(micPending(s)
+            ? 'Two quick permissions before you start: notifications, so I can remind you when a questionnaire is ready, and your microphone, for the questions where you record a voice answer. First, notifications.'
+            : "I'll remind you when a questionnaire is ready, so the app needs permission to show notifications.");
+          setPhase('notifications');
+          return;
         }
         setReminderSyncTick((t) => t + 1);
-        enterStudy(s);
+        continueAfterNotifications(s);
       })();
       return;
     }
-    if (notificationsSettled(s)) { enterStudy(s); return; }
+    if (notificationsSettled(s)) { continueAfterNotifications(s); return; }
     if (isPushSupported() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       void (async () => {
         await subscribePush();
         await maybeDeliverWelcome(s);
-        enterStudy(s);
+        continueAfterNotifications(s);
       })();
       return;
     }
-    pushBot("One last step — please turn on notifications so you don't miss a questionnaire. I'll send a quick welcome to confirm they're working.");
+    pushBot(micPending(s)
+      ? "Two quick permissions before you start: notifications, so you don't miss a questionnaire, and your microphone, for the questions where you record a voice answer. First, notifications — I'll send a quick welcome to confirm they're working."
+      : "One last step — please turn on notifications so you don't miss a questionnaire. I'll send a quick welcome to confirm they're working.");
     setPhase('notifications');
-  }, [notificationsSettled, enterStudy, subscribePush, maybeDeliverWelcome, pushBot, setReminderSyncTick]);
+  }, [notificationsSettled, continueAfterNotifications, subscribePush, maybeDeliverWelcome, pushBot, setReminderSyncTick]);
+
+  // Notifications step in the native app — primary action: show Android's notification dialog,
+  // then carry on whatever the answer (reminders are optional, see enterStudyGated).
+  const allowNativeNotifications = useCallback(async () => {
+    if (!study || notifBusy) return;
+    setNotifBusy(true);
+    try {
+      const perm = await requestReminderPermission();
+      if (perm !== 'granted') markNudgeShown(study.id, userIdRef.current); // just declined: ask again tomorrow
+      pushBot(perm === 'granted'
+        ? "✅ Notifications are on — I'll remind you when a questionnaire is ready."
+        : 'No problem — you can turn notifications on later in your phone\'s settings for this app.');
+      setReminderSyncTick((t) => t + 1);
+      continueAfterNotifications(study);
+    } finally {
+      setNotifBusy(false);
+    }
+  }, [study, notifBusy, pushBot, setReminderSyncTick, continueAfterNotifications]);
 
   // Mandatory notifications step — primary action. Request permission (if not decided),
   // then subscribe + deliver the welcome push, then continue into the study. A denied
@@ -945,7 +1341,7 @@ export default function App() {
         // supported browser). No real push is possible, so skip the confirmation and
         // continue — they'll still get notifications while the app is open.
         pushBot("✅ Notifications are on. You'll get notifications while the app is open; for background reminders, install this app to your home screen.");
-        enterStudy(study);
+        continueAfterNotifications(study);
         return;
       }
       // Record that a welcome has been dispatched so the silent path won't re-send later.
@@ -959,7 +1355,7 @@ export default function App() {
     } finally {
       setNotifBusy(false);
     }
-  }, [study, notifBusy, subscribePush, deliverWelcome, pushBot, enterStudy]);
+  }, [study, notifBusy, subscribePush, deliverWelcome, pushBot, continueAfterNotifications]);
 
   // Notifications-step confirmation — the participant saw the welcome. Record it (so we
   // never re-welcome or re-prompt) and continue into the study.
@@ -971,8 +1367,8 @@ export default function App() {
     pushUser('Yes, got it');
     pushBot("Perfect — you're all set. I'll send a notification whenever a questionnaire is ready.");
     setAwaitingWelcomeConfirm(false);
-    enterStudy(study);
-  }, [study, pushUser, pushBot, enterStudy]);
+    continueAfterNotifications(study);
+  }, [study, pushUser, pushBot, continueAfterNotifications]);
 
   // Notifications-step confirmation — the welcome didn't arrive. Flag it for the research
   // team's Push panel, try one local notification so the participant still sees something,
@@ -990,26 +1386,91 @@ export default function App() {
       ? "Thanks — I've shown one now and let the study team know, in case reminders don't reach you. You can carry on with the study."
       : "Thanks — I've let the study team know so they can help make sure reminders reach you. You can still take part in the study.");
     setAwaitingWelcomeConfirm(false);
-    enterStudy(study);
-  }, [study, pushUser, pushBot, enterStudy]);
+    continueAfterNotifications(study);
+  }, [study, pushUser, pushBot, continueAfterNotifications]);
+
+  // Settings → Notifications switch. Off: nothing more is planned or sent to this participant (the server
+  // is told, so web push stops too); they stay in the study and can still open questionnaires. On: ask for
+  // permission if needed and plan / subscribe again.
+  const changeNotificationsOff = useCallback(async (off: boolean) => {
+    if (!study || !userId) return;
+    const native = isNativeApp();
+    setParticipantOff(study.id, userId, off, true);
+    setNotifOff(off);
+    if (!off) {
+      localStorage.removeItem(`esmira_push_optout_${study.id}`);
+      if (native) {
+        await requestReminderPermission();
+        setReminderSyncTick((t) => t + 1);
+      } else if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+        await requestNotifications();
+      } else {
+        void subscribePush();
+      }
+    }
+    const ok = await setNotificationPreference({ study, serverVersion, userId, off, channel: native ? 'android' : 'web' });
+    if (ok) setParticipantOff(study.id, userId, off, false);
+  }, [study, userId, serverVersion, subscribePush]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mandatory notifications step — escape hatch. Records the opt-out (so the step
   // isn't shown again for this study) and continues into the study.
   const skipNotifications = useCallback(() => {
     if (!study) return;
     localStorage.setItem(`esmira_push_optout_${study.id}`, '1');
+    markNudgeShown(study.id, userIdRef.current); // the daily reminder starts tomorrow
     pushUser('Not now');
-    pushBot('No problem — you can turn notifications on any time from Settings.');
-    enterStudy(study);
-  }, [study, pushBot, pushUser, enterStudy]);
+    pushBot(nudgeEnabled(study)
+      ? "No problem — I'll remind you tomorrow, or you can turn notifications on any time from Settings."
+      : 'No problem — you can turn notifications on any time from Settings.');
+    continueAfterNotifications(study);
+  }, [study, pushBot, pushUser, continueAfterNotifications]);
 
-  // Refresh the "Next notification" row whenever the Details panel opens.
+  // Microphone step — primary action. Only now is the system prompt shown; access is released
+  // straight away (nothing is recorded). A refusal keeps the participant on the step, which
+  // then explains how to unblock it and offers to carry on without.
+  const allowMicrophone = useCallback(async () => {
+    if (!study || micBusy) return;
+    setMicBusy(true);
+    try {
+      const result = await requestMicrophone();
+      if (result !== 'granted') { setMicStatus(result); return; }
+      localStorage.setItem(micOnboardedKey(study.id), '1');
+      pushBot("✅ Microphone is ready. It's only switched on while you're recording an answer.");
+      enterStudy(study);
+    } finally {
+      setMicBusy(false);
+    }
+  }, [study, micBusy, pushBot, enterStudy]);
+
+  // Microphone step — escape hatch. Recorded so the step isn't shown again for this study;
+  // the recorder still asks (or explains a block) when a voice question comes up.
+  const skipMicrophone = useCallback(() => {
+    if (!study) return;
+    localStorage.setItem(micOnboardedKey(study.id), '1');
+    pushUser(micStatus === 'ask' ? 'Not now' : 'Continue without microphone');
+    pushBot(micStatus === 'ask'
+      ? "No problem — you'll be asked again the first time a question needs the microphone."
+      : 'No problem — you can still take part. Voice questions will need the microphone, so you may be asked again when one comes up.');
+    enterStudy(study);
+  }, [study, micStatus, pushBot, pushUser, enterStudy]);
+
+  // Refresh the "Next notification" row whenever the Details panel opens. The native app plans its reminders
+  // on the phone, so the row reads the same plan the phone was handed (the next prompt's opening time).
   useEffect(() => {
+    if (aboutOpen && isNativeApp() && study && userId && enrolledAt != null) {
+      const now = Date.now();
+      const plan = planReminders(study, enrolledAt, now, loadCompletions(study.id, userId), {
+        exclude: (q) => q.title === TRIALS_QN_TITLE,
+        userId,
+      });
+      setNextNotification(plan.find((r) => r.at > now)?.at ?? null);
+      return;
+    }
     if (!aboutOpen || !study?.webPushEnabled || !userId) { setNextNotification(null); return; }
     let cancelled = false;
     void fetchNextNotification(study.id, userId).then((r) => { if (!cancelled) setNextNotification(r.next); });
     return () => { cancelled = true; };
-  }, [aboutOpen, study, userId]);
+  }, [aboutOpen, study, userId, enrolledAt]);
 
   // ── Wearables: offered = the study's providers that the server also has creds for ──
   const offeredWearables = useMemo(
@@ -1121,23 +1582,40 @@ export default function App() {
     }
   };
 
-  // ── Footer submit (name entry or text-question answer) ───────
+  // ── Footer submit (text-question answer) ─────────────────────
   const onFooterSend = () => {
     const value = footerValue.trim();
     if (!value) return;
-    if (phase === 'name' && study) {
-      setParticipant(value);
-      localStorage.setItem(`esmira_participant_${study.id}`, value);
-      pushUser(value);
-      setFooterValue('');
-      pushBot(`Thanks, ${value}!`);
-      enterStudyGated(study);
-      return;
-    }
     if (phase === 'survey' && currentQuestion?.type === 'text') {
       setFooterValue('');
       handleRespond(currentQuestion.id, value);
     }
+  };
+
+  // ── Saved progress (lib/pausedCheckin.ts) ────────────────────
+  // Keep the running check-in on this device after every step, so closing the app (or the phone killing it)
+  // loses nothing: reopening carries on while its window is open. Returns false when storage refuses.
+  const saveProgress = (remindLater = false): boolean => {
+    const engine = engineRef.current;
+    const active = activeQRef.current;
+    if (!engine || !study || !active || practiceRef.current) return false;
+    return savePaused(study.id, userId, {
+      questionnaireId: active.id,
+      currentIndex: engine.getState().currentIndex,
+      responses: { ...engine.getResponseMap() },
+      specifyTexts: { ...engine.getSpecifyTexts() },
+      audioIds: [...audioIdsRef.current],
+      keystrokeIds: [...keystrokeIdsRef.current],
+      keystrokeTexts: { ...keystrokeTextsRef.current },
+      keystrokeModes: { ...keystrokeModesRef.current },
+      cognitiveIds: engine.session.questions.filter((x) => x.type === 'cognitive').map((x) => x.id),
+      order: engine.session.questions.map((x) => x.id),
+      fallbacks: engine.getActivatedFallbacks(),
+      ...(activeOccKeyRef.current ? { occKey: activeOccKeyRef.current } : {}),
+      ...(remindLater ? { remindLater: true } : {}),
+      pausedAt: Date.now(),
+      startedAt: surveyStartRef.current,
+    });
   };
 
   // ── Start a questionnaire ────────────────────────────────────
@@ -1158,20 +1636,32 @@ export default function App() {
       }
     }
     practiceRef.current = practice;
-    // A check-in parked with "Remind me later" picks up where it stopped (lib/pausedCheckin.ts).
-    const parked = practice ? null : loadPaused(study.id, userId);
-    const resume = parked && parked.questionnaireId === internalId ? parked : null;
-    const session = adaptQuestionnaire(study.id, q, Date.now(), { practice, battery: resume?.cognitiveIds });
-    if (resume) {
-      session.answered = resume.responses;
-      session.current_question_index = resume.currentIndex;
+    // A daily-plan check-in counts against the window it was opened in, even if that closes while answering.
+    activeOccKeyRef.current = practice ? undefined : questionnaireAvailability.get(internalId)?.occKey;
+    // A check-in saved on this device (closed mid-way, or "Remind me later") picks up where it stopped, but only in
+    // the window it was opened in (lib/pausedCheckin.ts). Saved answers from an earlier window are dropped.
+    const saved = practice ? null : loadPaused(study.id, userId, internalId);
+    let resume = saved && canResume(saved, questionnaireAvailability.get(internalId)) ? saved : null;
+    const build = () => {
+      const s = adaptQuestionnaire(study.id, q, Date.now(), { practice, battery: resume?.cognitiveIds, order: resume?.order });
+      if (resume) {
+        s.answered = resume.responses;
+        s.current_question_index = resume.currentIndex;
+      }
+      return { session: s, engine: new OfflineSurveyEngine(s, resume?.fallbacks) };
+    };
+    let { session, engine } = build();
+    // Nothing left to ask (the questionnaire was edited since): start afresh rather than on an empty screen.
+    if (resume && !engine.getCurrentQuestion()) {
+      resume = null;
+      ({ session, engine } = build());
     }
-    const engine = new OfflineSurveyEngine(session);
     if (resume) engine.restoreSpecifyTexts(resume.specifyTexts);
     engineRef.current = engine;
     activeQRef.current = { id: q.internalId, name: q.title, changeMode: q.changeResponseMode ?? 'previous' };
     setActiveQTitle(q.title);
-    surveyStartRef.current = Date.now();
+    if (!practice) void recordPromptEvent(study, 'opened', q.internalId, q.title);
+    surveyStartRef.current = resume?.startedAt ?? Date.now();
     audioIdsRef.current = resume ? [...resume.audioIds] : [];
     keystrokeIdsRef.current = resume ? [...resume.keystrokeIds] : [];
     keystrokeTextsRef.current = resume ? { ...resume.keystrokeTexts } : {};
@@ -1181,7 +1671,6 @@ export default function App() {
     if (auto) pushSection(q.title);
     else pushUser(q.title);
     if (resume) {
-      clearPaused(study.id, userId);
       // Show what was answered before the pause, then carry on from the saved position.
       for (const done of session.questions) {
         const value = resume.responses[done.id];
@@ -1197,12 +1686,20 @@ export default function App() {
       pushBot('Welcome back — carrying on where you left off.');
     }
     if (practice) pushSection('Practice run — nothing you enter is saved');
+    // Saved from the start, so a check-in closed before its first answer still reopens (with the same task battery).
+    // This also replaces any saved answers the window check above turned down.
+    else saveProgress();
     setPhase('survey');
     const transition = engine.getSectionTransition();
     if (transition?.description) pushSection(transition.description);
     setCurrentQuestion(engine.getCurrentQuestion());
     setProgress(engine.getProgress());
   };
+
+  // PWA: hold an app update's reload while a check-in is open or being sent (lib/reloadGate.ts).
+  useEffect(() => {
+    updateReload.hold(phase === 'survey' || submitting);
+  }, [phase, submitting]);
 
   // Open the questionnaire enterList picked once the list phase has rendered, so the start sees the
   // freshly set user id, enrollment and availability.
@@ -1232,7 +1729,9 @@ export default function App() {
       // Rich-text prompts (e.g. voice memos) carry HTML in `text`; render them as
       // HTML like the live card, otherwise the bubble shows literal <div>/<br>.
       pushBot(settledQuestionHtml(q), !!q.is_html, questionId);
-      pushUser(formatAnswer(q, value), questionId);
+      // A typed (keystroke) answer's value is its log's identifier: echo what was written.
+      const typed = q.type === 'keystroke_text' ? keystrokeTextsRef.current[q.id] : undefined;
+      pushUser(typed ?? formatAnswer(q, value), questionId);
     }
     afterAdvance(next);
   };
@@ -1314,6 +1813,7 @@ export default function App() {
     });
     setCurrentQuestion(rewound);
     setProgress(engine.getProgress());
+    saveProgress();
   };
 
   // Cognitive tasks are never changeable, regardless of the questionnaire's mode:
@@ -1350,6 +1850,8 @@ export default function App() {
 
   // Leave the running questionnaire without submitting it and show the list again.
   const leaveSurvey = () => {
+    const active = activeQRef.current;
+    if (active && !practiceRef.current) void recordPromptEvent(study, 'closed', active.id, active.name);
     engineRef.current = null;
     activeQRef.current = null;
     setCurrentQuestion(null);
@@ -1358,25 +1860,13 @@ export default function App() {
     setPhase('list');
   };
 
-  // Task-card "Remind me later" (webTaskActions): park the answers so far on this device. No push
-  // is scheduled, so the message promises a saved place, not a reminder.
+  // Task-card "Remind me later" (webTaskActions): park the answers so far on this device, to resume from the
+  // list. No push is scheduled, so the message promises a saved place, not a reminder.
   const handleRemindLater = () => {
-    const engine = engineRef.current;
-    const active = activeQRef.current;
-    if (!engine || !study || !active) return;
+    if (!engineRef.current || !study || !activeQRef.current) return;
     pushUser('Remind me later');
-    const saved = savePaused(study.id, userId, {
-      questionnaireId: active.id,
-      currentIndex: engine.getState().currentIndex,
-      responses: { ...engine.getResponseMap() },
-      specifyTexts: { ...engine.getSpecifyTexts() },
-      audioIds: [...audioIdsRef.current],
-      keystrokeIds: [...keystrokeIdsRef.current],
-      keystrokeTexts: { ...keystrokeTextsRef.current },
-      keystrokeModes: { ...keystrokeModesRef.current },
-      cognitiveIds: engine.session.questions.filter((x) => x.type === 'cognitive').map((x) => x.id),
-      pausedAt: Date.now(),
-    });
+    const saved = saveProgress(true);
+    if (!saved) clearPaused(study.id, userId, activeQRef.current.id);
     pushBot(saved
       ? "Okay — I've saved your answers so far on this phone. Open the check-in below when you're ready to carry on."
       : "Sorry, I couldn't save your answers on this phone, so this check-in was closed. You can start it again from the list.");
@@ -1387,7 +1877,7 @@ export default function App() {
   const handleSkipCheckin = () => {
     if (!study) return;
     pushUser('Skip check-in');
-    clearPaused(study.id, userId);
+    if (activeQRef.current) clearPaused(study.id, userId, activeQRef.current.id);
     pushBot('Okay, I skipped this check-in. None of your answers were submitted.');
     leaveSurvey();
   };
@@ -1408,6 +1898,7 @@ export default function App() {
     if (!engine) return;
     setProgress(engine.getProgress());
     if (next) {
+      saveProgress();
       const transition = engine.getSectionTransition();
       if (transition?.description) pushSection(transition.description);
       setCurrentQuestion(next);
@@ -1445,7 +1936,10 @@ export default function App() {
       setPhase('tutorial');
       return;
     }
+    // Handed over for sending (or the offline queue) now, so it is no longer an unfinished check-in.
+    clearPaused(study.id, userId, active.id);
     setSubmitting(true);
+    void recordPromptEvent(study, 'submitted', active.id, active.name);
     const responses = buildEsmiraResponses(
       engine.session.questions, engine.getResponseMap(), engine.getSpecifyTexts(),
       keystrokeTextsRef.current, keystrokeModesRef.current,
@@ -1479,7 +1973,7 @@ export default function App() {
     if (active) {
       const q = study.questionnaires.find((x) => x.internalId === active.id);
       if (q) {
-        recordCompletion(study.id, userId, q, anchor, submittedAt);
+        recordCompletion(study.id, userId, q.internalId, submittedAt, activeOccKeyRef.current);
         // Mirror to IndexedDB so the SW suppresses further prompts for this questionnaire.
         const rec = loadCompletions(study.id, userId)[q.internalId];
         if (rec) void mirrorCompletion(study.id, userId, q.internalId, rec.lastAt, rec.count, rec.occ);
@@ -1487,43 +1981,39 @@ export default function App() {
       setNowTick((t) => t + 1);
       setReminderSyncTick((t) => t + 1);
     }
+    if (ok) setPlanRefreshTick((t) => t + 1);
     setSubmitting(false);
     // Studies that opt in (webSnapshot) get a snapshot, the participant's own answers and a thank-you.
     const messages = snapshotMessages(
       study, engine.session.questions, engine.getResponseMap(),
       Object.values(pvtLinesRef.current).find((line): line is string => !!line) ?? null,
     );
-    const closingIds: string[] = [];
     if (study.webLocalOnly) {
       // Nothing was sent, so never claim the responses were recorded.
-      if (!messages) closingIds.push(pushBot('✅ Thank you — you are all done. Nothing was sent to the server.'));
+      if (!messages) pushBot('✅ Thank you — you are all done. Nothing was sent to the server.');
     } else {
-      closingIds.push(pushBot(ok
+      pushBot(ok
         ? '✅ Thank you — your responses have been recorded.'
-        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.'));
+        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
     }
-    messages?.forEach((message) => closingIds.push(pushBot(message)));
-    // Paced studies reveal these closing bubbles (and the offer below) one by one.
-    if (study.webPacedMessages && closingIds.length > 1) setPace({ from: closingIds[0], shown: 1 });
-    clearPaused(study.id, userId);
+    messages?.forEach((message) => pushBot(message));
     engineRef.current = null;
     activeQRef.current = null;
-    // A study with an end snapshot (webSnapshot) ends on its thank-you: no offer of another
-    // questionnaire and no list. Reopening the app returns to the list.
-    if (messages) {
+    // A study with an end snapshot (webSnapshot) or marked single-run (webSingleRun) ends on its
+    // thank-you: no offer of another questionnaire and no list. Reopening the app returns to the list.
+    if (messages || study.webSingleRun) {
       setPhase('done');
       return;
     }
     // Only offer another questionnaire if one is actually completable right now —
     // otherwise the prompt dead-ends into a locked card (e.g. "Opens tomorrow 08:00"),
     // which reads as a bug rather than as there simply being nothing left to do today.
-    const completions = loadCompletions(study.id, userId);
-    const now = Date.now();
-    const anotherAvailable = study.questionnaires.some((q) =>
-      q.title !== TRIALS_QN_TITLE && computeAvailability(q, anchor, now, completions).state === 'available');
+    const availability = studyAvailability(study, userId, anchor, Date.now(), loadCompletions(study.id, userId));
+    const anotherAvailable = study.questionnaires.some((q) => q.title !== TRIALS_QN_TITLE && availability(q).state === 'available');
     if (anotherAvailable) {
       pushBot('Would you like to complete another questionnaire?');
     }
+    awaitingOpenRef.current = !anotherAvailable;
     setPhase('list');
   };
 
@@ -1578,11 +2068,11 @@ export default function App() {
   const headerStatus = useMemo(() => {
     switch (phase) {
       case 'enterKey':
-      case 'name':
       case 'phone-only':
       case 'pid-conflict': return 'Sign up';
       case 'consent': return 'Consent';
       case 'notifications': return 'Notifications';
+      case 'microphone': return 'Microphone';
       case 'tutorialOffer':
       case 'tutorial': return 'Tutorial';
       case 'survey': return activeQTitle || 'Survey';
@@ -1590,38 +2080,23 @@ export default function App() {
       case 'list': {
         const DAY_MS = 24 * 60 * 60 * 1000;
         const avValues = [...questionnaireAvailability.values()];
-        const visibleQs = study?.questionnaires.filter(q => q.title !== TRIALS_QN_TITLE) ?? [];
-        const maxPeriod = visibleQs.length
-          ? Math.max(0, ...visibleQs.map(q => q.durationPeriodDays ?? 0))
-          : 0;
+        const period = study ? studyPeriod(study) : null;
 
-        if (avValues.length > 0) {
-          // All questionnaires ended → study over
-          if (avValues.every(av => av.state === 'ended')) {
-            if (enrolledAt && maxPeriod > 0) {
-              const d = new Date(enrolledAt + maxPeriod * DAY_MS);
-              return `Ended ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-            }
-            return 'Study ended';
+        // All questionnaires ended → study over
+        if (avValues.length > 0 && avValues.every(av => av.state === 'ended')) {
+          if (enrolledAt && period && period.last >= 0) {
+            const d = new Date(enrolledAt + period.last * DAY_MS); // the last study day
+            return `Ended ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
           }
-          // None available yet → study hasn't started
-          if (avValues.every(av => av.state === 'upcoming')) {
-            const earliest = avValues
-              .map(av => av.opensAt)
-              .filter((t): t is number => t != null)
-              .sort((a, b) => a - b)[0];
-            if (earliest) {
-              const d = new Date(earliest);
-              return `Starts ${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`;
-            }
-          }
+          return 'Study ended';
         }
-
-        // Study in progress → show which day
-        if (enrolledAt) {
-          const dayNum = Math.floor((Date.now() - enrolledAt) / DAY_MS) + 1;
-          if (maxPeriod > 0) return `Day ${dayNum} of ${maxPeriod}`;
-          if (dayNum >= 1) return `Day ${dayNum}`;
+        if (study && enrolledAt) {
+          // None available yet → the study starts when the first one opens
+          const startsAt = avValues.length > 0 && avValues.every(av => av.state === 'upcoming')
+            ? avValues.map(av => av.opensAt).filter((t): t is number => t != null).sort((a, b) => a - b)[0] ?? null
+            : null;
+          const label = studyDayLabel(study, enrolledAt, Date.now(), startsAt);
+          if (label) return label;
         }
         return 'Questionnaires';
       }
@@ -1637,8 +2112,11 @@ export default function App() {
     for (const m of messages) if (m.sender === 'user' && m.qid) id = m.id;
     return id;
   }, [messages]);
-  const footerActive = phase === 'name' || (phase === 'survey' && currentQuestion?.type === 'text');
-  const footerPlaceholder = phase === 'name' ? 'Enter your name' : 'Type your response…';
+  // A record_keystrokes answer is being written in the chat row (KeystrokeComposer).
+  const writing = phase === 'survey' && keystroker !== null && currentQuestion?.id === keystroker.id;
+  const footerActive = !pacing && phase === 'survey' && currentQuestion?.type === 'text';
+  const [footerHintOpen, setFooterHintOpen] = useState(false);
+  useEffect(() => { setFooterHintOpen(false); }, [footerActive, phase]);
   // Quick actions (settings, details, contact, sign out) act on a joined study, so keep them
   // off until an invite code has loaded one — i.e. not during install / invite-code entry.
   const quickActionsEnabled = study !== null && phase !== 'loading' && phase !== 'error' && phase !== 'enterKey';
@@ -1656,10 +2134,78 @@ export default function App() {
     window.location.assign(enrollUrl(window.location.pathname, code, pidInput));
   };
 
+  // Quick-actions grid menu at the start of the chat row (shared by the plain input and the
+  // keystroke composer, which swaps in while a typed answer is being written).
+  const quickActionsMenu = (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setGridMenuOpen((o) => !o)}
+        disabled={!quickActionsEnabled}
+        className="p-3 text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        aria-label="Quick actions"
+      >
+        <Grid size={20} aria-hidden="true" />
+      </button>
+      <AnimatePresence>
+        {gridMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 cursor-pointer"
+              role="presentation"
+              onClick={() => setGridMenuOpen(false)}
+              onTouchEnd={(e) => { e.preventDefault(); setGridMenuOpen(false); }}
+            />
+            <motion.div
+              ref={gridMenuRef} tabIndex={-1} role="group" aria-label="Quick actions menu"
+              initial={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: reduceMotion ? 0 : 0.15 }}
+              className={cn('absolute bottom-full left-0 mb-4 p-4 bg-white dark:bg-surface-container-lowest rounded-2xl shadow-xl z-50 border origin-bottom-left w-64', highContrast ? 'border-2 border-black' : 'border-slate-100 dark:border-outline-variant/30')}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'settings', display: 'Settings', icon: Settings, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', onSelect: openSettings },
+                  { key: 'about', display: 'Details', icon: Info, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10', onSelect: () => { setAboutView('main'); setAboutOpen(true); } },
+                  ...(offeredWearables.length > 0
+                    ? [{ key: 'wearables', display: 'Wearables', icon: Watch, color: 'text-teal-500', bg: 'bg-teal-50 dark:bg-teal-500/10', onSelect: openWearables }]
+                    : []),
+                  ...(sensing
+                    ? [{ key: 'sensing', display: 'Phone sensing', icon: Activity, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', onSelect: () => openSensing() }]
+                    : []),
+                  { key: 'contact', display: 'Contact', icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10', onSelect: openContact },
+                  ...(phase === 'survey' && currentQuestion
+                    ? [{ key: 'skip', display: 'Skip', icon: SkipForward, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10', onSelect: handleSkip }]
+                    : []),
+                  { key: 'signout', display: 'Sign out', icon: LogOut, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-500/10', onSelect: signOut },
+                ].map((a) => (
+                  <button
+                    key={a.key}
+                    onClick={() => { setGridMenuOpen(false); a.onSelect(); }}
+                    className={cn('flex flex-col items-center justify-center gap-2 p-3 rounded-xl transition-colors', highContrast ? 'border-2 border-black hover:bg-black hover:text-white' : 'hover:bg-surface-container-high dark:hover:bg-surface-container-highest')}
+                  >
+                    <div className={cn('p-3 rounded-full', highContrast ? 'bg-transparent' : a.bg)}>
+                      <a.icon size={24} className={highContrast ? 'text-current' : a.color} aria-hidden="true" />
+                    </div>
+                    <span className="text-xs font-semibold text-on-surface">{a.display}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+
   // ── Render ───────────────────────────────────────────────────
+  // `relative` on the shell and the conversation: an absolutely positioned descendant (e.g. a `sr-only` span in
+  // a locked questionnaire card) is otherwise placed against the page itself, so neither overflow clips it and it
+  // stretches the document below the shell; scrolling past the end of the conversation then scrolled the whole
+  // page, taking the header off screen and lifting the chat row off the bottom (lib/shellLayout.test.mts).
   return (
     <div className={cn(
-      'app-shell flex flex-col h-dvh bg-surface overflow-hidden transition-colors duration-300',
+      'app-shell relative flex flex-col h-dvh bg-surface overflow-hidden transition-colors duration-300',
       dark && 'dark', highContrast && 'high-contrast',
     )}>
       {/* Wearable connect/disconnect result toast (auto-dismisses). */}
@@ -1679,7 +2225,7 @@ export default function App() {
           <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" aria-hidden="true" className="w-10 h-10 rounded-full shrink-0 object-cover" />
           <div className="flex flex-col min-w-0">
             <h1 className="text-base font-bold leading-none truncate">{study?.title ?? 'iEMAbot Study'}</h1>
-            <span className="text-[0.75rem] opacity-80 uppercase tracking-widest font-semibold truncate">
+            <span className="text-[12px] opacity-80 uppercase tracking-widest font-semibold truncate">
               {headerStatus}
             </span>
           </div>
@@ -1687,8 +2233,19 @@ export default function App() {
         {phase !== 'phone-only' && <InstallPrompt variant="compact" className="ml-2" />}
       </header>
 
+      {/* Native app: a newer build is on the server (lib/appUpdate.ts). */}
+      {appUpdate && (
+        <div role="status" className="app-update shrink-0 relative z-40 bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200 border-b border-amber-200 dark:border-amber-500/30 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+          <span>A new version of the app is available{appUpdate.versionName ? ` (${appUpdate.versionName})` : ''}.</span>
+          <button type="button" onClick={() => void openAppUpdate(appUpdate)}
+            className="shrink-0 rounded-full bg-[#075E54] text-white px-4 py-1.5 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#075E54]">
+            Update
+          </button>
+        </div>
+      )}
+
       {/* Chat area */}
-      <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="flex-1 min-h-0 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+      <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="relative flex-1 min-h-0 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
         <div className="flex justify-center my-2">
           <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[0.75rem] font-bold uppercase tracking-wider shadow-sm">Today</span>
         </div>
@@ -1706,14 +2263,14 @@ export default function App() {
               transition={{ duration: reduceMotion ? 0 : 0.3 }}
               className={cn('flex flex-col max-w-[85%]', msg.sender === 'user' ? 'self-end items-end' : 'self-start items-start')}>
               <div className={cn('px-4 py-3 rounded-2xl message-shadow relative',
-                msg.sender === 'user' ? 'bg-primary text-on-primary rounded-tr-none'
+                msg.sender === 'user' ? 'bg-primary text-on-primary dark:bg-primary-container dark:text-on-surface rounded-tr-none'
                   : 'bg-white dark:bg-surface-container-lowest text-on-surface rounded-tl-none border border-slate-200 dark:border-outline-variant/30')}>
                 {msg.html
                   ? <div className={cn('leading-relaxed font-medium esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: msg.content }} />
                   : <p className={cn('leading-relaxed font-medium whitespace-pre-wrap', textSizeClass)}>{msg.content}</p>}
                 <div className="flex justify-end items-center gap-1 mt-1">
-                  <span className={cn('text-[0.75rem] font-bold', msg.sender === 'user' ? 'text-on-primary' : 'text-on-surface-variant')}>{nowTime()}</span>
-                  {msg.sender === 'user' && <CheckCircle size={12} className="text-on-primary opacity-70" aria-hidden="true" />}
+                  <span className={cn('text-[0.75rem] font-bold', msg.sender === 'user' ? 'text-on-primary dark:text-on-surface' : 'text-on-surface-variant')}>{nowTime()}</span>
+                  {msg.sender === 'user' && <CheckCircle size={12} className="text-on-primary dark:text-on-surface opacity-70" aria-hidden="true" />}
                 </div>
               </div>
               {phase === 'survey' && msg.qid
@@ -1730,7 +2287,8 @@ export default function App() {
             </motion.div>
           ))}
         </AnimatePresence>
-        {/* Paced messages: typing dots until the next bubble; no exit animation, so they never sit above it */}
+        {/* Paced messages: typing dots until the next bubble; no exit animation, so they never sit above it.
+            The steps below wait for the last bubble, so their buttons never appear above text still to come. */}
         {pacing && (
           <motion.div aria-hidden="true"
             initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -1882,7 +2440,7 @@ export default function App() {
         )}
 
         {/* PID conflict — invite link already claimed on another device */}
-        {phase === 'pid-conflict' && study && (
+        {phase === 'pid-conflict' && study && !pacing && (
           <div role="group" aria-label="Participant ID already in use" className="self-start w-[85%] flex flex-col gap-3">
             <button
               onClick={async () => {
@@ -1891,18 +2449,12 @@ export default function App() {
                 if (status === 'claimed') {
                   pushUser('Transfer to this device');
                   setPidConflict(null);
-                  const savedName = localStorage.getItem(`esmira_participant_${study.id}`) || '';
-                  setParticipant(savedName);
                   if (study.studyDescription) pushBot(study.studyDescription, true);
                   const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
                   if (study.informedConsentForm && !consented) {
                     pushBot(study.informedConsentForm);
                     setPhase('consent');
-                  } else if (!savedName && !study.webSkipName) {
-                    pushBot('Before we begin — what name would you like to go by?');
-                    setPhase('name');
                   } else {
-                    if (savedName) pushBot(`Welcome back, ${savedName}!`);
                     enterStudyGated(study);
                   }
                 }
@@ -1934,7 +2486,7 @@ export default function App() {
         )}
 
         {/* Tutorial offer (yes/no) — shown after consent + name for tutorial-enabled studies */}
-        {phase === 'tutorialOffer' && (
+        {phase === 'tutorialOffer' && !pacing && (
           <div className="self-start w-[85%] flex gap-3">
             <button onClick={acceptTutorial} className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
               <PlayCircle size={18} aria-hidden="true" /> Yes, show me
@@ -1943,8 +2495,31 @@ export default function App() {
           </div>
         )}
 
+        {/* Notifications step in the native app: explain first, then Android's own dialog */}
+        {phase === 'notifications' && study && isNativeApp() && !pacing && (
+          <div role="group" aria-label="Turn on notifications" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+            <div className="flex items-start gap-2">
+              <BellRing size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-bold text-on-surface">Turn on notifications</p>
+                <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
+                  This study sends a notification when each questionnaire is ready. Tap Allow notifications, then choose Allow when your phone asks.
+                </p>
+              </div>
+            </div>
+            <button onClick={() => void allowNativeNotifications()} disabled={notifBusy}
+              className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
+              <BellRing size={16} aria-hidden="true" /> {notifBusy ? 'Waiting for your answer…' : 'Allow notifications'}
+            </button>
+            <button onClick={skipNotifications} disabled={notifBusy}
+              className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60">
+              Not now
+            </button>
+          </div>
+        )}
+
         {/* Mandatory notifications step (push-enabled studies, after consent + name) */}
-        {phase === 'notifications' && study && (() => {
+        {phase === 'notifications' && study && !isNativeApp() && !pacing && (() => {
           const supported = isPushSupported() && typeof Notification !== 'undefined';
           const denied = supported && notifPerm === 'denied';
           return (
@@ -1980,7 +2555,7 @@ export default function App() {
               <div>
                 <p className="font-bold text-on-surface">Turn on notifications</p>
                 <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
-                  This study sends each questionnaire as a notification when it's due. Turn them on so you don't miss one — we'll send a quick welcome to confirm they work.
+                  This study sends each questionnaire as a notification when it's due. Turn them on so you don't miss one — we'll send a quick welcome to confirm they work.{supported && !denied && ' When your browser asks, choose Allow.'}
                 </p>
               </div>
             </div>
@@ -2042,6 +2617,88 @@ export default function App() {
           );
         })()}
 
+        {/* Microphone step (studies with voice-recording items, after notifications) */}
+        {phase === 'microphone' && study && !pacing && (
+          <div role="group" aria-label="Allow microphone access" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+            <div className="flex items-start gap-2">
+              <Mic size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-bold text-on-surface">Allow microphone access</p>
+                <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
+                  {micStatus === 'denied'
+                    ? `Microphone access is blocked. Open ${isNativeApp() ? "your phone's settings for this app" : "your browser's settings for this page"}, allow the microphone, then tap Try again.`
+                    : micStatus === 'unsupported'
+                      ? "This browser can't use the microphone here. You can carry on — try a different browser if a voice question doesn't work."
+                      : micStatus === 'error'
+                        ? "I couldn't open a microphone on this device. Check that one is connected and not in use by another app, then tap Try again."
+                        : `Tap Allow microphone, then choose Allow when your ${isNativeApp() ? 'phone' : 'browser'} asks. Nothing is recorded now.`}
+                </p>
+              </div>
+            </div>
+            {micStatus !== 'unsupported' && (
+              <button onClick={() => void allowMicrophone()} disabled={micBusy}
+                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
+                {micStatus === 'ask'
+                  ? <><Mic size={16} aria-hidden="true" /> {micBusy ? 'Waiting for your answer…' : 'Allow microphone'}</>
+                  : <><RefreshCw size={16} aria-hidden="true" /> Try again</>}
+              </button>
+            )}
+            <button onClick={skipMicrophone} disabled={micBusy}
+              className={micStatus === 'unsupported'
+                ? 'w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all'
+                : 'w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60'}>
+              {micStatus === 'ask' ? 'Not now' : micStatus === 'unsupported' ? 'Continue' : 'Continue without microphone'}
+            </button>
+          </div>
+        )}
+
+        {/* Daily reminder to turn notifications on while they are off (lib/notificationNudge.ts) */}
+        {phase === 'list' && study && !pacing && autoStartId == null && notifNudge && !notifOff && (
+          <div role="group" aria-label="Notifications are off" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+            <div className="flex items-start gap-2">
+              <BellOff size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-bold text-on-surface">Notifications are off</p>
+                <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
+                  {'Without notifications you may miss a questionnaire. '}
+                  {notifNudge === 'ask'
+                    ? `Turn them on and choose Allow when your ${isNativeApp() ? 'phone' : 'browser'} asks.`
+                    : notifNudge === 'install'
+                      ? 'On iPhone they only work once this app is on your Home Screen: add it, open it from there and turn notifications on.'
+                      : isNativeApp()
+                        ? 'Your phone no longer asks, so please allow them in its settings: tap Open settings (or go to Android Settings → Apps → iEMAbot → Notifications), switch notifications on and come back.'
+                        : onIOS
+                          ? 'They are blocked for this app. Open the iPhone Settings → Notifications, choose this app, allow notifications, then tap Try again.'
+                          : "They are blocked for this site. Open your browser's settings for this page, allow notifications, then tap Try again."}
+                </p>
+              </div>
+            </div>
+            {notifNudge === 'install' ? (
+              <>
+                <InstallPrompt variant="card" />
+                {/* iOS gives the installed app its own empty storage: show the code to type in there. */}
+                <InviteCodeNote code={accessKey || localStorage.getItem(LAST_KEY_STORE) || ''} participantId={invitedParticipantId(params)} />
+              </>
+            ) : notifNudge === 'ask' ? (
+              <button onClick={() => void nudgeAllow()} disabled={nudgeBusy}
+                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
+                <BellRing size={16} aria-hidden="true" /> {nudgeBusy ? 'Waiting for your answer…' : 'Turn on notifications'}
+              </button>
+            ) : (
+              <button onClick={() => void nudgeRecheck()}
+                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
+                {isNativeApp()
+                  ? <><Settings size={16} aria-hidden="true" /> Open settings</>
+                  : <><RefreshCw size={16} aria-hidden="true" /> Try again</>}
+              </button>
+            )}
+            <button onClick={() => setNotifNudge(null)} disabled={nudgeBusy}
+              className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60">
+              Not now
+            </button>
+          </div>
+        )}
+
         {/* Questionnaire list */}
         {phase === 'list' && study && !pacing && autoStartId == null && (() => {
           // Show what the participant can act on now: the currently-available
@@ -2056,7 +2713,6 @@ export default function App() {
           const items = available.length
             ? available
             : withAv.filter((x) => x.av?.opensAt).sort((a, b) => a.av!.opensAt! - b.av!.opensAt!);
-          const parked = userId ? loadPaused(study.id, userId) : null;
           return (
           <div className="self-start w-[85%] flex flex-col gap-2">
             {items.map(({ q, av }) => {
@@ -2066,18 +2722,20 @@ export default function App() {
                   className="w-full flex items-center justify-between px-4 py-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 hover:bg-surface-container-high rounded-xl transition-colors text-left shadow-sm message-shadow">
                   <span className="min-w-0">
                     <span className={cn('block font-semibold', textSizeClass)}>{q.title}</span>
-                    {parked?.questionnaireId === q.internalId && (
+                    {userId && (() => { const saved = loadPaused(study.id, userId, q.internalId); return saved && canResume(saved, av); })() && (
                       <span className="block text-xs text-on-surface-variant mt-0.5">Paused — tap to carry on</span>
                     )}
                   </span>
                   <ChevronRight size={18} className="text-outline-variant" aria-hidden="true" />
                 </button>
               ) : (
+                // Named by its visible text (title, then why it is locked). No aria-label: one that differs from the
+                // visible text fails WCAG 2.5.3 Label in Name (axe label-content-name-mismatch).
                 <button type="button" disabled key={q.internalId}
-                  aria-label={`${q.title}${av?.reason ? ` — ${av.reason}` : ''}`}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-surface-container-high/40 dark:bg-surface-container-highest/40 border border-dashed border-outline-variant/40 rounded-xl text-left opacity-70">
                   <div className="min-w-0">
                     <span className={cn('font-semibold text-on-surface-variant', textSizeClass)}>{q.title}</span>
+                    {av?.reason && <span className="sr-only">, </span>}
                     <p className="text-xs text-on-surface-variant mt-0.5 flex items-center gap-1">
                       <Lock size={11} aria-hidden="true" />{av?.reason}
                     </p>
@@ -2091,14 +2749,16 @@ export default function App() {
         })()}
 
         {/* Tutorial overview — first-visit orientation with optional practice runs */}
-        {phase === 'tutorial' && study && (
+        {phase === 'tutorial' && study && !pacing && (
           <div className="self-start w-[85%] flex flex-col gap-2">
-            {study.questionnaires.filter((q) => q.title !== TRIALS_QN_TITLE).map((q) => {
+            {tutorialQuestionnaires(study).map((q) => {
               const n = countQuestions(q);
               return (
                 <div key={q.internalId}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-xl shadow-sm message-shadow">
-                  <div className="min-w-0">
+                  className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-xl shadow-sm message-shadow">
+                  {/* Wraps the Practice button onto its own line once the title no longer fits beside
+                      it (larger text sizes), instead of squeezing the title underneath it. */}
+                  <div className="flex-1 basis-32 max-w-full break-words">
                     <p className={cn('font-semibold', textSizeClass)}>{q.title}</p>
                     <p className="text-xs text-on-surface-variant mt-0.5">{n} {n === 1 ? 'question' : 'questions'}</p>
                   </div>
@@ -2122,7 +2782,7 @@ export default function App() {
         )}
 
         {/* Active survey question */}
-        {phase === 'survey' && currentQuestion && (
+        {phase === 'survey' && currentQuestion && !pacing && (
           <SurveyInputs
             question={currentQuestion}
             progress={progress}
@@ -2138,6 +2798,7 @@ export default function App() {
             onOpenRecorder={() => setRecorder(currentQuestion)}
             onSkipAudio={handleAudioSkip}
             onOpenKeystroke={() => setKeystroker(currentQuestion)}
+            writing={writing}
             taskActions={study?.webTaskActions && !practiceRef.current
               ? { onRemindLater: handleRemindLater, onSkipCheckin: handleSkipCheckin }
               : undefined}
@@ -2150,75 +2811,35 @@ export default function App() {
       {/* Footer. Not on the smartphone-only invite page: its menu actions (contact, error report,
           notifications, wearables) all need a participant id, which that page never creates. */}
       {phase !== 'phone-only' && (
-      <footer aria-label="Message input" className="app-footer shrink-0 relative z-50 bg-white/85 dark:bg-surface-container-lowest/85 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
+      <footer aria-label="Message input" className="app-footer shrink-0 relative z-50 bg-white/85 dark:bg-surface-container-lowest/85 rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
+        {/* The blur sits on its own layer: a backdrop-filter on the footer itself would make it the
+            containing block for `fixed` children, shrinking the quick-actions menu's tap-outside
+            backdrop to the footer strip so taps on the conversation or header left the menu open. */}
+        <div aria-hidden="true" className="absolute inset-0 -z-10 rounded-[inherit] backdrop-blur-md pointer-events-none" />
+        {writing && keystroker ? (
+          <KeystrokeComposer key={keystroker.id} question={keystroker} menu={quickActionsMenu} onSend={handleSaveKeystrokes} />
+        ) : (
         <div className="flex items-center gap-2">
-          {/* Quick-actions grid menu */}
-          <div className="relative shrink-0">
-            <button
-              onClick={() => setGridMenuOpen((o) => !o)}
-              disabled={!quickActionsEnabled}
-              className="p-3 text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-              aria-label="Quick actions"
-            >
-              <Grid size={20} aria-hidden="true" />
+          {quickActionsMenu}
+          {footerActive ? (
+            <input
+              type="text"
+              value={footerValue}
+              onChange={(e) => setFooterValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onFooterSend()}
+              aria-label="Type a response"
+              placeholder="Type your response…"
+              className="flex-1 min-w-0 bg-surface-container-high rounded-full px-4 py-3 text-[15px] text-ellipsis text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          ) : (
+            // Nothing to type: the field is a hint. Cut off with an ellipsis on narrow screens; a tap
+            // shows it in full (the row grows for as long as it is open).
+            <button type="button" onClick={() => setFooterHintOpen((o) => !o)} aria-expanded={footerHintOpen}
+              className={cn('flex-1 min-w-0 bg-surface-container-high px-4 py-3 text-[15px] text-left text-on-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                footerHintOpen ? 'rounded-2xl whitespace-normal' : 'rounded-full truncate')}>
+              Tap an option above to continue
             </button>
-            <AnimatePresence>
-              {gridMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40 cursor-pointer"
-                    role="presentation"
-                    onClick={() => setGridMenuOpen(false)}
-                    onTouchEnd={(e) => { e.preventDefault(); setGridMenuOpen(false); }}
-                  />
-                  <motion.div
-                    ref={gridMenuRef} tabIndex={-1} role="group" aria-label="Quick actions menu"
-                    initial={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 10 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
-                    className={cn('absolute bottom-full left-0 mb-4 p-4 bg-white dark:bg-surface-container-lowest rounded-2xl shadow-xl z-50 border origin-bottom-left w-64', highContrast ? 'border-2 border-black' : 'border-slate-100 dark:border-outline-variant/30')}
-                  >
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { key: 'settings', display: 'Settings', icon: Settings, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', onSelect: openSettings },
-                        { key: 'about', display: 'Details', icon: Info, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10', onSelect: () => { setAboutView('main'); setAboutOpen(true); } },
-                        ...(offeredWearables.length > 0
-                          ? [{ key: 'wearables', display: 'Wearables', icon: Watch, color: 'text-teal-500', bg: 'bg-teal-50 dark:bg-teal-500/10', onSelect: openWearables }]
-                          : []),
-                        { key: 'contact', display: 'Contact', icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10', onSelect: openContact },
-                        ...(phase === 'survey' && currentQuestion
-                          ? [{ key: 'skip', display: 'Skip', icon: SkipForward, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10', onSelect: handleSkip }]
-                          : []),
-                        { key: 'signout', display: 'Sign out', icon: LogOut, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-500/10', onSelect: signOut },
-                      ].map((a) => (
-                        <button
-                          key={a.key}
-                          onClick={() => { setGridMenuOpen(false); a.onSelect(); }}
-                          className={cn('flex flex-col items-center justify-center gap-2 p-3 rounded-xl transition-colors', highContrast ? 'border-2 border-black hover:bg-black hover:text-white' : 'hover:bg-surface-container-high dark:hover:bg-surface-container-highest')}
-                        >
-                          <div className={cn('p-3 rounded-full', highContrast ? 'bg-transparent' : a.bg)}>
-                            <a.icon size={24} className={highContrast ? 'text-current' : a.color} aria-hidden="true" />
-                          </div>
-                          <span className="text-xs font-semibold text-on-surface">{a.display}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
-          <input
-            type="text"
-            value={footerValue}
-            disabled={!footerActive}
-            onChange={(e) => setFooterValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onFooterSend()}
-            aria-label="Type a response"
-            placeholder={footerActive ? footerPlaceholder : 'Tap an option above to continue'}
-            className="flex-1 min-w-0 bg-surface-container-high rounded-full px-4 py-3 text-[0.9375rem] text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
-          />
+          )}
           <button
             onClick={onFooterSend}
             disabled={!footerActive || !footerValue.trim()}
@@ -2228,6 +2849,7 @@ export default function App() {
             <Send size={18} aria-hidden="true" />
           </button>
         </div>
+        )}
       </footer>
       )}
 
@@ -2238,6 +2860,7 @@ export default function App() {
             : settingsView === 'notifications' ? 'Notifications'
             : settingsView === 'errorReport' ? 'Send error report'
             : settingsView === 'wearables' ? 'Connect wearables'
+            : settingsView === 'sensing' ? 'Phone sensing'
             : 'Settings';
           return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}
@@ -2246,7 +2869,8 @@ export default function App() {
               className="w-full max-w-md max-h-[85dvh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
               <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  {settingsView !== 'main' && (
+                  {/* Wearables, and Phone sensing opened from its grid tile, have no Settings page to go back to. */}
+                  {settingsView !== 'main' && settingsView !== 'wearables' && (settingsView !== 'sensing' || sensingViaSettings) && (
                     <button onClick={() => setSettingsView('main')} aria-label="Back" className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
                   )}
                   <h2 id="settings-dialog-title" className="font-bold text-lg flex items-center gap-2 truncate">
@@ -2268,7 +2892,7 @@ export default function App() {
                         </div>
                       </div>
                       <div className="self-end max-w-[85%]">
-                        <div className="px-3 py-2 rounded-2xl message-shadow bg-primary text-on-primary rounded-tr-none">
+                        <div className="px-3 py-2 rounded-2xl message-shadow bg-primary text-on-primary dark:bg-primary-container dark:text-on-surface rounded-tr-none">
                           <p className={cn('leading-relaxed font-medium', textSizeClass)}>Looks great!</p>
                         </div>
                       </div>
@@ -2292,16 +2916,19 @@ export default function App() {
                     <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">App</div>
                     <div className="flex flex-col">
                       <AboutLinkButton icon={Bug} label="Send error report" onClick={() => { setErrorStatus('idle'); setErrorText(''); setSettingsView('errorReport'); }} />
-                      <AboutLinkButton icon={BellRing} label="Notifications not working?" onClick={() => { if (typeof Notification !== 'undefined') setNotifPerm(Notification.permission); setSettingsView('notifications'); }} />
-                      {offeredWearables.length > 0 && (
-                        <AboutLinkButton icon={Watch} label="Connect wearables" onClick={() => setSettingsView('wearables')} />
-                      )}
+                      <AboutLinkButton icon={BellRing} label="Notifications" onClick={() => { refreshNotifPerm(); setSettingsView('notifications'); }} />
+                      {sensing && <AboutLinkButton icon={Activity} label="Phone sensing" onClick={() => openSensing(true)} />}
                       <button onClick={updateStudies} disabled={updateStatus === 'updating'}
                         className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors text-left disabled:opacity-70">
                         <span className="p-2 rounded-full bg-surface-container-high dark:bg-surface-container-highest text-on-surface-variant shrink-0"><Download size={18} aria-hidden="true" /></span>
                         <span className="flex-1 font-semibold text-sm text-on-surface">Update studies</span>
                         {updateStatus === 'updating' && <RefreshCw size={16} className="animate-spin text-on-surface-variant shrink-0" aria-hidden="true" />}
-                        {updateStatus === 'done' && <span className="text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Updated</span>}
+                        {updateStatus === 'done' && updatePending === 0 && <span className="text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Updated</span>}
+                        {(updateStatus === 'offline' || (updateStatus === 'done' && updatePending > 0)) && (
+                          <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 shrink-0 text-right">
+                            {updateStatus === 'offline' ? 'Offline' : 'Updated'}{updatePending > 0 && ` · ${updatePending} waiting to send`}
+                          </span>
+                        )}
                         {updateStatus === 'error' && <span className="text-xs font-semibold text-red-600 dark:text-red-400 shrink-0">Failed</span>}
                         {updateStatus === 'idle' && <ChevronRight size={18} className="text-outline-variant shrink-0" aria-hidden="true" />}
                       </button>
@@ -2313,8 +2940,18 @@ export default function App() {
                 <AboutEsmiraPanel serverVersion={serverVersion} />
               ) : settingsView === 'notifications' ? (
                 <NotificationsPanel perm={notifPerm} onEnable={requestNotifications}
+                  channelOn={!!study && channelEnabled(study, isNativeApp())} off={notifOff}
+                  onSwitch={(off) => void changeNotificationsOff(off)}
                   onTest={() => { if (study) void sendTestPush(study); }}
-                  testStatus={testPushStatus} canTest={!!study && !!vapidKey} />
+                  testStatus={testPushStatus} canTest={!!study && !!vapidKey && !isNativeApp()} />
+              ) : settingsView === 'sensing' && sensing ? (
+                <PhoneSensingPanel
+                  settings={sensing}
+                  status={sensingStatus}
+                  onAllowActivity={() => { void allowActivity(); }}
+                  onOpenUsageAccess={() => { void openUsageAccessSettings(); }}
+                  onWaitForWifi={(on) => { void changeWaitForWifi(on); }}
+                />
               ) : settingsView === 'wearables' ? (
                 <WearablesPanel
                   providers={offeredWearables}
@@ -2395,29 +3032,30 @@ export default function App() {
                     </div>
                     {/* Study information rows */}
                     <div className="px-5 pb-2">
-                      <InfoRow label="Username" value={participant || '—'} />
                       <InfoRow label="User id" value={userId || '—'} mono />
                       <InfoRow label="Server url" value={serverRootUrl()} mono />
                       <InfoRow label="Joined at" value={joinedAt ? joinedAt.toLocaleString() : 'Not yet joined'} />
                       <InfoRow label="Completed questionnaires" value={completedCount} />
                       <InfoRow label="Next notification" value={
-                        <span className="inline-flex items-center gap-1 text-on-surface-variant">
-                          <Bell size={13} aria-hidden="true" />
-                          {!study?.webPushEnabled
+                        <InfoRowIconValue icon={Bell} text={
+                          !study || !channelEnabled(study, isNativeApp())
                             ? 'Off for this study'
-                            : nextNotification
-                              ? new Date(nextNotification).toLocaleString()
-                              : 'Not scheduled'}
-                        </span>
+                            : notifOff
+                              ? 'Off (you turned notifications off in Settings)'
+                              : isNativeApp() && notifPerm === 'denied'
+                                ? 'Off (notifications are blocked in Android settings)'
+                                : nextNotification
+                                  ? new Date(nextNotification).toLocaleString()
+                                  : 'Not scheduled'
+                        } />
                       } />
                       {study?.wearablesEnabled && (
                         <InfoRow label="Wearables" value={
-                          <span className="inline-flex items-center gap-1 text-on-surface-variant">
-                            <Watch size={13} aria-hidden="true" />
-                            {wearableStatus.length > 0
+                          <InfoRowIconValue icon={Watch} text={
+                            wearableStatus.length > 0
                               ? wearableStatus.map((w) => WEARABLE_LABEL[w.provider] ?? w.provider).join(', ')
-                              : 'None connected'}
-                          </span>
+                              : 'None connected'
+                          } />
                         } />
                       )}
                     </div>
@@ -2526,16 +3164,6 @@ export default function App() {
           reduceMotion={reduceMotion}
           onCancel={() => setRecorder(null)}
           onSave={handleSaveRecording}
-        />
-      )}
-
-      {/* Keystroke-logging writing overlay (record_keystrokes questions) */}
-      {keystroker && (
-        <KeystrokeRecorder
-          question={keystroker}
-          reduceMotion={reduceMotion}
-          onCancel={() => setKeystroker(null)}
-          onSave={handleSaveKeystrokes}
         />
       )}
 
@@ -2671,12 +3299,25 @@ function SpecifyModal({
 }
 
 /** A label / value row in the About · Study information panel. */
+/** Values stay on one line and end in "…" when they don't fit; a plain-text value
+ *  keeps its full text in the tooltip. */
 function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  const full = typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
   return (
-    <div className="flex items-start justify-between gap-4 py-2.5 border-b border-outline-variant/20 last:border-0">
-      <span className="text-sm text-on-surface-variant shrink-0">{label}</span>
-      <span className={cn('text-sm font-medium text-on-surface text-right break-all', mono && 'font-mono')}>{value}</span>
+    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-outline-variant/20 last:border-0">
+      <span className="text-sm text-on-surface-variant shrink-0 whitespace-nowrap">{label}</span>
+      <span title={full} className={cn('min-w-0 text-sm font-medium text-on-surface text-right truncate', mono && 'font-mono')}>{value}</span>
     </div>
+  );
+}
+
+/** An icon + text value for an InfoRow that truncates the text, not the icon. */
+function InfoRowIconValue({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
+  return (
+    <span className="flex items-center justify-end gap-1 min-w-0 text-on-surface-variant" title={text}>
+      <Icon size={13} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">{text}</span>
+    </span>
   );
 }
 
@@ -2690,22 +3331,35 @@ function formatProtocolTime(t: number): string {
 /** One upload in the Upload protocol: survey name, timestamp, and send status. */
 function ProtocolRow({ entry }: { entry: UploadProtocolEntry }) {
   const sent = entry.status === 'sent';
+  const failed = entry.status === 'failed';
+  // Completed offline and sent later: show both times, so the delay is visible.
+  const sentLater = sent && entry.sentAt != null && formatProtocolTime(entry.sentAt) !== formatProtocolTime(entry.time);
   return (
     <li className="flex items-start justify-between gap-3 px-2 py-3 border-b border-outline-variant/20 last:border-0">
       <div className="flex items-start gap-3 min-w-0">
         <span className={cn('p-2 rounded-full shrink-0',
           sent ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400'
-               : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400')}>
-          {sent ? <CheckCircle size={16} aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
+            : failed ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'
+              : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400')}>
+          {sent ? <CheckCircle size={16} aria-hidden="true" /> : failed ? <XCircle size={16} aria-hidden="true" /> : <Clock size={16} aria-hidden="true" />}
         </span>
         <div className="min-w-0">
           <p className="font-semibold text-sm text-on-surface break-words">{entry.label}</p>
-          <p className="text-xs text-on-surface-variant">{formatProtocolTime(entry.time)}</p>
+          {sentLater ? (
+            <>
+              <p className="text-xs text-on-surface-variant">Completed {formatProtocolTime(entry.time)}</p>
+              <p className="text-xs text-on-surface-variant">Sent {formatProtocolTime(entry.sentAt!)}</p>
+            </>
+          ) : (
+            <p className="text-xs text-on-surface-variant">{formatProtocolTime(entry.time)}</p>
+          )}
         </div>
       </div>
       <span className={cn('text-xs font-semibold shrink-0 mt-1',
-        sent ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400')}>
-        {sent ? 'Sent' : 'Pending'}
+        sent ? 'text-green-700 dark:text-green-400'
+          : failed ? 'text-red-700 dark:text-red-400'
+            : 'text-amber-700 dark:text-amber-400')}>
+        {sent ? 'Sent' : failed ? 'Not accepted' : 'Pending'}
       </span>
     </li>
   );
@@ -2723,72 +3377,102 @@ function AboutLinkButton({ icon: Icon, label, onClick }: { icon: typeof FileText
   );
 }
 
-/** About ESMira sub-panel: app identity, version, server, and project link. */
+/** About iEMAbot sub-panel: plain-language intro, version, server, and source links. */
 function AboutEsmiraPanel({ serverVersion }: { serverVersion: number }) {
+  const linkCls = 'inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline';
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" className="w-12 h-12 shrink-0" />
         <div className="min-w-0">
           <p className="font-bold text-lg leading-none">iEMAbot</p>
-          <p className="text-xs text-on-surface-variant mt-1">Web participant interface</p>
+          <p className="text-xs text-on-surface-variant mt-1">{isNativeApp() ? 'Android app' : 'Web app'} for research studies</p>
         </div>
       </div>
-      <p className="text-sm text-on-surface-variant leading-relaxed">
-        ESMira is a tool for running longitudinal studies (ESM, AA, EMA, …). Studies are created
-        through an online interface, and participants can take part using iOS, Android, or a web browser.
-      </p>
+      <div className="flex flex-col gap-2 text-sm text-on-surface-variant leading-relaxed">
+        <p>
+          iEMAbot helps researchers learn how people's feelings, sleep and daily lives change over time.
+          Instead of one long questionnaire, it sends you short check-ins during your day, as a simple
+          chat, so you can answer in a minute or two wherever you are.
+        </p>
+        <p>
+          iEMAbot is made by the Surrey Sleep Research Centre and the UK Dementia Research Institute, and
+          builds on ESMira, a free research platform from Karl Landsteiner University in Austria. Both
+          are open source: anyone can read the code to see exactly how the app works.
+        </p>
+      </div>
       <div>
         <InfoRow label="App version" value={APP_VERSION} />
         <InfoRow label="Server version" value={serverVersion} />
         <InfoRow label="Server" value={serverRootUrl()} mono />
       </div>
-      <a
-        href="https://github.com/KL-Psychological-Methodology/ESMira-web"
-        target="_blank"
-        rel="noreferrer noopener"
-        className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
-      >
-        <ExternalLink size={16} aria-hidden="true" /> ESMira project &amp; source code
-      </a>
+      <div className="flex flex-col gap-2">
+        <a href="https://github.com/andreifoldes/iEMAbot" target="_blank" rel="noreferrer noopener" className={linkCls}>
+          <ExternalLink size={16} aria-hidden="true" /> iEMAbot source code
+        </a>
+        <a href="https://github.com/KL-Psychological-Methodology/ESMira-web" target="_blank" rel="noreferrer noopener" className={linkCls}>
+          <ExternalLink size={16} aria-hidden="true" /> ESMira project &amp; source code
+        </a>
+      </div>
     </div>
   );
 }
 
 /** Notifications troubleshooting sub-panel: current permission + guidance. */
-function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest }: {
+function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, channelOn, off, onSwitch }: {
   perm: NotificationPermission | 'unsupported';
   onEnable: () => void;
   onTest: () => void;
   testStatus: 'idle' | 'sending' | 'sent' | 'local' | 'error';
   canTest: boolean;
+  /** The research team sends notifications to this app for the study. */
+  channelOn: boolean;
+  /** The participant switched them off here. */
+  off: boolean;
+  onSwitch: (off: boolean) => void;
 }) {
+  const native = isNativeApp();
   const status = perm === 'granted'
     ? { icon: <CheckCircle size={18} aria-hidden="true" />, text: 'Notifications are enabled.', cls: 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400' }
     : perm === 'denied'
-      ? { icon: <BellOff size={18} aria-hidden="true" />, text: 'Notifications are blocked for this site.', cls: 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' }
+      ? { icon: <BellOff size={18} aria-hidden="true" />, text: native ? 'Notifications are blocked for this app.' : 'Notifications are blocked for this site.', cls: 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' }
       : perm === 'unsupported'
-        ? { icon: <Bell size={18} aria-hidden="true" />, text: 'This browser does not support notifications.', cls: 'bg-surface-container-high text-on-surface-variant' }
+        ? { icon: <Bell size={18} aria-hidden="true" />, text: native ? "Couldn't check notifications on this phone." : 'This browser does not support notifications.', cls: 'bg-surface-container-high text-on-surface-variant' }
         : { icon: <Bell size={18} aria-hidden="true" />, text: 'Notifications are not enabled yet.', cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' };
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
+      {channelOn ? (
+        <div className="flex flex-col gap-1">
+          <Toggle icon={<Bell size={18} aria-hidden="true" />} label="Questionnaire notifications" on={!off} onClick={() => onSwitch(!off)} />
+          <p className="text-xs text-on-surface-variant" aria-live="polite">
+            {off
+              ? "Off: you won't get reminders for this study. You can still open questionnaires from the list."
+              : "On: we'll remind you when a questionnaire is ready."}
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-on-surface-variant">The research team has not turned on notifications for this study.</p>
+      )}
+      {channelOn && !off && (
       <div className="flex items-center gap-3">
         <span className={cn('p-2 rounded-full shrink-0', status.cls)}>{status.icon}</span>
         <p className="text-sm font-semibold">{status.text}</p>
       </div>
-      {perm === 'default' && (
+      )}
+      {channelOn && !off && perm === 'default' && (
         <button onClick={onEnable}
           className="self-start inline-flex items-center gap-2 bg-primary text-on-primary font-bold px-4 py-2.5 rounded-full active:scale-95 hover:brightness-110 transition-all">
           <BellRing size={16} aria-hidden="true" /> Enable notifications
         </button>
       )}
-      {perm === 'denied' && (
+      {channelOn && !off && perm === 'denied' && (
         <p className="text-sm text-on-surface-variant">
-          You've blocked notifications. To turn them back on, open your browser's site settings for this
-          page, allow notifications, then reload.
+          {native
+            ? "You've blocked notifications. To turn them back on, open Android Settings → Apps → iEMAbot → Notifications and allow them."
+            : "You've blocked notifications. To turn them back on, open your browser's site settings for this page, allow notifications, then reload."}
         </p>
       )}
-      {perm === 'granted' && canTest && (
+      {channelOn && !off && perm === 'granted' && canTest && (
         <div className="flex flex-col gap-1.5" aria-live="polite">
           <button onClick={onTest} disabled={testStatus === 'sending'}
             className="self-start inline-flex items-center gap-2 bg-primary text-on-primary font-bold px-4 py-2.5 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60">
@@ -2803,10 +3487,10 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest }: {
         <p className="font-semibold text-sm mb-2">If reminders aren't arriving:</p>
         {isNativeApp() ? (
           <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
-            <li>Open Android Settings → Apps → ESMira → Notifications and make sure they are allowed.</li>
-            <li>Exclude ESMira from battery optimisation (Settings → Apps → ESMira → Battery → Unrestricted) so reminders aren't delayed.</li>
+            <li>Open Android Settings → Apps → iEMAbot → Notifications and make sure they are allowed.</li>
+            <li>Exclude iEMAbot from battery optimisation (Settings → Apps → iEMAbot → Battery → Unrestricted) so reminders aren't delayed.</li>
             <li>Check that Do Not Disturb is not silencing the app.</li>
-            <li>Allow “Alarms &amp; reminders” for ESMira if your phone asks, so reminders arrive on time.</li>
+            <li>Allow “Alarms &amp; reminders” for iEMAbot if your phone asks, so reminders arrive on time.</li>
           </ul>
         ) : (
           <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
@@ -2820,7 +3504,7 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest }: {
       </div>
       {!isNativeApp() && (
         <p className="text-xs text-on-surface-variant">
-          For the most reliable reminders, the ESMira iOS or Android app is recommended.
+          For the most reliable reminders on Android, use the iEMAbot Android app.
         </p>
       )}
     </div>

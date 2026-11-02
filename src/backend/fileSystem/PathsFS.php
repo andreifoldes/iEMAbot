@@ -137,9 +137,25 @@ class PathsFS {
 		return self::folderPushSubscriptions($studyId) . Paths::makeUrlFriendly($userId) . '.state';
 	}
 
-	/** Per-participant schedule state for the native Android app's server-nudge poll ({realized, sensor}). */
+	/** Per-participant schedule state for the native Android app's server-nudge poll ({sensor}). */
 	static function fileNativeState(int $studyId, string $userId): string {
 		return self::folderStudies() . "$studyId/.native_state/" . Paths::makeUrlFriendly($userId) . '.state';
+	}
+
+	/** Participants who switched notifications off in the app (see ParticipantNotificationPrefs). */
+	static function folderNotificationsOff(int $studyId): string {
+		return self::folderStudies() . "$studyId/.notifications_off/";
+	}
+	static function fileNotificationsOff(int $studyId, string $userId): string {
+		return self::folderNotificationsOff($studyId) . Paths::makeUrlFriendly($userId);
+	}
+
+	/** Participants who have left the study (one marker file each); nothing is sent to them any more. */
+	static function folderWithdrawn(int $studyId): string {
+		return self::folderStudies() . "$studyId/.withdrawn/";
+	}
+	static function fileWithdrawn(int $studyId, string $userId): string {
+		return self::folderWithdrawn($studyId) . Paths::makeUrlFriendly($userId);
 	}
 
 	/** Append-only JSONL of push funnel events (sent/failed/received/clicked) for a study. */

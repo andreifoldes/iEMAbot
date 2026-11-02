@@ -9,13 +9,13 @@ use backend\channels\ConversationalChannel;
 use backend\channels\handoff\HandoffService;
 use backend\channels\InboundEvent;
 use backend\channels\OutboundMessage;
-use backend\channels\QuestionnaireAvailability;
 use backend\channels\store\ChannelBindingStore;
 use backend\channels\store\JsonFile;
 use backend\Configs;
 use backend\CreateDataSet;
 use backend\fileSystem\PathsFS;
 use backend\Main;
+use backend\schedule\Schedule;
 use Throwable;
 
 /**
@@ -26,7 +26,7 @@ use Throwable;
  *
  * Participant state (studies/<id>/.channel_bindings/<userId>.state):
  *   session (ConversationEngine), queue (due occurrences waiting for the open session),
- *   schedule (DueOccurrences cursor/realized/sensor), sent (delivery ledger),
+ *   schedule (DueOccurrences cursor/sensor), sent (delivery ledger),
  *   done (occKey => completedAt), qdone (qid => [completedAt...]), dyn, promptRef, awaitTz
  */
 class ConversationService {
@@ -48,6 +48,7 @@ class ConversationService {
 	}
 
 	public function handleEvent(InboundEvent $ev, int $nowMs): void {
+		$this->channel->heard($ev->chatRef);
 		try {
 			$this->route($ev, $nowMs);
 		}
@@ -113,6 +114,7 @@ class ConversationService {
 			$this->channel->ack($ev->ackId);
 			return;
 		}
+		$this->channel->paceFor($ev->chatRef, $study);
 		$engine = $this->engine($binding, $study, $nowMs);
 		if(($expired = $engine->expireIfDue($state, $nowMs)) !== null)
 			$this->deliver($binding, $state, $expired);
@@ -211,6 +213,7 @@ class ConversationService {
 		$study = ChannelStudies::load((int) $binding['studyId'], (string) ($binding['lang'] ?? ''));
 		if($study === null)
 			return false;
+		$this->channel->paceFor((string) $binding['chatRef'], $study);
 		$r = $this->engine($binding, $study, $nowMs)->handoffResult($state, $session, $index, $result, $nowMs);
 		if($r === null)
 			return false;
@@ -309,7 +312,7 @@ class ConversationService {
 		if($qid < 0)
 			return;
 		$q = ChannelStudies::questionnaire($study, $qid);
-		$availability = $q === null ? null : $this->availability($binding, $state, $q, $nowMs);
+		$availability = $q === null ? null : $this->availability($binding, $state, $study, $q, $nowMs);
 		if($availability !== null && $availability['state'] === 'available')
 			$this->startQuestionnaire($binding, $state, $study, ['qid' => $qid, 'occKey' => $availability['occKey']], $nowMs);
 		else
@@ -331,7 +334,7 @@ class ConversationService {
 			$qid = (int) ($q['internalId'] ?? 0);
 			if(isset($titles[$qid]) || ($q['title'] ?? '') === HandoffService::TRIALS_QN_TITLE)
 				continue;
-			if($this->availability($binding, $state, $q, $nowMs)['state'] === 'available')
+			if($this->availability($binding, $state, $study, $q, $nowMs)['state'] === 'available')
 				$titles[$qid] = (string) ($q['title'] ?? '');
 		}
 		if(!$titles)
@@ -349,8 +352,43 @@ class ConversationService {
 		}));
 	}
 
-	private function availability(array $binding, array $state, array $q, int $nowMs): array {
-		return QuestionnaireAvailability::compute($q, (int) $binding['joinedAt'], $nowMs, ChannelStudies::tzOffsetMin($binding, $nowMs), $state);
+	/** Whether a questionnaire is open now, from the study's schedule: {state, occKey} (Schedule::availability). */
+	private function availability(array $binding, array $state, array $study, array $q, int $nowMs): array {
+		$schedule = Schedule::config($study);
+		if($schedule === null)
+			return ['state' => 'locked', 'occKey' => null];
+		$studyId = (int) $binding['studyId'];
+		$userId = (string) $binding['userId'];
+		$tz = ChannelStudies::tzOffsetMin($binding, $nowMs);
+		$inputs = Schedule::inputs($study, $studyId, $userId, $nowMs);
+		$inputs['completions'] = array_merge($inputs['completions'], self::chatCompletions($state));
+		$days = Schedule::days($study, $studyId, $userId, $inputs, (int) $binding['joinedAt'], $nowMs, $tz);
+		$today = end($days);
+		return Schedule::availability($schedule, (int) ($q['internalId'] ?? 0), Schedule::windowsOf($days), $nowMs, $today === false ? 0 : (int) $today['index']);
+	}
+
+	/**
+	 * Completions recorded in the chat state, as the schedule's list: each window completed in the chat (done,
+	 * "qid|key" => time), and other completions (qdone) without a key.
+	 * @return array<int, array{qid:int, t:int, key?:string}>
+	 */
+	public static function chatCompletions(array $state): array {
+		$out = [];
+		$keyed = [];
+		foreach(($state['done'] ?? []) as $id => $t) {
+			$parts = explode('|', (string) $id, 2);
+			if(count($parts) === 2) {
+				$out[] = ['qid' => (int) $parts[0], 't' => (int) $t, 'key' => $parts[1]];
+				$keyed[(int) $parts[0] . '@' . (int) $t] = true;
+			}
+		}
+		foreach(($state['qdone'] ?? []) as $qid => $times) {
+			foreach((array) $times as $t) {
+				if(!isset($keyed[(int) $qid . '@' . (int) $t]))
+					$out[] = ['qid' => (int) $qid, 't' => (int) $t];
+			}
+		}
+		return $out;
 	}
 
 	public function engine(array $binding, array $study, int $nowMs): ConversationEngine {

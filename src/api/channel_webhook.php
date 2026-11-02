@@ -36,8 +36,22 @@ if(!$channel->verifyInbound($headers, $body)) {
 	return;
 }
 
+// Answer before handling: replies are paced to reading speed (ReadingPace), so a burst of
+// messages can outlast Telegram's patience and it would deliver the update again.
+http_response_code(200);
+if(function_exists('fastcgi_finish_request')) {
+	echo 'ok';
+	fastcgi_finish_request();
+}
+else { // mod_php: tell the client the response is complete, then keep working (ignore_user_abort)
+	header('Content-Length: 2');
+	header('Connection: close');
+	echo 'ok';
+	while(ob_get_level() > 0)
+		ob_end_flush();
+	flush();
+}
+
 $service = new ConversationService($channel);
 foreach($channel->parseInbound($body) as $event)
 	$service->handleEvent($event, Main::getMilliseconds());
-http_response_code(200);
-echo 'ok';

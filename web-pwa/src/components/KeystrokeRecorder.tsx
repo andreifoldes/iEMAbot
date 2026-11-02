@@ -1,36 +1,20 @@
 /**
- * KeystrokeRecorder — a focused writing modal for `record_keystrokes` questions (the
- * voice-memo skip fallback: answer by typing, log the keystroke *dynamics* not the content).
+ * KeystrokeRecorder — a focused writing modal for `record_keystrokes` questions, used by the
+ * Telegram handoff page (HandoffApp), which has no chat footer. In the participant app the same
+ * question is answered in the chat footer instead (KeystrokeComposer).
  *
- * A plain <textarea> is wired to KeystrokeRecorderCore via native listeners (keydown/keyup/
- * beforeinput/focus/blur + document visibilitychange), which builds the content-free classed
- * event log. On Save we serialise the log to a text/CSV blob and hand back
- * (identifier, blob, transcript, captureMode); the typed answer text is kept separate.
- *
- * A soft, non-blocking nudge encourages ~2 minutes of continuous writing so the text answer
- * is comparably substantial to the ~5-minute voice memo. It tracks *active* writing time
- * (idle gaps don't count) and shows a progress cue + a gentle re-engagement line on a lull —
- * never a hard countdown, and Save is always available (this is the optional fallback).
- * When the question sets `min_length`, a character floor is folded into the same nudge:
- * the progress bar completes only once both time and length targets are met.
+ * Capture and the ~2-minute writing nudge live in useKeystrokeCapture; on Save the log is
+ * serialised to a text/CSV blob and handed back as (identifier, blob, transcript, captureMode).
  */
 
-import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
 import { useDialogA11y } from '../lib/useDialogA11y';
-import { KeystrokeRecorderCore, type CaptureMode } from '../lib/keystrokeCapture';
+import { type CaptureMode } from '../lib/keystrokeCapture';
 import { newKeystrokeIdentifier } from '../lib/keystrokeUploads';
+import { nudgeHint, useKeystrokeCapture } from '../lib/useKeystrokeCapture';
 import type { PreloadedQuestion } from '../types';
-
-/** Soft nudge target: ~2 min of *active* writing (parity with the ~5-min voice memo). */
-const TARGET_MS = 120_000;
-/** Gaps longer than this don't count toward "continuous" active-writing time. */
-const IDLE_GAP_MS = 8_000;
-/** After this long without a keystroke (and below target), show a gentle re-engagement line. */
-const IDLE_HINT_MS = 12_000;
-const TICK_MS = 500;
 
 /** First line of the (rich-text/HTML) prompt — used as the compact modal title. */
 function firstLine(html: string): string {
@@ -61,99 +45,15 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
   const { intro, image: promptImage, detail } = splitQuestionHtml(question.text || '');
   const title = firstLine(intro || question.text || '');
 
-  const [progress, setProgress] = useState(0);
-  const [lengthShort, setLengthShort] = useState(false);
-  const [idle, setIdle] = useState(false);
-  const [hasText, setHasText] = useState(false);
+  const { textareaRef, progress, reached, lengthShort, idle, hasText, finish } = useKeystrokeCapture(minChars);
 
-  const coreRef = useRef<KeystrokeRecorderCore | null>(null);
-  if (!coreRef.current) coreRef.current = new KeystrokeRecorderCore();
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const committedRef = useRef(false);
-  // Nudge accounting (refs so per-keystroke updates don't re-render).
-  const activeMsRef = useRef(0);
-  const lastKeyMsRef = useRef<number | null>(null);
-  const hasTextRef = useRef(false);
-  const charCountRef = useRef(0);
-
-  useEffect(() => {
-    const ta = textareaRef.current;
-    const core = coreRef.current;
-    if (!ta || !core) return;
-
-    const evTs = (e: Event): number => (e.timeStamp > 0 ? e.timeStamp : performance.now());
-    const onKeyDown = (e: KeyboardEvent) =>
-      core.onKeyDown({ key: e.key, code: e.code, keyCode: e.keyCode, timeStamp: evTs(e), isComposing: e.isComposing, repeat: e.repeat });
-    const onKeyUp = (e: KeyboardEvent) =>
-      core.onKeyUp({ key: e.key, code: e.code, keyCode: e.keyCode, timeStamp: evTs(e), isComposing: e.isComposing });
-    const onBeforeInput = (e: InputEvent) =>
-      core.onBeforeInput({ inputType: e.inputType, data: e.data, timeStamp: evTs(e) });
-    const onFocus = (e: FocusEvent) => core.onFocus(evTs(e));
-    const onBlur = (e: FocusEvent) => core.onBlur(evTs(e));
-    // Nudge: the cross-platform `input` event fires once per real content change (no physical/soft
-    // double count). Accumulate active-writing time, capping any single gap at IDLE_GAP_MS.
-    const onInput = () => {
-      const now = performance.now();
-      const last = lastKeyMsRef.current;
-      if (last != null) activeMsRef.current += Math.min(now - last, IDLE_GAP_MS);
-      lastKeyMsRef.current = now;
-      charCountRef.current = ta.value.trim().length;
-      const nowHasText = ta.value.length > 0;
-      if (nowHasText !== hasTextRef.current) { hasTextRef.current = nowHasText; setHasText(nowHasText); }
-    };
-    const onVis = () => {
-      const now = performance.now();
-      if (document.hidden) core.onBlur(now);
-      else if (document.activeElement === ta) core.onFocus(now);
-    };
-
-    ta.addEventListener('keydown', onKeyDown);
-    ta.addEventListener('keyup', onKeyUp);
-    ta.addEventListener('beforeinput', onBeforeInput as EventListener);
-    ta.addEventListener('focus', onFocus);
-    ta.addEventListener('blur', onBlur);
-    ta.addEventListener('input', onInput);
-    document.addEventListener('visibilitychange', onVis);
-    ta.focus(); // anchors t0 and emits the opening focus_gained marker
-
-    const iv = setInterval(() => {
-      // Overall progress is the lower of the time and length targets, so the bar only
-      // completes once both are met (length target is a no-op when minChars is 0).
-      const timeProgress = Math.min(1, activeMsRef.current / TARGET_MS);
-      const lengthProgress = minChars > 0 ? Math.min(1, charCountRef.current / minChars) : 1;
-      setProgress(Math.min(timeProgress, lengthProgress));
-      setLengthShort(timeProgress >= 1 && lengthProgress < 1);
-      const lk = lastKeyMsRef.current;
-      setIdle(lk != null && performance.now() - lk > IDLE_HINT_MS && (timeProgress < 1 || lengthProgress < 1));
-    }, TICK_MS);
-
-    return () => {
-      clearInterval(iv);
-      ta.removeEventListener('keydown', onKeyDown);
-      ta.removeEventListener('keyup', onKeyUp);
-      ta.removeEventListener('beforeinput', onBeforeInput as EventListener);
-      ta.removeEventListener('focus', onFocus);
-      ta.removeEventListener('blur', onBlur);
-      ta.removeEventListener('input', onInput);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const commit = () => {
-    if (committedRef.current) return;
-    const core = coreRef.current;
-    const ta = textareaRef.current;
-    if (!core || !ta) return;
-    const transcript = ta.value;
-    if (!transcript.trim()) return; // nothing to save yet
-    committedRef.current = true;
-    const { csv, captureMode } = core.finish(transcript);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    onSave(newKeystrokeIdentifier(), blob, transcript, captureMode);
+  const commit = async () => {
+    const res = await finish();
+    if (!res) return;
+    const blob = new Blob([res.csv], { type: 'text/csv' });
+    onSave(newKeystrokeIdentifier(), blob, res.transcript, res.captureMode);
   };
 
-  const reached = progress >= 1;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
@@ -166,17 +66,21 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
         aria-label={title}
         initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        // With a prompt image the sheet goes full-height: the picture gets ~30%
-        // of the viewport (tap it for the fullscreen lightbox) while the writing
-        // area stays large; instructions cap + scroll rather than squeeze either.
+        // With a prompt image the sheet fills the whole screen height on phones (as the
+        // voice recorder does): the picture gets ~30% of the viewport (tap it for the
+        // fullscreen lightbox) while the writing area stays large; instructions cap +
+        // scroll rather than squeeze either.
         className={cn(
-          'relative w-full sm:max-w-md flex flex-col max-h-[92dvh] overflow-y-auto bg-white dark:bg-surface-container-lowest rounded-t-3xl sm:rounded-3xl shadow-2xl px-6 pt-4 pb-7',
-          promptImage && 'h-[92dvh] sm:h-auto',
+          'relative w-full sm:max-w-md flex flex-col overflow-y-auto bg-white dark:bg-surface-container-lowest shadow-2xl px-6 pb-7',
+          promptImage
+            ? 'h-dvh max-h-dvh sm:h-auto sm:max-h-[94dvh] sm:rounded-3xl pt-[max(1rem,env(safe-area-inset-top))]'
+            : 'max-h-[94dvh] rounded-t-3xl sm:rounded-3xl pt-4',
         )}
       >
-        <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-outline-variant/50 sm:hidden" />
-        <div className="relative flex items-center justify-center min-h-8">
-          <h2 className="text-lg font-bold text-on-surface text-center truncate px-9">{title}</h2>
+        {!promptImage && <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-outline-variant/50 sm:hidden" />}
+        <div className="relative flex items-center justify-center min-h-8 shrink-0">
+          {/* Wraps rather than truncating: the prompt must be readable in full. */}
+          <h2 className="text-lg font-bold text-on-surface text-center leading-snug px-9">{title}</h2>
           <button
             onClick={onCancel}
             aria-label="Close"
@@ -223,18 +127,12 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
           />
         </div>
         <p className="mt-2 shrink-0 text-center text-xs text-on-surface-variant" aria-live="polite">
-          {idle
-            ? 'Still with you? Keep writing whatever comes to mind — no need for polish.'
-            : reached
-              ? "That's plenty — finish whenever you're ready, or keep going."
-              : lengthShort
-                ? 'Almost there — a few more sentences will do.'
-                : 'Try to keep writing continuously for about two minutes.'}
+          {nudgeHint({ idle, reached, lengthShort })}
         </p>
 
         <div className="mt-3 shrink-0 flex justify-end">
           <button
-            onClick={commit}
+            onClick={() => void commit()}
             disabled={!hasText}
             className="flex items-center gap-2 bg-primary text-on-primary font-bold px-6 py-3 rounded-full active:scale-95 transition disabled:opacity-40"
           >

@@ -7,6 +7,7 @@ use backend\channels\ChannelCapabilities;
 use backend\channels\ChannelException;
 use backend\channels\ConversationalChannel;
 use backend\channels\OutboundMessage;
+use backend\channels\ReadingPace;
 use backend\Configs;
 
 /**
@@ -21,9 +22,12 @@ class TelegramChannel implements ConversationalChannel {
 
 	/** @var TelegramApiClient|null */
 	private $client;
+	/** @var ReadingPace */
+	private $pace;
 
-	public function __construct(?TelegramApiClient $client = null) {
+	public function __construct(?TelegramApiClient $client = null, ?ReadingPace $pace = null) {
 		$this->client = $client;
+		$this->pace = $pace ?? new ReadingPace();
 	}
 
 	public function id(): string {
@@ -67,10 +71,25 @@ class TelegramChannel implements ConversationalChannel {
 	public function send(string $chatRef, OutboundMessage $message): string {
 		$messageId = '';
 		foreach(TelegramRenderer::sendCalls($chatRef, $message) as [$method, $params]) {
+			$this->pace->waitBefore($chatRef, function() use ($chatRef) {
+				try {
+					$this->client()->call('sendChatAction', ['chat_id' => $chatRef, 'action' => 'typing']);
+				}
+				catch(ChannelException $e) { /* only cosmetic; the message itself reports real failures */ }
+			});
 			$result = $this->client()->call($method, $params);
+			$this->pace->sent($chatRef, (string) ($params['text'] ?? $params['caption'] ?? ''));
 			$messageId = is_array($result) ? (string) ($result['message_id'] ?? '') : '';
 		}
 		return $messageId;
+	}
+
+	public function heard(string $chatRef): void {
+		$this->pace->heard($chatRef);
+	}
+
+	public function paceFor(string $chatRef, array $study): void {
+		$this->pace->setSpeed($chatRef, $study);
 	}
 
 	public function edit(string $chatRef, string $messageRef, OutboundMessage $message): bool {

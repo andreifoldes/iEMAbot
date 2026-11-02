@@ -16,6 +16,7 @@ const sidebars: SidebarsConfig = {
         'backend/web-push',
         'backend/chat-channels',
         'backend/wearables',
+        'backend/phone-sensing',
         'backend/api-reference',
         'backend/sqlite-store',
         'backend/data-and-privacy',

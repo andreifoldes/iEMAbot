@@ -3,8 +3,8 @@
 const debug = process.env.ESMIRA_DEBUG === '1';
 
 module.exports = {
-  appId: 'org.esmira.participant',
-  appName: 'ESMira',
+  appId: 'org.iemabot.app',
+  appName: 'iEMAbot',
   webDir: '../dist/pwa-native',
   android: {
     allowMixedContent: debug,
@@ -15,7 +15,8 @@ module.exports = {
     androidScheme: 'https',
   },
   plugins: {
-    // Status-bar icon + accent for reminder notifications (res/drawable/ic_stat_esmira.xml).
-    LocalNotifications: { smallIcon: 'ic_stat_esmira', iconColor: '#065f52' },
+    // Only used for the notification permission now: reminders are posted by the app's own Reminders plugin
+    // (ReminderNotifier.java, same look and stacking as the PWA). Kept in step in case it ever posts one.
+    LocalNotifications: { smallIcon: 'ic_stat_esmira', iconColor: '#075E54' },
   },
 };

@@ -43,6 +43,8 @@ class ErrorReportStoreFS implements ErrorReportStore {
 			}
 		}
 		closedir($handle);
+		// Oldest first. readdir() order depends on the filesystem.
+		usort($list, fn($a, $b) => $a->timestamp <=> $b->timestamp);
 		return $list;
 	}
 	

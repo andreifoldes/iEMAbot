@@ -41,6 +41,25 @@ class ParticipantVariableStoreTest extends BaseDataFolderTestSetup {
 		$this->assertFileDoesNotExist(PathsFS::fileParticipantVariables($this->studyId, 'p5'));
 	}
 
+	function test_completions_are_kept_in_order_beside_the_variables() {
+		ParticipantVariableStore::record($this->studyId, 'p8', ['wake' => '07:00'], 1000);
+		for($t = 30; $t >= 1; $t--)
+			ParticipantVariableStore::recordCompletion($this->studyId, 'p8', $t % 3 ? 1 : 2, $t * 1000); // uploaded newest first
+		ParticipantVariableStore::recordCompletion($this->studyId, 'p8', 2, 30000); // an upload sent twice
+		$list = ParticipantVariableStore::completions($this->studyId, 'p8');
+		// Questionnaire 1 was completed 20 times and keeps all of them, questionnaire 2 its 10.
+		$this->assertCount(30, $list);
+		$this->assertSame(['qid' => 1, 't' => 1000], $list[0]);
+		$this->assertSame(['qid' => 2, 't' => 30000], $list[29]);
+		for($t = 31; $t <= 35; $t++)
+			ParticipantVariableStore::recordCompletion($this->studyId, 'p8', 1, $t * 1000);
+		$ones = array_values(array_filter(ParticipantVariableStore::completions($this->studyId, 'p8'), fn($c) => $c['qid'] === 1));
+		$this->assertCount(ParticipantVariableStore::COMPLETIONS_KEEP_PER_QUESTIONNAIRE, $ones); // the newest 20
+		$this->assertSame(35000, end($ones)['t']);
+		$this->assertSame(['wake' => '07:00'], $this->values('p8'));
+		$this->assertSame([], ParticipantVariableStore::completions($this->studyId, 'nobody'));
+	}
+
 	function test_unencodable_file_content_is_not_truncated() {
 		ParticipantVariableStore::record($this->studyId, 'p6', ['wake' => '07:00'], 1000);
 		$file = PathsFS::fileParticipantVariables($this->studyId, 'p6');

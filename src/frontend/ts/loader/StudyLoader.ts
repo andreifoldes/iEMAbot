@@ -314,6 +314,7 @@ export class StudyLoader {
 	
 	public async addQuestionnaire(study: Study, questionnaireData: DataStructureInputType): Promise<Questionnaire> {
 		questionnaireData["internalId"] = await this.getNewQuestionnaireId(study)
+		// When it is open and prompted is set in the study's schedule (sections/schedule.tsx).
 		const newQuestionnaire = study.questionnaires.push(questionnaireData)
 		this.autoValidateQuestionnaire(study, newQuestionnaire)
 		return newQuestionnaire

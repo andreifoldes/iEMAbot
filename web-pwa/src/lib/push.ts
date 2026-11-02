@@ -10,6 +10,8 @@
  * for a PWA installed to the Home Screen (iOS 16.4+).
  */
 
+import { NOTIFICATION_BADGE, NOTIFICATION_ICON } from './notificationSpec.ts';
+
 /** True when this browser can register a web-push subscription. */
 export function isPushSupported(): boolean {
   return (
@@ -103,12 +105,31 @@ export async function showLocalNotification(title: string, body: string): Promis
     const reg = await serviceWorkerReady();
     await reg.showNotification(title, {
       body,
-      icon: '/pwa/pwa-192x192.png',
-      badge: '/pwa/badge-96x96.png',
+      icon: NOTIFICATION_ICON,
+      badge: NOTIFICATION_BADGE,
       tag: 'esmira-welcome',
     });
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Close web-push reminders whose check-in has closed (sw.ts closeExpired: the `expiresAt` the service worker
+ * stamps into each one). Web notifications cannot expire by themselves, so the app does this whenever it is
+ * opened or brought back. Best effort; a no-op without a service worker.
+ */
+export async function closeExpiredNotifications(now = Date.now()): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || typeof reg.getNotifications !== 'function') return;
+    for (const n of await reg.getNotifications()) {
+      const exp = (n.data as { expiresAt?: number } | undefined)?.expiresAt;
+      if (typeof exp === 'number' && exp <= now) n.close();
+    }
+  } catch {
+    /* best effort */
   }
 }

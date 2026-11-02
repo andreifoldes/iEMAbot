@@ -6,7 +6,7 @@ namespace backend\wearables;
 use backend\Configs;
 use backend\fileSystem\PathsFS;
 use backend\Main;
-use backend\notifications\SensorTriggerScheduler;
+use backend\schedule\Schedule;
 use Throwable;
 
 /**
@@ -55,7 +55,7 @@ class WearablesWebhook {
 				if($study === null || empty($study['wearablesEnabled']))
 					continue;
 				$isNew = WearablesEventArchive::append($studyId, $userId, $provider, $kind, $nowMs, $interval, $detail);
-				if($isNew && SensorTriggerScheduler::wantsEvent($study, $provider, $kind))
+				if($isNew && Schedule::wantsEvent($study, $provider, $kind))
 					WearablesEventStore::append($studyId, $userId, $provider, $kind, $nowMs);
 				$count++;
 			}

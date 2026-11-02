@@ -21,3 +21,17 @@ describe('pickVoice', () => {
     assert.equal(pickVoice([{ name: 'Anna', lang: 'de-DE' }], 'fr-FR'), undefined);
   });
 });
+
+describe('pickVoice offline', () => {
+  const voices = [
+    { name: 'Google UK English Female', lang: 'en-GB', localService: false },
+    { name: 'Device English', lang: 'en-GB', localService: true },
+  ];
+  it('skips network voices so the read-aloud is not silent', () => {
+    assert.equal(pickVoice(voices, 'en-GB')?.name, 'Google UK English Female'); // online: the nicer one
+    assert.equal(pickVoice(voices, 'en-GB', true)?.name, 'Device English');
+  });
+  it('falls back to the browser default when no on-device voice exists', () => {
+    assert.equal(pickVoice([voices[0]], 'en-GB', true), undefined);
+  });
+});

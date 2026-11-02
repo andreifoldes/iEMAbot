@@ -17,10 +17,10 @@
  */
 
 import { getApiRoot } from './serverRoot';
+import { MAX_REJECTIONS, checkUploadReply, rejectionCost } from './uploadRetry';
 
 const DB_NAME = 'esmira_audio';
 const STORE = 'recordings';
-const MAX_ATTEMPTS = 20;
 
 export interface AudioRecord {
   /** Non-zero integer upload identifier; also the questionnaire response value. */
@@ -119,16 +119,14 @@ async function uploadOne(rec: AudioRecord): Promise<void> {
   form.append('upload', rec.blob, String(rec.identifier));
 
   const resp = await fetch(`${getApiRoot()}api/file_uploads.php`, { method: 'POST', body: form });
-  if (!resp.ok) throw new Error(`file_uploads.php returned ${resp.status}`);
-  const env = await resp.json();
-  if (!env.success) throw new Error(env.error || 'Audio upload rejected');
+  await checkUploadReply(resp, 'file_uploads.php');
 }
 
 let flushing = false;
 
 /**
- * Upload every 'ready' recording. On success the local copy is dropped; on
- * failure attempts are bumped and the recording is abandoned after MAX_ATTEMPTS.
+ * Upload every 'ready' recording. On success the local copy is dropped; a recording
+ * the server keeps refusing is abandoned after MAX_REJECTIONS (being offline never counts).
  * Guarded so concurrent triggers (submit + online + visibility) don't overlap.
  */
 export async function flushAudioQueue(): Promise<void> {
@@ -138,15 +136,15 @@ export async function flushAudioQueue(): Promise<void> {
     const all = await getAll();
     for (const rec of all) {
       if (rec.status !== 'ready') continue;
-      if (rec.attempts >= MAX_ATTEMPTS) {
+      if (rec.attempts >= MAX_REJECTIONS) {
         await tx('readwrite', (s) => s.delete(rec.identifier)); // give up — avoid an unbounded queue
         continue;
       }
       try {
         await uploadOne(rec);
         await tx('readwrite', (s) => s.delete(rec.identifier));
-      } catch {
-        await tx('readwrite', (s) => s.put({ ...rec, attempts: rec.attempts + 1 } satisfies AudioRecord));
+      } catch (err) {
+        await tx('readwrite', (s) => s.put({ ...rec, attempts: rec.attempts + rejectionCost(err) } satisfies AudioRecord));
       }
     }
   } catch {

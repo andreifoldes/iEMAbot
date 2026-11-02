@@ -197,6 +197,7 @@ class SaveStudyTest extends BaseWritePermissionTestSetup {
 			'id' => $this->studyId,
 			'accessKeys' => ['accessKey1', 'accessKey2'],
 			'published' => false,
+			'schedule' => (object) ['checkins' => []], // as the editor saves it (no upgrade, see test_old_config_gets_the_schedule)
 			'questionnaires' => [
 				(object) [
 					'internalId' => $this->internalId,
@@ -450,6 +451,22 @@ class SaveStudyTest extends BaseWritePermissionTestSetup {
 		$obj = new SaveStudy();
 		$output = $obj->exec();
 		$this->assertEqualConfigs($this->createCollection(true, false), $output['json']);
+	}
+	function test_old_config_gets_the_schedule() {
+		$adjustConfig = function($study) {
+			unset($study->schedule);
+			$study->questionnaires[0]->completableOnce = true;
+		};
+		Main::$defaultPostInput = json_encode($this->createCollection(false, false, $adjustConfig));
+		$obj = new SaveStudy();
+		$output = $obj->exec();
+		foreach($output['json'] as $langStudy) {
+			$this->assertEquals([(object) [
+				'questionnaireId' => $this->internalId, 'parallel' => true, 'startType' => 'fixed', 'startTime' => 0, 'prompt' => 'none',
+				'available' => 'range', 'endType' => 'fixed', 'endTime' => 0, 'endNextDay' => true, 'limit' => 'once',
+			]], $langStudy->schedule->checkins);
+			$this->assertFalse(isset($langStudy->questionnaires[0]->completableOnce));
+		}
 	}
 	function test_with_identical_internalIds() {
 		$newInternalId = $this->internalId;

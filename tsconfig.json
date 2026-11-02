@@ -17,5 +17,5 @@
 		"jsxFactory": "m",
 		"jsxFragmentFactory": "m.Fragment",
 	},
-	"include": ["src/frontend/**/*", "custom.d.ts"]
+	"include": ["src/frontend/**/*"]
 }

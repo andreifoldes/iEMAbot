@@ -17,6 +17,10 @@ The CSV, JSONL and media files remain the source for the researcher panel and it
 worked before changed. The database is the **queryable copy** on the server. Writes are best-effort: a
 database error is logged once per request to the server's error reports and never fails a participant's
 upload.
+
+The exception is phone sensing data (`sensor_data`, `sensor_chunks`, `sensor_batches`): it has no files and is kept **only** in
+this database, so it is written even when `sqlite_enabled` is off, and a database error fails the upload so the
+app retries. See [Phone sensing](./phone-sensing.md).
 :::
 
 ## What goes in
@@ -30,6 +34,9 @@ upload.
 | `push_events` | Push funnel: `sent`, `failed`, `received`, `clicked`. One row per event, so a participant with several devices has several identical `sent` rows | Each event |
 | `client_info` | Latest installed-as-PWA flag and device class per participant | Each report (latest wins) |
 | `wearable_measurements` | Synced Withings / Google Health measurements | Each hourly sync |
+| `sensor_data` | Phone sensing from the Android app (see [Phone sensing](./phone-sensing.md)): one row per prompt record, activity transition, app event or daily summary. `stream`, `user_id`, `sample_time` (epoch ms, 0 for daily rows), `local_date` (daily rows) and `label` (activity, package or event) are real columns; the rest is JSON in `data`, keyed by the stream's columns. Kept only here | Each upload batch |
+| `sensor_chunks` | Raw accelerometer samples from phone sensing, one compressed chunk per upload batch (`start_time`, `end_time`, `sample_count`, `encoding`, `data`; about 4 bytes per sample, format in [Phone sensing](./phone-sensing.md#accelerometer-chunks)). Kept only here | Each upload batch |
+| `sensor_batches` | One row per phone sensing upload batch (participant, stream, batch id, row count, time): recognises re-sent batches and feeds the admin overview | Each upload batch |
 
 Storing the response as JSON keyed by column name means adding or renaming a study variable never needs a
 schema change. Rows are de-duplicated on who sent them and when (user, entry id, response time), not on the
@@ -43,7 +50,7 @@ not participant data.
 
 **Reset study** removes the study's `responses`, `web_access` and `media` rows, exactly mirroring what it
 removes from disk. **Delete study** removes every row for the study from every table. Other studies are not
-touched. As with the files, Reset does not clear push, wearable or message data.
+touched. As with the files, Reset does not clear push, wearable, message or phone sensing data.
 
 ## Configuration
 

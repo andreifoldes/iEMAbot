@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "org.esmira.participant"
+    namespace = "org.iemabot.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "org.esmira.participant"
+        applicationId "org.iemabot.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Local test builds (android-app/scripts/ship-test.local.sh) bump these; defaults otherwise.
@@ -17,8 +17,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Release signing comes from the environment (CI secrets, see .github/workflows/android.yml).
+    // Without ANDROID_KEYSTORE_PATH the release APK is left unsigned.
+    def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -39,6 +55,9 @@ dependencies {
     implementation project(':capacitor-android')
     // Background poll for server-driven nudges (Apache-2.0, no Google Play services).
     implementation "androidx.work:work-runtime:2.9.1"
+    // Phone sensing: Activity Recognition (Transition API). Proprietary Google Play services library, used
+    // only when a study enables activity recognition; without Play services that sensor is simply unavailable.
+    implementation "com.google.android.gms:play-services-location:21.3.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

@@ -3,9 +3,10 @@
 Automated **WCAG 2.2 A/AA** audit of the ESMira participant PWA, using
 [axe-core](https://github.com/dequelabs/axe-core) driven by Playwright. It serves
 the real production build (`dist/pwa`) with `vite preview` and walks the whole
-participant journey — invite code → consent → name → the mandatory notifications
+participant journey — invite code → consent → the mandatory notifications
 step → the tutorial → a practice run of **every questionnaire** — running an axe
-scan at each state, in both the **light** and **dark** themes.
+scan at each state, in the **light** and **dark** themes and their **high-contrast**
+variants.
 
 This is the same check that gates a production deploy (see the deploy workflow).
 
@@ -18,8 +19,12 @@ This is the same check that gates a production deploy (see the deploy workflow).
   launch card, and info/image. The fixture is the real `ssrc` sample study (its
   morning / momentary / evening bundle) **plus** an injected "All Question Types"
   questionnaire, so the sample bundle is exercised too.
-- **Both themes**, so colour-contrast is checked against the actually rendered
-  colours in day and night mode.
+- **Four themes** (light, dark, high contrast, dark high contrast), so colour-contrast
+  is checked against the actually rendered colours in each display mode.
+  Text painted in the same colour as its background (1:1) is reported by axe only as
+  "needs review", on the assumption that it is hidden on purpose; the audit gates it as
+  `color-contrast-invisible` (serious), because on a visible control it is a label
+  nobody can read (e.g. white on white in a high-contrast theme).
 - **All the app chrome**: onboarding screens, the quick-actions menu, Settings
   and its sub-panels, the Details/study-info modal, Contact, and the recorder.
 - **Every install-guidance variant** on the invite-code screen. The guidance is chosen
@@ -83,7 +88,7 @@ A human-readable summary and the full machine-readable results are written to
 | `A11Y_MODE` | `fixture` | `fixture` = offline, deterministic, all question types. `live` = drive the real study over the network (needs VPN/connectivity; catches server drift). |
 | `A11Y_KEY` | `ssrc` | Study invite code used in `live` mode. |
 | `A11Y_FAIL_ON` | `critical,serious` | Impact levels that fail the gate. |
-| `A11Y_THEMES` | `light,dark` | Themes to audit. |
+| `A11Y_THEMES` | `light,dark,high-contrast,dark-high-contrast` | Themes to audit. A name containing `dark` or `high-contrast` turns that mode on. |
 | `A11Y_LIVE_BUNDLE` | – | `1` = walk morning/momentary/evening in *every* theme (slower). |
 | `A11Y_PORT` | `4318` | Port for the spawned `vite preview`. |
 | `A11Y_BASE_URL` | – | Audit an already-running server instead of spawning preview. |

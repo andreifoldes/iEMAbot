@@ -21,9 +21,10 @@ Everything collected from participants is also copied into a SQLite database in 
 | Media (images, audio, keystroke logs) | `studies/<id>/media/`, and `media` table (bytes optional) | No |
 | Wearable measurements | `studies/<id>/.wearables_data/*.csv`, and `wearable_measurements` table | No |
 | Wearable OAuth tokens | `studies/<id>/.wearables_tokens/` | **Yes** (libsodium `secretbox`), with plaintext fallback |
+| Phone sensing (light, activity, accelerometer, app usage) | `sensor_data`, `sensor_chunks` and `sensor_batches` tables of `esmira_data/iemabot.sqlite` only | No |
 | Push subscriptions | `studies/<id>/.push_subscriptions/` | No |
 | Push funnel events, client telemetry, participant messages | files under `studies/<id>/`, and the `push_events`, `client_info`, `participant_messages` tables | No |
-| Provider client secrets, token key, VAPID private key | Server config file in `backend/config/` | **No** (plaintext, outside web root via `.htaccess`) |
+| Provider client secrets, token key, VAPID private key, GitHub token | Server config file in `backend/config/` | **No** (plaintext, outside web root via `.htaccess`) |
 
 ## Third parties by design
 
@@ -32,6 +33,7 @@ Everything collected from participants is also copied into a SQLite database in 
 | Browser push services (FCM, Mozilla, Apple) | Encrypted push payloads containing the study or questionnaire title and a short body. |
 | Withings / Google Health | OAuth exchange and API pulls, server to provider; the provider also calls the server's webhook when new data exists. |
 | Google Fonts | The PWA's service worker fetches the Inter font. |
+| GitHub (only when set up, see [error reports as GitHub issues](../deployment/docker-and-cron.md#error-reports-as-github-issues)) | Each "Send error report": the participant's note and recent app errors, both with email addresses, phone and other long numbers, IP addresses, URL query strings, access keys, tokens, @handles removed; the first half of the participant's user id (also where the id appears in the text); the study id, app and server versions, pending uploads, online state, language, and browser and OS major versions. Not sent: the full user id, the full user agent (device model), the server address, the study title, survey answers. Names or addresses a participant writes in the note are not recognised and stay in. |
 
 ## Transport security
 
@@ -48,13 +50,15 @@ localhost). The wearables redirect URI falls back to `http` if `$_SERVER['HTTPS'
 | Decline notifications | Yes |
 | Unsubscribe from push | Yes |
 | Disconnect a wearable (deletes its token, data, cursor) | Yes |
-| Sign out (clears local storage, IndexedDB, caches, service worker, push subscription) | Yes |
+| Sign out (clears local storage, IndexedDB, caches, service worker, push subscription; records a `quit` event so the server sends nothing more, on any device) | Yes |
 | Participant-initiated deletion of **response data** | <span className="status status--tbc">TBC</span> not provided |
 
 ## Researcher controls
 
 CSV, media and wearable export; study backup; **Reset study** (wipes responses, statistics, media) and
-delete study. Reset does not currently clear the wearables or push folders. Reset and delete also remove the
+delete study; **Withdraw participant** (Push notifications panel: stops every reminder for one participant,
+see [Leaving the study](./web-push.md#leaving-the-study)). Reset does not currently clear the wearables, push
+or withdrawal folders. Reset and delete also remove the
 matching rows from the SQLite database (Reset: responses, web access and media; Delete: everything for the
 study).
 
@@ -68,7 +72,8 @@ study).
 
 The typing fallback records a **content-free event log** (letters are bucketed into classes, never stored as
 characters) as a CSV, **and** the typed text itself in the `<name>~text` column. The log therefore does not
-reveal text, but the response does.
+reveal text, but the response does. In the Android app the native keyboard-timing hook classifies characters
+on the device too and passes only the class and a timestamp to the web layer.
 
 ## Not yet provided
 

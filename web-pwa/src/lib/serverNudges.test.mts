@@ -20,9 +20,10 @@ test('native: passes the target through, omits an unknown joinedAt, and survives
     } },
   };
   assert.equal(await configureServerNudges('https://x/esmira/', 7, 'u1'), true);
-  assert.equal(await configureServerNudges('https://x/esmira/', 7, 'u1', 1234), true);
+  assert.equal(await configureServerNudges('https://x/esmira/', 7, 'u1', 1234, 'de'), true);
+  // the app plans reminders itself, so the poll asks only for sensor prompts
   assert.deepEqual(calls[0], { server: 'https://x/esmira/', studyId: 7, userId: 'u1' });
-  assert.deepEqual(calls[1], { server: 'https://x/esmira/', studyId: 7, userId: 'u1', joinedAt: 1234 });
+  assert.deepEqual(calls[1], { server: 'https://x/esmira/', studyId: 7, userId: 'u1', joinedAt: 1234, lang: 'de' });
   fail = true;
   assert.equal(await configureServerNudges('https://x/esmira/', 7, 'u1'), false);
   await cancelServerNudges();

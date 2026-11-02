@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { initInstallCapture } from './lib/pwaInstall';
 import { initJoinLinks } from './lib/joinLink';
+import { updateReload } from './lib/reloadGate';
 import './fonts';
 import './index.css';
 
@@ -31,11 +32,13 @@ if ('serviceWorker' in navigator) {
   // resets Chrome's install engagement. Guard on whether a controller already
   // existed at load so the first-install claim is ignored.
   const hadController = !!navigator.serviceWorker.controller;
-  let reloading = false;
+  // Held while a check-in is open, so an update never wipes one mid-answer (lib/reloadGate.ts).
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading || !hadController) return;
-    reloading = true;
-    window.location.reload();
+    if (!hadController) return;
+    updateReload.request();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') updateReload.hidden();
   });
 
   // One-time cleanup of the retiring iEMAbot's ROOT-scoped service worker. That

@@ -14,6 +14,7 @@ export const FILE_RESPONSES = FILE_ADMIN + "?type=GetData&study_id=%1&q_id=%2"
 export const FILE_CREATE_MEDIA = FILE_ADMIN + "?type=CreateMediaZip&study_id=%1"
 export const FILE_MEDIA = FILE_ADMIN + "?type=GetMediaZip&study_id=%1"
 export const FILE_WEARABLE_DATA = FILE_ADMIN + "?type=GetWearableDataZip&study_id=%1"
+export const FILE_PHONE_SENSING_DATA = FILE_ADMIN + "?type=GetPhoneSensingDataZip&study_id=%1"
 export const FILE_IMAGE = FILE_ADMIN + "?type=GetMedia&study_id=%1&userId=%2&entryId=%3&key=%4&media_type=image"
 export const FILE_AUDIO = FILE_ADMIN + "?type=GetMedia&study_id=%1&userId=%2&entryId=%3&key=%4&media_type=audio"
 export const FILE_SAVE_ACCESS = 'api/access.php'

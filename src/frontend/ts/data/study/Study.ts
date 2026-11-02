@@ -10,6 +10,7 @@ import { RepairStudy } from "../../helpers/RepairStudy";
 import { Lang } from "../../singletons/Lang";
 import { PluginContainer } from "./PluginContainer";
 import { StudyChannels } from "./StudyChannels";
+import { StudySchedule } from "./StudySchedule";
 
 export class Study extends DataStructure implements TranslatableRootInterface {
 	public lastChanged: number
@@ -38,13 +39,23 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// When enabled, the participant PWA registers a web-push subscription after
 	// consent and the server sends questionnaire reminders (see api/push_subscribe.php).
 	public webPushEnabled = this.primitive<boolean>("webPushEnabled", false)
+	// For studies with a voice-recording item: when enabled (default), the participant PWA explains
+	// during onboarding why it needs the microphone and only then shows the browser's prompt. When
+	// disabled, the browser asks the first time the recorder opens. See web-pwa/src/lib/permissions.ts.
+	public webMicOnboarding = this.primitive<boolean>("webMicOnboarding", true)
+	// When enabled (default), participants whose device does not allow notifications are asked once a day, above the
+	// questionnaire list, to turn them on (web and Android app). See web-pwa/src/lib/notificationNudge.ts.
+	public notificationNudge = this.primitive<boolean>("notificationNudge", true)
+	// Notifications in the native Android app (planned on the phone, plus wearable prompts fetched from
+	// api/native_pending.php). On by default, as the app has always sent them; off stops both.
+	public androidNotificationsEnabled = this.primitive<boolean>("androidNotificationsEnabled", true)
+	// Web push: when a participant's last check-in has closed or been completed, one silent "study complete" message
+	// takes the place of the last reminder on the phone (backend PushSender::studyEndPayload). On by default.
+	public studyEndNotificationEnabled = this.primitive<boolean>("studyEndNotificationEnabled", true)
 	// When enabled, the participant PWA only runs the study on a smartphone. Computers and
 	// tablets get an invite page with a QR code to continue on a phone instead
 	// (see web-pwa/src/lib/phoneGate.ts). A convenience check in the browser, not a security measure.
 	public webPhoneOnly = this.primitive<boolean>("webPhoneOnly", false)
-	// When enabled, the participant PWA does not ask for a display name; the participant
-	// is identified only by the generated study id.
-	public webSkipName = this.primitive<boolean>("webSkipName", false)
 	// Names an end-of-questionnaire read-out of the participant's own answers in the PWA
 	// (see web-pwa/src/lib/snapshot.ts). No editor control: set in the study source.
 	public webSnapshot = this.primitive<string>("webSnapshot", "")
@@ -54,9 +65,10 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// When enabled, a cognitive task card in the PWA offers Start task / Skip task / Remind me later /
 	// Skip check-in. No editor control: set in the study source.
 	public webTaskActions = this.primitive<boolean>("webTaskActions", false)
-	// When enabled, the PWA reveals the opening bubbles of a first visit and the closing bubbles of a
-	// check-in one by one at reading speed (see web-pwa/src/lib/pacing.ts). No editor control: set in the study source.
-	public webPacedMessages = this.primitive<boolean>("webPacedMessages", false)
+	// Reading speed (words per minute) at which consecutive bot messages are paced in every channel:
+	// each waits, behind a typing indicator, until the previous one has had time to be read
+	// (web-pwa/src/lib/pacing.ts, backend/channels/ReadingPace.php). 0 turns pacing off.
+	public messagePacingWpm = this.primitive<number>("messagePacingWpm", 238)
 	// When enabled, the participant PWA can connect a wearable (Withings/Google Health)
 	// via OAuth and the server polls it for data (see backend/wearables/, api/wearables_*).
 	// wearablesProviders limits which providers are offered; wearablesDataTypes (empty =
@@ -64,6 +76,26 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	public wearablesEnabled = this.primitive<boolean>("wearablesEnabled", false)
 	public wearablesProviders = this.primitiveArray<string>("wearablesProviders")
 	public wearablesDataTypes = this.primitiveArray<string>("wearablesDataTypes")
+	// Phone sensing in the native Android app (see sections/phoneSensing.tsx and backend/PhoneSensingStore.php).
+	// Light: one ambient-light sample whenever a questionnaire is opened and submitted. Activity: Google
+	// Activity Recognition transitions, recorded continuously. Accelerometer: raw samples from
+	// phoneSensingAccelBeforeMin before each scheduled prompt until phoneSensingAccelAfterMin after it, and
+	// while a questionnaire is open. Usage: app usage from Android's usage stats ("" = off, "daily",
+	// "events" or "both"); needs the participant to grant Usage access.
+	public phoneSensingLight = this.primitive<boolean>("phoneSensingLight", false)
+	public phoneSensingActivity = this.primitive<boolean>("phoneSensingActivity", false)
+	public phoneSensingAccelerometer = this.primitive<boolean>("phoneSensingAccelerometer", false)
+	public phoneSensingAccelBeforeMin = this.primitive<number>("phoneSensingAccelBeforeMin", 10)
+	public phoneSensingAccelAfterMin = this.primitive<number>("phoneSensingAccelAfterMin", 10)
+	public phoneSensingAccelHz = this.primitive<number>("phoneSensingAccelHz", 20)
+	public phoneSensingUsage = this.primitive<string>("phoneSensingUsage", "")
+	// When the app uploads what it sensed: "any" connection, "wifi_preferred" (mobile data only once data has
+	// waited phoneSensingWifiFallbackHours for Wi-Fi) or "wifi_only". With phoneSensingParticipantNetwork the
+	// participant may pick "any" or "wifi_preferred" in the app (not when the study says "wifi_only").
+	// Questionnaire answers always use any connection.
+	public phoneSensingUploadNetwork = this.primitive<string>("phoneSensingUploadNetwork", "wifi_preferred")
+	public phoneSensingWifiFallbackHours = this.primitive<number>("phoneSensingWifiFallbackHours", 24)
+	public phoneSensingParticipantNetwork = this.primitive<boolean>("phoneSensingParticipantNetwork", true)
 	// Whether participant-facing personal charts are enabled. Defaults to true so existing
 	// studies keep showing charts. Set to false to hide the charts tab entirely.
 	public enablePersonalCharts = this.primitive<boolean>("enablePersonalCharts", true)
@@ -92,6 +124,8 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	public contactEmail = this.translatable("contactEmail", "")
 	public rewardEmailContent = this.translatable("rewardEmailContent", "")
 	public rewardInstructions = this.translatable("rewardInstructions", "")
+	// Text of that message; empty = the default (NotificationSpec::STUDY_END_BODY).
+	public studyEndNotification = this.translatable("studyEndNotification", "")
 	public postStudyNote = this.translatable("postStudyNote", "")
 	public faq = this.translatable("faq", "")
 
@@ -104,6 +138,9 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// Messaging channels (currently Telegram, see backend/channels/). The backend reads
 	// channels.telegram.enabled; defaults are omitted from the saved JSON.
 	public channels = this.object("channels", StudyChannels)
+	// The study's one schedule: which check-ins open when and when participants are prompted, on every channel
+	// (see data/study/StudySchedule.ts, sections/schedule.tsx, backend/schedule/Schedule.php).
+	public schedule = this.object("schedule", StudySchedule)
 
 	constructor(data: DataStructureInputType, parent: BaseObservable<ObservableTypes> | null, lastChanged: number, repair: RepairStudy | null) {
 		if (repair != null && !repair.repairStudy(data))
@@ -175,11 +212,41 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 		return names;
 	}
 
-	public countScheduledAlarms(): number {
-		let alarms: number = 0
-		for (let questionnaire of this.questionnaires.get()) {
-			alarms += questionnaire.countScheduledAlarms()
+	/** Questionnaires with a check-in that prompts. In the web app their prompts arrive as push notifications. */
+	public getScheduledQuestionnaires(): Questionnaire[] {
+		const prompted = new Set(this.schedule.checkins.get().filter((c) => c.prompt.get() != "none").map((c) => c.questionnaireId.get()))
+		return this.questionnaires.get().filter((questionnaire) => prompted.has(questionnaire.internalId.get()))
+	}
+
+	/** "Questionnaire › item" for each voice-recording item. The web app needs the microphone for these. */
+	public getAudioInputLabels(): string[] {
+		const labels: string[] = []
+		for (const questionnaire of this.questionnaires.get()) {
+			for (const page of questionnaire.pages.get()) {
+				for (const input of page.inputs.get()) {
+					if (input.responseType.get() == "record_audio")
+						labels.push(`${questionnaire.getTitle()} › ${input.name.get()}`)
+				}
+			}
 		}
-		return alarms
+		return labels
+	}
+
+	/**
+	 * Names of the study's clock-time items, the candidates for a participant variable (habitual wake-up or
+	 * bedtime) that a sensor-trigger fallback or the daily check-in plan is anchored to. Time items asking
+	 * "how long ..." are left out: the PWA renders them as a duration picker (web-pwa/src/lib/esmiraAdapter.ts),
+	 * whose answers are minutes, not a time of day.
+	 */
+	public getTimeItemNames(): string[] {
+		const names = new Set<string>()
+		this.questionnaires.get().forEach((questionnaire) =>
+			questionnaire.pages.get().forEach((page) =>
+				page.inputs.get().forEach((input) => {
+					const isDuration = /\bhow long\b/.test(input.text.get().replace(/<[^>]+>/g, "").toLowerCase())
+					if (input.responseType.get() == "time" && !isDuration && input.name.get() != "")
+						names.add(input.name.get())
+				})))
+		return Array.from(names).sort()
 	}
 }

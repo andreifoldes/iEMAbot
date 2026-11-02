@@ -35,7 +35,8 @@ Durations need at least 1 minute. Item `description` (the **Explanation** field)
   at the cap, recording auto-stops into review.
 - The "Tap Stop when you are done" hint appears only when there is no prompt image.
 - **Picture tasks:** text before the first image shows on the chat card; the image and later text appear only
-  in the modal, which is 94 dvh high with the image maximised, so older participants can see it clearly.
+  in the modal, which fills the full screen height on phones with the image maximised, so older participants
+  can see it clearly. The modal title wraps rather than being cut off.
 - Optional memos can be skipped. The container is WebM or MP4 depending on the browser.
 
 ## Keystroke fallback {/* #keystroke-fallback */}
@@ -47,13 +48,26 @@ A typing alternative for participants who cannot or will not speak.
 - **Arming rule:** the `record_keystrokes` item must sit **immediately after** the `record_audio` item, on the
   same non-randomised page. It is then hidden unless the memo is skipped, and inherits the memo's prompt if
   its own is blank.
-- A modal with a textarea and a soft target of about **2 minutes of active writing** (gaps over 8 s do not
-  count; an idle hint appears after 12 s) shown as a progress bar.
-- `minLength` is a **soft floor** that holds the bar below 100% until met. Saving only needs non-empty text:
+- **Written in the chat row, like a messenger.** Tapping *Write your answer* turns the footer's one-line input
+  into a text box that grows with the answer (up to about six lines, then it scrolls). The full prompt stays
+  readable on the question card; for a picture task the picture and the instructions after it appear on the
+  card too (tap the picture to enlarge it). **Send** is the save: the answer settles into the thread as the
+  participant's message. Enter starts a new line; Ctrl/Cmd+Enter sends from a hardware keyboard.
+- A soft target of about **2 minutes of active writing** (gaps over 8 s do not count; an idle hint appears
+  after 12 s), shown as a progress bar and hint above the text box.
+- `minLength` is a **soft floor** that holds the bar below 100% until met. Sending only needs non-empty text:
   the floor never blocks submission.
-- **What is stored:** a CSV `class,hold,release,press` where letters are bucketed into classes and **never
-  stored as characters**, uploaded as `Keystrokes` media; plus the typed text in `<name>~text` and the
+- **What is stored:** a CSV `class,hold,release,press,source` where letters are bucketed into classes and
+  **never stored as characters**, uploaded as `Keystrokes` media; plus the typed text in `<name>~text` and the
   capture mode (physical vs soft keyboard) in `<name>~capture_mode`. Paste and focus loss are marked.
+- **`source`** says which clock timed the row. `dom` is the browser's event timestamp. `ime` is the Android
+  app's native timing: the app wraps the WebView's keyboard connection and stamps each soft-keyboard edit when
+  the keyboard's call reaches the app, before the renderer and JS event loop add latency and jitter. It also
+  splits Gboard-style *composing* updates into per-key classes, which the browser only reports as `other`.
+  In the Android app the `ime` rows replace the browser's soft-keyboard rows; focus, paste and hardware-key
+  rows stay `dom`. If the native hook records nothing, the `dom` rows are kept. Soft-keyboard rows have no
+  hold time on either path: the keyboard is a separate app, so the touch itself is never visible.
+- The Telegram handoff page (no chat row) still uses a full-screen writing modal with the same capture.
 
 ## "Other, please specify" {/* #other-please-specify */}
 

@@ -16,8 +16,7 @@ flowchart TD
   A -->|"link contains ?key="| E
   C --> D --> E[Welcome + study description]
   E --> F[Consent]
-  F --> G[Display name]
-  G --> H{Web Push enabled?}
+  F --> H{Web Push enabled?}
   H -- yes --> I["Notifications step<br/>+ welcome push check"]
   H -- no --> J
   I --> J{Tutorial?}
@@ -105,23 +104,26 @@ these studies.
 - **Off by default.** Only an explicit `true` gates, so existing studies behave as before.
 - **A convenience, not a lock.** The check runs in the participant's browser, so it protects data quality, not access.
 
-## Consent, name and join time
+## Consent and join time
 
 The study description (HTML) and consent text are shown, then *I consent* / *I do not consent*. A generic
-*Welcome to &lt;title&gt;.* line comes first, unless the description itself opens with "Welcome". The display
-name is cosmetic; the participant ID is assigned automatically. **The consent time is the enrolment anchor**
-(`esmira_joined_*`, event `joined`), from which `durationStartingAfterDays` and similar fields count.
+*Welcome to &lt;title&gt;.* line comes first, unless the description itself opens with "Welcome". The app
+never asks for a name: the participant is identified only by the participant ID, which is assigned
+automatically (or taken from the invite link). A display name stored by an older version is forgotten on the
+next launch. **The consent time is the enrolment anchor** (`esmira_joined_*`, event `joined`), from which
+`durationStartingAfterDays` and similar fields count.
 
-A researcher can tick **Do not ask participants for a name (web)** in the study settings (the `webSkipName`
-field). The name step is then skipped everywhere it would appear (first visit, after consent, after transferring
-a participant ID), and the Details panel shows no username.
-
-With `webPacedMessages` (source-edit only), a first visit shows the welcome, description and consent bubbles one
-after another instead of all at once. Before each bubble a typing indicator stays up for the previous bubble's
-reading time at 238 words per minute (`lib/pacing.ts`), at least 1.2 s and at most 10 s. The consent buttons
-appear with the last bubble. Returning participants, who have already consented, see no pacing. The same pacing
-applies to the closing bubbles after a check-in (the snapshot below, or the thank-you and the offer of another
-questionnaire), and the questionnaire list appears once they are all shown.
+Whenever the app says several things in a row (welcome, description and consent; the tutorial intro and its
+instructions; the closing bubbles after a check-in), the bubbles appear one after another instead of all at once.
+This is always on, for every study. Before each bot bubble that follows another bot bubble, a typing indicator
+stays up for the previous bubble's reading time (`lib/pacing.ts`), at least 1.2 s and at most 10 s, minus however long that bubble has already been on screen. The first reply to something the
+participant did, their own bubbles and settled question/answer pairs are never held back. Buttons, the
+questionnaire list, question cards and the text field wait for the last bubble, so nothing to tap appears above
+text still to come. A returning participant who reopens the app sees the opening bubbles at once. The Telegram
+bot paces its messages by the same rule, with Telegram's own "typing…" indicator
+(`src/backend/channels/ReadingPace.php`). The reading speed is a study setting, **Message pacing (words per minute)** (`messagePacingWpm`): 238 by
+default (an average adult reading speed), lower for more time, 0 to show messages at once. The former study field
+`webPacedMessages` is no longer read.
 
 ## End-of-questionnaire snapshot
 
@@ -151,17 +153,35 @@ study itself is still fetched, and the *contact the research team* message is st
 writes one. After a check-in the app says nothing was sent instead of "your responses have been recorded". The
 ESRS 2026 mini check-in uses it, and its end screen says so. Server access logs of the study request remain.
 
-## Task actions and pausing
+## Task actions
 
 With `webTaskActions` (source-edit only), a cognitive task card shows four buttons in two rows, as under a task in
 the Telegram bot: **Start task**, **Skip task** (drops only the task), **Remind me later** and **Skip check-in**
 (drops the whole questionnaire; nothing is submitted).
 
-**Remind me later** parks the check-in **on this device** (`lib/pausedCheckin.ts`, key `esmira_paused_<study>_<id>`):
-answers so far, the position, and any recording or typing identifiers. No push is scheduled, so the app says the
-answers are saved and does not promise a reminder. The questionnaire list then shows *Paused — tap to carry on*;
-resuming replays the earlier answers into the chat and continues where it stopped. Finishing, skipping or resuming
-clears the saved copy. One paused check-in is kept per study and participant.
+**Remind me later** parks the check-in on this device (see below) and returns to the list, which shows
+*Paused — tap to carry on*. No push is scheduled, so the app says the answers are saved and does not promise a
+reminder.
+
+## Closing the app mid-check-in
+
+The web and Android app save a check-in in progress **on this device** after every answer, skip and changed
+answer, and when it starts (`lib/pausedCheckin.ts`, key `esmira_paused_<study>_<id>_<questionnaire>`): answers so
+far, the position, the order of randomized pages and the drawn task battery, revealed skip fallbacks, any recording
+or typing identifiers, and the window it was opened in. Nothing is sent to the server until the check-in is
+submitted.
+
+- **Background, then back**: nothing changes, the check-in is still on screen. If its window closed meanwhile, it
+  still counts against the window it was opened in.
+- **Closed or killed, reopened while the window is open**: the app reopens the check-in by itself, replays the
+  earlier answers into the chat and carries on at the question it stopped on. One parked with **Remind me later**
+  waits on the list instead.
+- **Reopened after the window closed**, or once the questionnaire is done: the saved answers are dropped. A check-in
+  is never resumed into a later window, so tomorrow's morning check-in starts empty.
+
+Submitting or skipping the check-in clears the saved copy; one is kept per questionnaire. In the web app, an app
+update that arrives during a check-in waits until it is over and applies the next time the app goes to the
+background (`lib/reloadGate.ts`), so it does not reload the page mid-answer.
 
 ## Notifications step
 
@@ -178,6 +198,8 @@ practice runs of every questionnaire. **Nothing is saved or sent** from a practi
 ## Questionnaire list and survey
 
 Available questionnaires are buttons; others are disabled with a lock and a reason such as *Opens at 20:00*.
+A questionnaire whose check-in has `autoStart` (e.g. usual sleep times on day zero) starts by itself when the
+participant reaches the list while it is open, before any other, and is left out of the tutorial's practice runs.
 The header shows *Day N of M*, *Starts [date]*, or *Ended [date]*.
 
 In a survey, one card appears at a time with a progress bar. The footer text box is used only for plain
@@ -189,19 +211,12 @@ another questionnaire?"* appears only if another is actually available now.
 
 ## Availability {/* #availability */}
 
-`availability.ts` computes one of: *available, upcoming, ended, completed, locked*, re-evaluated every 60 s
-while the app is open.
-
-| Rule | Honoured fields |
-| --- | --- |
-| Study window | `durationStart` / `durationEnd`, `durationStartingAfterDays`, `durationPeriodDays` (anchored on enrolment, local-day boundaries) |
-| Once | `completableOnce` |
-| Once per day | `completableOncePerDay`: locks until the next scheduled day (passive questionnaires reopen at midnight) |
-| Frequency | `limitCompletionFrequency` / `completionFrequencyMinutes` |
-| Per notification | `completableOncePerNotification` with `completableMinutesAfterNotification` as window length |
-| Fixed window | `completableAtSpecificTime` start/end |
-| Signal windows | From `actionTriggers.schedules` (`dailyRepeatRate`, `weekdays`, `dayOfMonth`, `skipFirstInLoop`, `startDayOne`); a window stays open until end of day unless a timeout is set |
-| Passive | No signals: gated only by the duration fields |
+The study's schedule (`lib/schedule.ts`, the port of the server's `Schedule.php`) gives each questionnaire one of:
+*available, upcoming, ended, completed, locked*, with a reason such as *Opens at 20:00* or *Opens after you get up
+(by 08:30)*, re-evaluated every 60 s while the app is open. A questionnaire is available inside one of its check-in
+windows that is not done yet; one without a check-in is never available. The windows are computed on the device from
+the server's cached inputs (`api/schedule.php`: usual sleep times, wearable events) and the device's own completions,
+so they keep working offline. See [Scheduling](../backend/scheduling.md).
 
 ## Connecting a wearable {/* #wearables */}
 
@@ -235,14 +250,14 @@ providers (Withings, Google Health). Otherwise nothing wearable-related appears.
 
 | Screen | Content |
 | --- | --- |
-| Settings | Dark mode, high contrast, reduce motion (defaults to the OS setting), text size (Normal → XX-Large), send error report (with a preview; no survey answers), "Notifications not working?", connect wearables, update studies, About |
+| Settings | Dark mode, high contrast, reduce motion (defaults to the OS setting), text size (Default → XX-Large), send error report (with a preview; no survey answers), "Notifications not working?", connect wearables, update studies, About |
 | About | App version (root `package.json`), server version, server URL, upstream ESMira link |
-| Details | Username, user ID, server URL, joined at, completed questionnaires, next notification, wearables, study description, consent, **upload protocol** (sent / pending) |
+| Details | User ID, server URL, joined at, completed questionnaires, next notification, wearables, study description, consent, **upload protocol** (sent / pending) |
 | Contact | Free-text message to the researcher via `save_message.php` |
-| Sign out | Full local reset, then reload |
+| Sign out | Tells the server the participant has left (server-side unsubscribe + `quit` event, so no reminder reaches them again on any device), cancels the Android app's alarms and background poll, full local reset, then reload. A device the server reports as withdrawn (signed out elsewhere, or withdrawn by the research team) resets itself on launch. |
 
-:::note[Appearance settings do not persist]
-Dark mode, contrast and text size are in-memory state and **reset on reload**.
+:::note[Appearance settings are kept on the device]
+Dark mode, contrast, reduce motion and text size are stored on the device, so they survive a reload. Until the participant changes them, they follow the phone's own settings.
 :::
 
 ## Optional device lock

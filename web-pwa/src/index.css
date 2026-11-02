@@ -3,7 +3,10 @@
 /* Drive `dark:` utilities from a `.dark` ancestor class (not prefers-color-scheme). */
 @custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
+/* `inline`: utilities read the --sys-* variables where they are used, not where the theme
+   variables are declared. Without it, --color-* resolve once on :root, so the `.dark` and
+   `.high-contrast` overrides on the app shell never reach bg-surface, text-on-surface etc. */
+@theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --color-primary: var(--sys-primary);
@@ -50,7 +53,13 @@
     --sys-outline-variant: #bec9c5;
   }
 
+  /* WhatsApp-style dark theme in the app's own palette: a near-black chat background,
+     charcoal bubbles, cards, header, input row and menus (surface-container-lowest is the
+     card colour in both themes, so in dark it sits above the background), a lighter grey for
+     the text field and chips, and off-white text. Outgoing bubbles use primary-container. */
   .dark {
+    color-scheme: dark;
+
     --sys-primary: #80d59e;
     --sys-primary-container: #005222;
     --sys-on-primary: #003815;
@@ -59,12 +68,12 @@
     --sys-secondary-container: #005047;
     --sys-on-secondary-container: #a5ede0;
 
-    --sys-surface: #191c1e;
-    --sys-surface-container: #1e2123;
-    --sys-surface-container-low: #191c1e;
-    --sys-surface-container-high: #282b2d;
-    --sys-surface-container-highest: #333638;
-    --sys-surface-container-lowest: #0f1113;
+    --sys-surface: #0f1113;
+    --sys-surface-container: #191c1e;
+    --sys-surface-container-low: #0f1113;
+    --sys-surface-container-high: #333638;
+    --sys-surface-container-highest: #3d4042;
+    --sys-surface-container-lowest: #26292b;
 
     --sys-on-surface: #e1e3e4;
     --sys-on-surface-variant: #bfc8c4;
@@ -101,7 +110,8 @@
 
 .high-contrast.dark {
   --sys-primary: #ffffff;
-  --sys-primary-container: #ffffff;
+  /* Outgoing bubbles pair this with on-surface in dark mode, so it must stay dark. */
+  --sys-primary-container: #000000;
   --sys-on-primary: #000000;
 
   --sys-secondary: #ffffff;
@@ -135,6 +145,14 @@
   background-color: var(--sys-surface) !important;
   color: var(--sys-on-surface) !important;
   border-bottom: 2px solid var(--sys-on-surface);
+}
+
+/* Header pills (the compact Install button) are white on a translucent white for the green
+   header; the high-contrast header is the surface colour, so draw them in its ink instead. */
+.high-contrast header .header-pill {
+  background-color: var(--sys-surface) !important;
+  color: var(--sys-on-surface) !important;
+  border: 2px solid var(--sys-on-surface);
 }
 
 .high-contrast footer {
@@ -253,8 +271,12 @@ textarea:focus-visible {
 
 /* Reflow for very short viewports (400 % zoom on a phone is about 320 x 256 CSS px,
    WCAG 1.4.10): the header and footer stop reserving space and the whole page scrolls
-   as one document instead of leaving a sliver for the conversation. */
-@media (max-height: 30rem) {
+   as one document instead of leaving a sliver for the conversation.
+   The breakpoint must be in px: a rem/em in a media query is measured against the browser's
+   default font size, which Android raises with the system font size. At 30rem a phone with a
+   large system font (default 28px+ → 840px+) fell into this mode in portrait, so the header
+   scrolled away and the chat row stopped sticking to the bottom (shellLayout.test.mts). */
+@media (max-height: 480px) {
   .app-shell {
     height: auto;
     min-height: 100dvh;
@@ -264,4 +286,21 @@ textarea:focus-visible {
     flex: none;
     overflow: visible;
   }
+}
+
+/* The text-size setting scales the root font size, which only the conversation should
+   follow. The header and the chat row (menu, input, send button) keep a fixed size and
+   height: re-pin the rem-based Tailwind theme values they use to px at the default scale. */
+.app-header,
+.app-footer {
+  --spacing: 4px;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  font-size: 16px;
 }

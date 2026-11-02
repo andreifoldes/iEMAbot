@@ -60,6 +60,61 @@ export class Content extends SectionContent {
 		this.goTo("admin/allStudies:edit")
 	}
 
+	/**
+	 * Device permissions the participant web app asks for, worked out from the study's items,
+	 * with the switch that controls each. The PWA explains each one during onboarding before
+	 * the browser's prompt (see web-pwa/src/lib/permissions.ts).
+	 */
+	private getPermissionsView(study: Study): Vnode<any, any> {
+		const scheduled = study.getScheduledQuestionnaires().map((questionnaire) => questionnaire.getTitle())
+		const audioItems = study.getAudioInputLabels()
+		const notificationsAsked = study.webPushEnabled.get()
+		const microphoneAsked = audioItems.length != 0 && study.webMicOnboarding.get()
+		const askedBadge = (asked: boolean) =>
+			<small class={asked ? "" : "highlight"}>{Lang.get(asked ? "permission_asked_at_onboarding" : "permission_not_asked")}</small>
+
+		return <div>
+			{TitleRow(Lang.getWithColon("participant_permissions"))}
+			<div class="center spacingBottom"><small>{Lang.get("participant_permissions_info")}</small></div>
+			{DashRow(
+				DashElement("vertical", {
+					content:
+						<div>
+							<div class="dashTitle">{Lang.get("permission_notifications")} · {askedBadge(notificationsAsked)}</div>
+							<small>{scheduled.length
+								? Lang.get("permission_needed_by", scheduled.join(", "))
+								: Lang.get("permission_notifications_not_needed")}</small>
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.webPushEnabled)} />
+								<span>{Lang.get("permission_notifications_toggle")}</span>
+							</label>
+							{scheduled.length != 0 && !notificationsAsked &&
+								<div><small class="highlight">{Lang.get("permission_notifications_off_warning")}</small></div>}
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.notificationNudge)} />
+								<span>{Lang.get("permission_notifications_nudge_toggle")}</span>
+							</label>
+						</div>
+				}),
+				DashElement("vertical", {
+					content:
+						<div>
+							<div class="dashTitle">{Lang.get("permission_microphone")} · {askedBadge(microphoneAsked)}</div>
+							<small>{audioItems.length
+								? Lang.get("permission_needed_by", audioItems.join(", "))
+								: Lang.get("permission_microphone_not_needed")}</small>
+							<label class="noTitle noDesc">
+								<input type="checkbox" {...BindObservable(study.webMicOnboarding)} disabled={audioItems.length == 0} />
+								<span>{Lang.get("permission_microphone_toggle")}</span>
+							</label>
+							{audioItems.length != 0 && !microphoneAsked &&
+								<div><small>{Lang.get("permission_microphone_first_use")}</small></div>}
+						</div>
+				})
+			)}
+		</div>
+	}
+
 	public getView(): Vnode<any, any> {
 		const study = this.getStudyOrThrow()
 		const studyMetadata: StudyMetadata | null = this.sectionData.siteData.studyLoader.studyMetadata[study.id.get()]
@@ -139,9 +194,9 @@ export class Content extends SectionContent {
 					content:
 						<div class="vAlignCenter">
 							<label class="noTitle noDesc">
-								<input type="checkbox" {...BindObservable(study.webSkipName)} disabled={!study.publishedWeb.get()} />
-								<span>{Lang.get('web_skip_name')}</span>
-								<small>{Lang.get('web_skip_name_info')}</small>
+								<input type="number" {...BindObservable(study.messagePacingWpm, new ConstrainedNumberTransformer(0, 2000))} />
+								<span>{Lang.get('message_pacing_wpm')}</span>
+								<small>{Lang.get('message_pacing_wpm_info')}</small>
 							</label>
 						</div>
 				}),
@@ -210,6 +265,8 @@ export class Content extends SectionContent {
 
 
 
+
+			{this.getPermissionsView(study)}
 
 			{TitleRow(Lang.getWithColon("personal_charts"))}
 			{DashRow(

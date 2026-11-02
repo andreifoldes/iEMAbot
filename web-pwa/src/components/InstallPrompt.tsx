@@ -113,7 +113,7 @@ export function InstallPrompt({
         onClick={platform === 'native' ? runNativePrompt : () => setShowHint((v) => !v)}
         aria-label="Install app"
         aria-expanded={platform === 'native' ? undefined : showHint}
-        className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs px-3 py-1.5 rounded-full active:scale-95 transition-all"
+        className="header-pill inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs px-3 py-1.5 rounded-full active:scale-95 transition-all"
       >
         {platform === 'native' ? <Download size={14} aria-hidden="true" /> : <Share size={14} aria-hidden="true" />}
         <span>Install</span>
@@ -463,7 +463,7 @@ function PhoneHandoff({ defaultOpen }: { defaultOpen: boolean }) {
           <div className="w-full">
             <CopyLink />
           </div>
-          <p className="text-[0.75rem] text-on-surface-variant leading-relaxed">
+          <p className="text-[12px] text-on-surface-variant leading-relaxed">
             Open it in <strong>Safari</strong> or <strong>Chrome</strong> (iPhone), or{' '}
             <strong>Chrome</strong> (Android).
           </p>

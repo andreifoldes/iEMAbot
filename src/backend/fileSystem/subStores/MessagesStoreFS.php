@@ -43,10 +43,11 @@ class MessagesStoreFS implements MessagesStore {
 				continue;
 			
 			if(($isAdmin || in_array($studyId, $msgPermissions)) && $this->hasMessages((int) $studyId)) {
-				$ids[] = $studyId;
+				$ids[] = (int) $studyId;
 			}
 		}
 		closedir($handle);
+		sort($ids); // readdir() order depends on the filesystem
 		return $ids;
 	}
 	public function getMessagesList(int $studyId, string $userId): array {
@@ -91,7 +92,8 @@ class MessagesStoreFS implements MessagesStore {
 			}
 			closedir($handle);
 		}
-		
+		// By participant. readdir() order depends on the filesystem.
+		usort($list, fn($a, $b) => strcmp($a->name, $b->name));
 		return $list;
 	}
 	

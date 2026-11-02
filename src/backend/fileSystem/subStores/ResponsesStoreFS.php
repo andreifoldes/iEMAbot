@@ -159,6 +159,7 @@ class ResponsesStoreFS implements ResponsesStore {
 			$lastActivities[$studyId] = filemtime($path);
 		}
 		closedir($handle);
+		ksort($lastActivities); // readdir() order depends on the filesystem
 		return $lastActivities;
 	}
 

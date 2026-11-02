@@ -6,6 +6,7 @@ use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\JsonOutput;
 use backend\Main;
+use backend\notifications\ParticipantWithdrawals;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -49,8 +50,15 @@ $file = PathsFS::filePushSubscription($studyId, $userId);
 
 try {
 	if($unsubscribe) {
-		if(file_exists($file))
-			unlink($file);
+		// Sign-out / leaving the study: drop the subscription and its cursor state at once, so the
+		// per-minute sender cannot queue one more reminder before the quit event arrives.
+		ParticipantWithdrawals::forgetDeliveryState($studyId, $userId);
+	}
+	else if(ParticipantWithdrawals::isWithdrawn($studyId, $userId)) {
+		// A device that still holds this participant's identity after they left (a second device,
+		// a researcher-side withdrawal) must not re-enable reminders.
+		echo JsonOutput::error('This participant has left the study', ParticipantWithdrawals::ERROR_CODE);
+		return;
 	}
 	else {
 		// Browser PushSubscription: { endpoint, keys: { p256dh, auth } }.
@@ -70,6 +78,9 @@ try {
 			'userId' => $userId,
 			'subscription' => $subscription,
 			'tzOffset' => isset($json->tzOffset) ? (int) $json->tzOffset : 0,
+			// Same language resolution as api/studies.php for this browser, so reminders are in
+			// the language the participant sees the study in.
+			'lang' => preg_match('/^[a-zA-Z_-]{2,10}$/', $lang = Main::getLang(false)) ? $lang : '',
 			'created' => Main::getMilliseconds(),
 		]));
 	}

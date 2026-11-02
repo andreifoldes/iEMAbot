@@ -1,0 +1,120 @@
+{
+    "_comment": "Notification content shared by web push (NotificationSpec.php) and the Android app (notificationSpec.ts): NotificationParityTest.php and notificationParity.test.mts. When notifications are sent comes from the schedule (schedule.json).",
+    "content": {
+        "title": [
+            {
+                "q": {
+                    "title": " Morning "
+                },
+                "study": {
+                    "title": "S"
+                },
+                "expected": "Morning"
+            },
+            {
+                "q": {
+                    "title": ""
+                },
+                "study": {
+                    "title": " Sleep study "
+                },
+                "expected": "Sleep study"
+            },
+            {
+                "q": [],
+                "study": [],
+                "expected": "iEMAbot"
+            },
+            {
+                "q": {
+                    "title": "Morning"
+                },
+                "study": {
+                    "title": "S"
+                },
+                "override": " Time to check in ",
+                "expected": "Time to check in"
+            },
+            {
+                "q": {
+                    "title": "Morning"
+                },
+                "study": {
+                    "title": "S"
+                },
+                "override": "   ",
+                "expected": "Morning"
+            }
+        ],
+        "withDeadline": [
+            {
+                "body": "B",
+                "tod": 30600000,
+                "expected": "B Complete by 08:30."
+            },
+            {
+                "body": "B",
+                "tod": 86400000,
+                "expected": "B Complete by 23:59."
+            }
+        ],
+        "coalesce": [
+            {
+                "items": [
+                    {
+                        "title": "A",
+                        "body": "a"
+                    }
+                ],
+                "study": {
+                    "title": "S"
+                },
+                "expected": [
+                    "A",
+                    "a"
+                ]
+            },
+            {
+                "items": [
+                    {
+                        "title": "A",
+                        "body": "a"
+                    },
+                    {
+                        "title": "B",
+                        "body": "b"
+                    }
+                ],
+                "study": {
+                    "title": "S"
+                },
+                "expected": [
+                    "S",
+                    "You have 2 questionnaires to complete."
+                ]
+            }
+        ],
+        "hash32": [
+            {
+                "s": "",
+                "expected": 2166136261
+            },
+            {
+                "s": "a",
+                "expected": 3826002220
+            },
+            {
+                "s": "iEMAbot",
+                "expected": 17077026
+            },
+            {
+                "s": "7:p-42:3:0:0:0:2026-07-10:1",
+                "expected": 4126607609
+            },
+            {
+                "s": "Ünïcödé",
+                "expected": 50751474
+            }
+        ]
+    }
+}

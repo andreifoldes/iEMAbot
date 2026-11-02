@@ -17,6 +17,15 @@ interface ConversationalChannel extends ChannelInterface {
 	public function send(string $chatRef, OutboundMessage $message): string;
 
 	/**
+	 * The participant in $chatRef just wrote or tapped something. Channels pace consecutive
+	 * messages to reading speed (ReadingPace); the first answer to the participant is not held back.
+	 */
+	public function heard(string $chatRef): void;
+
+	/** $chatRef belongs to $study: pace its messages at the study's reading speed (`messagePacingWpm`). */
+	public function paceFor(string $chatRef, array $study): void;
+
+	/**
 	 * Replace the text/buttons of an earlier message. Returns false when the platform
 	 * refused (message too old, unchanged, ...); callers then send a new message.
 	 */

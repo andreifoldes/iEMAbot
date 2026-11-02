@@ -1,7 +1,12 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">ESMira</string>
-    <string name="title_activity_main">ESMira</string>
-    <string name="package_name">org.esmira.participant</string>
-    <string name="custom_url_scheme">org.esmira.participant</string>
+    <string name="app_name">iEMAbot</string>
+    <string name="title_activity_main">iEMAbot</string>
+    <string name="package_name">org.iemabot.app</string>
+    <string name="custom_url_scheme">org.iemabot.app</string>
+    <!-- Phone sensing: notification while the accelerometer records around a questionnaire (sensing/AccelerometerService) -->
+    <string name="sensing_channel_name">Study motion recording</string>
+    <string name="sensing_channel_description">Shown while the app records motion around a questionnaire</string>
+    <string name="sensing_notification_title">Recording motion for your study</string>
+    <string name="sensing_notification_text">Around your questionnaire only. Stops by itself.</string>
 </resources>

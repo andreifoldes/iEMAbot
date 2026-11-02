@@ -22,15 +22,17 @@ class SSETest extends TestCase {
 	 * Test that `flushProgress` flushes the correct progress only when progress changes.
 	 */
 	public function testFlushProgressWithNewProgress(): void {
-		$invokedCount = $this->exactly(2);
+		// Counted here rather than with InvokedCount::getInvocationCount(), which PHPUnit 10 removed.
+		$calls = 0;
 		$this->sse
-			->expects($invokedCount)
+			->expects($this->exactly(2))
 			->method('flushContent')
-			->willReturnCallback(function($content) use($invokedCount) {
-				if($invokedCount->getInvocationCount() === 1) {
+			->willReturnCallback(function($content) use(&$calls) {
+				++$calls;
+				if($calls === 1) {
 					$this->assertSame("event: progress\ndata: {\"progress\": 25}\n\n", $content);
 				}
-				else if($invokedCount->getInvocationCount() === 2) {
+				else if($calls === 2) {
 					$this->assertSame("event: progress\ndata: {\"progress\": 50}\n\n", $content);
 				}
 				

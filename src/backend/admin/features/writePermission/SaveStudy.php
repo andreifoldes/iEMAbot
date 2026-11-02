@@ -14,6 +14,7 @@ use backend\exceptions\PageFlowException;
 use backend\Main;
 use backend\Permission;
 use backend\ResponsesIndex;
+use backend\schedule\ScheduleUpgrade;
 use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\StudyAccessIndexStore;
 use backend\subStores\StudyStore;
@@ -297,6 +298,10 @@ class SaveStudy extends HasWritePermission {
 		$oldInternalId = $questionnaire->internalId ?? 0;
 		$questionnaire->internalId = $newInternalId;
 		foreach($this->studyCollection as $langStudy) {
+			foreach($langStudy->schedule->checkins ?? [] as $checkin) { // its check-ins follow it (-1: none yet)
+				if($oldInternalId > 0 && ($checkin->questionnaireId ?? -1) == $oldInternalId)
+					$checkin->questionnaireId = $newInternalId;
+			}
 			foreach($langStudy->questionnaires ?? [] as $q) {
 				foreach($q->actionTriggers ?? [] as $actionTrigger) {
 					foreach($actionTrigger->eventTriggers ?? [] as $eventTrigger) {
@@ -484,6 +489,17 @@ class SaveStudy extends HasWritePermission {
 		
 		if($this->studyStore->getStudyLastChanged($this->studyId) > (int)$_GET['lastChanged'])
 			throw new PageFlowException('The study configuration was changed (by another account?) since you last loaded it. You can not save your changes. Please reload the page.');
+		
+		
+		//
+		// A config still in the old form (e.g. an imported file) gets the one schedule, as the 3.7.0 update gave
+		// every stored study (see backend/schedule/ScheduleUpgrade.php).
+		//
+		foreach($this->studyCollection as $langCode => $langStudy) {
+			if(ScheduleUpgrade::needed(json_decode(json_encode($langStudy), true)))
+				$this->studyCollection->$langCode = ScheduleUpgrade::upgradeObject($langStudy);
+		}
+		$study = $this->mainStudy = $this->studyCollection->_;
 		
 		
 		//

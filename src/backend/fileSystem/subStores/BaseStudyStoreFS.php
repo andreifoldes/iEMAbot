@@ -67,6 +67,7 @@ abstract class BaseStudyStoreFS implements BaseStudyStore
 			}
 		}
 		closedir($handle);
+		sort($studies); // readdir() order depends on the filesystem
 		return $studies;
 	}
 

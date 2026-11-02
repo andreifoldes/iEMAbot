@@ -7,4 +7,6 @@ export class Action extends DataStructure {
 	public reminder_delay_minu				= this.primitive<number>(		"reminder_delay_minu",		5)
 	
 	public msgText							= this.translatable(			"msgText",					"")
+	// iEMAbot: notification title for this trigger on every channel; empty = the questionnaire title.
+	public msgTitle							= this.translatable(			"msgTitle",					"")
 }

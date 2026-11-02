@@ -31,5 +31,8 @@ return [
 	'langCodes' => ['en'], //will be used for privacyPolicy, legal and servername. The optional languages of the UI are hardcoded and will not be influenced by this value
 	// Lets the ESMira Android app (Capacitor WebView, origin https://localhost) call the participant API. Off by default; see backend/Cors.php
 	'native_app_cors' => false,
+	// Participants' "Send error report" messages can also be filed as GitHub issues; set the repository and token with cli/github_issues_setup.php
+	'github_issues_repo' => '', //owner/name
+	'github_issues_labels' => ['participant-report'],
 	'webOnlyMode' => false //when true, iOS/Android-only features are greyed out in the admin (web PWA only deployment)
 ];

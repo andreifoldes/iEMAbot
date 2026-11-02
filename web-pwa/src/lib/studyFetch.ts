@@ -16,6 +16,8 @@ export interface FetchedStudy {
   vapidPublicKey?: string;
   /** Wearable providers with credentials configured on the server. */
   wearableProviders?: string[];
+  /** True when the server could not be reached and this is the copy saved on the device. */
+  fromCache?: boolean;
 }
 
 const STUDY_ENV_PREFIX = 'esmira_study_env:';
@@ -52,12 +54,12 @@ export async function fetchStudy(accessKey: string, studyId?: number): Promise<F
     resp = await fetch(url, { headers: { Accept: 'application/json' } });
   } catch (err) {
     const cached = readCachedEnvelope(cacheKey);
-    if (cached) return pickStudy(cached, studyId);
+    if (cached) return { ...pickStudy(cached, studyId), fromCache: true };
     throw err;
   }
   if (!resp.ok) {
     const cached = resp.status >= 500 ? readCachedEnvelope(cacheKey) : null;
-    if (cached) return pickStudy(cached, studyId);
+    if (cached) return { ...pickStudy(cached, studyId), fromCache: true };
     throw new Error(`studies.php returned ${resp.status}`);
   }
   const env = (await resp.json()) as StudiesEnvelope;

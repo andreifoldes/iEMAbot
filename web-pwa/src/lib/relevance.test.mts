@@ -111,3 +111,123 @@ test('rich-text page headers become plain section labels', async () => {
   } as EsmiraQuestionnaire, 0);
   assert.equal(s.sections?.[0].description, 'Part 1');
 });
+
+/** Mirrors the live SSRC "Social Company" page: each rating pair applies to one branch only. */
+function makeSocialQuestionnaire(): EsmiraQuestionnaire {
+  const likert = (name: string, relevance: string) =>
+    ({ name, responseType: 'likert', required: true, relevance, text: name });
+  return {
+    internalId: 2,
+    title: 'Momentary',
+    pages: [{
+      inputs: [
+        {
+          name: 'momentaryCheckinWithWhom',
+          responseType: 'list_single',
+          required: true,
+          text: 'Who are you with right now?',
+          listChoices: ['Partner', 'Family', 'Friend', 'Nobody'],
+        },
+        likert('momentaryCheckinLikeCompany', 'momentaryCheckinWithWhom != "Nobody"'),
+        likert('momentaryCheckinLikeAlone', 'momentaryCheckinWithWhom == "Nobody"'),
+        likert('momentaryCheckinRatherAlone', 'momentaryCheckinWithWhom != "Nobody"'),
+        likert('momentaryCheckinRatherCompany', 'momentaryCheckinWithWhom == "Nobody"'),
+        { name: 'after', responseType: 'text_input', text: 'After' },
+      ],
+    }],
+  } as EsmiraQuestionnaire;
+}
+
+function socialFlow(withWhom: string): string[] {
+  const engine = new OfflineSurveyEngine(adaptQuestionnaire(4001, makeSocialQuestionnaire(), 0));
+  const asked: string[] = [];
+  let q = engine.respond('momentaryCheckinWithWhom', withWhom);
+  while (q && q.id !== 'after') {
+    asked.push(q.id);
+    q = engine.respond(q.id, '3');
+  }
+  return asked;
+}
+
+test('engine: answering "Nobody" asks only the being-alone ratings', () => {
+  assert.deepEqual(socialFlow('Nobody'), ['momentaryCheckinLikeAlone', 'momentaryCheckinRatherCompany']);
+});
+
+test('engine: being with someone asks only the company ratings', () => {
+  assert.deepEqual(socialFlow('Friend'), ['momentaryCheckinLikeCompany', 'momentaryCheckinRatherAlone']);
+});
+
+/**
+ * Mirrors the live SSRC morning "Sleep Diary" → "Bed Exit Diary" → "Sleepiness Scale" pages: the
+ * bed-exit count is gated on the night-wakings count, and the bed-exit reason on the bed-exit count.
+ */
+function makeBedExitQuestionnaire(): EsmiraQuestionnaire {
+  const counts = ['0', '1', '2', '3', '4', '5+'];
+  return {
+    internalId: 3,
+    title: 'Morning',
+    pages: [
+      {
+        header: 'Sleep Diary',
+        inputs: [{
+          name: 'morningNightWakings', responseType: 'list_single', required: true,
+          text: 'How many times did you wake up during the night?', listChoices: counts,
+        }],
+      },
+      {
+        header: 'Bed Exit Diary',
+        inputs: [
+          {
+            name: 'morningBedExits', responseType: 'list_single', required: true,
+            relevance: 'morningNightWakings != "0"',
+            text: 'How many times did you get out of bed during the night?', listChoices: counts,
+          },
+          {
+            name: 'morningBedExitReason', responseType: 'list_single', required: true,
+            relevance: 'morningBedExits != "0"',
+            text: 'What was the main reason you got up? (choose one)',
+            listChoices: ['Needed the bathroom', 'Discomfort or pain', "Couldn't sleep / restless", 'Something else'],
+          },
+        ],
+      },
+      {
+        header: 'Sleepiness Scale',
+        inputs: [{ name: 'morningKss', responseType: 'likert', required: true, text: 'How sleepy?', likertSteps: 9 }],
+      },
+    ],
+  } as EsmiraQuestionnaire;
+}
+
+const bedExitEngine = () => new OfflineSurveyEngine(adaptQuestionnaire(4001, makeBedExitQuestionnaire(), 0));
+
+test('engine: 0 night wakings skips the whole Bed Exit Diary page', () => {
+  const engine = bedExitEngine();
+  assert.equal(engine.respond('morningNightWakings', '0')?.id, 'morningKss');
+  // The next header shown is the Sleepiness Scale, not Bed Exit Diary.
+  assert.equal(engine.getSectionTransition()?.description, 'Sleepiness Scale');
+});
+
+test('engine: wakings but 0 bed exits skips the reason question', () => {
+  const engine = bedExitEngine();
+  assert.equal(engine.respond('morningNightWakings', '2')?.id, 'morningBedExits');
+  assert.equal(engine.getSectionTransition()?.description, 'Bed Exit Diary');
+  assert.equal(engine.respond('morningBedExits', '0')?.id, 'morningKss');
+});
+
+test('engine: wakings and bed exits asks the reason', () => {
+  const engine = bedExitEngine();
+  engine.respond('morningNightWakings', '5+');
+  assert.equal(engine.respond('morningBedExits', '1')?.id, 'morningBedExitReason');
+});
+
+test('engine: changing wakings back to 0 drops the stale bed-exit answers', () => {
+  const engine = bedExitEngine();
+  engine.respond('morningNightWakings', '2');
+  engine.respond('morningBedExits', '1');
+  engine.respond('morningBedExitReason', 'Needed the bathroom');
+  engine.rewindTo('morningNightWakings');
+  assert.equal(engine.respond('morningNightWakings', '0')?.id, 'morningKss');
+  const answers = engine.getResponseMap();
+  assert.equal(answers.morningBedExits, undefined);
+  assert.equal(answers.morningBedExitReason, undefined);
+});

@@ -28,6 +28,8 @@ class LoginTokenStoreFS implements LoginTokenStore {
 			}
 			closedir($h_folder);
 		}
+		// Oldest first, then by id. readdir() order depends on the filesystem.
+		usort($obj, fn($a, $b) => [$a->lastUsed, $a->tokenId] <=> [$b->lastUsed, $b->tokenId]);
 		return $obj;
 	}
 	

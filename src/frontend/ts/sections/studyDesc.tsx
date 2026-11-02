@@ -125,6 +125,17 @@ export class Content extends SectionContent {
 						<textarea {...BindObservable(study.tutorialIntro)}></textarea>
 						{ObservableLangChooser(this.getStudyOrThrow())}
 					</label>
+					<div class="line spacingTop">
+						<small>{Lang.getWithColon("tutorial_practice_questionnaires")}</small>
+						<div class="vertical hAlignStart">
+							{study.questionnaires.get().map(questionnaire =>
+								<label class="noTitle noDesc">
+									<input type="checkbox" {...BindObservable(questionnaire.includeInTutorial)} />
+									<span>{questionnaire.getTitle()}</span>
+								</label>
+							)}
+						</div>
+					</div>
 				</div>
 			}
 

@@ -98,6 +98,52 @@ class SqliteSchema {
 			UNIQUE (study_id, user_id, sent_at)
 		)',
 
+		// Phone sensing from the Android app (see PhoneSensingStore), kept only here: one row per prompt record, transition, event
+		// or daily summary. `sample_time` is epoch ms (0 for daily rows), `local_date` the phone's local day
+		// (daily rows only) and `label` what tells rows with the same time apart (activity, package, event).
+		// `data` is a JSON object keyed by the stream's CSV columns.
+		'CREATE TABLE IF NOT EXISTS sensor_data (
+			id INTEGER PRIMARY KEY,
+			study_id INTEGER NOT NULL,
+			user_id TEXT NOT NULL,
+			stream TEXT NOT NULL,
+			sample_time INTEGER NOT NULL,
+			local_date TEXT NOT NULL,
+			label TEXT NOT NULL,
+			data TEXT NOT NULL,
+			received_at INTEGER NOT NULL,
+			UNIQUE (study_id, user_id, stream, sample_time, local_date, label)
+		)',
+
+		// Raw accelerometer from phone sensing: one compressed chunk of samples per upload batch (see
+		// AccelerometerCodec, encoding `d1`), about 4 bytes per sample instead of a row each.
+		'CREATE TABLE IF NOT EXISTS sensor_chunks (
+			id INTEGER PRIMARY KEY,
+			study_id INTEGER NOT NULL,
+			user_id TEXT NOT NULL,
+			stream TEXT NOT NULL,
+			start_time INTEGER NOT NULL,
+			end_time INTEGER NOT NULL,
+			sample_count INTEGER NOT NULL,
+			encoding TEXT NOT NULL,
+			data BLOB NOT NULL,
+			received_at INTEGER NOT NULL
+		)',
+		'CREATE INDEX IF NOT EXISTS sensor_chunks_user ON sensor_chunks (study_id, user_id, stream, start_time)',
+
+		// One row per upload batch of phone sensing data: recognises a batch the app sends again, and gives the
+		// admin panel its per-stream overview without scanning sensor_data.
+		'CREATE TABLE IF NOT EXISTS sensor_batches (
+			study_id INTEGER NOT NULL,
+			user_id TEXT NOT NULL,
+			stream TEXT NOT NULL,
+			batch_id TEXT NOT NULL,
+			row_count INTEGER NOT NULL,
+			received_at INTEGER NOT NULL,
+			PRIMARY KEY (study_id, user_id, stream, batch_id)
+		)',
+		'CREATE INDEX IF NOT EXISTS sensor_batches_stream ON sensor_batches (study_id, stream)',
+
 		'CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
 	];
 
@@ -117,6 +163,7 @@ class SqliteSchema {
 		// it is rebuilt from there by cli/sqlite_backfill.php rather than migrated in place.
 		if($current === 1)
 			$pdo->exec('DROP TABLE IF EXISTS push_events');
+		// v3: sensor_data, sensor_chunks and sensor_batches added (created below).
 
 		foreach(self::TABLES as $sql)
 			$pdo->exec($sql);

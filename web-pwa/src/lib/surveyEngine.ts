@@ -92,8 +92,10 @@ export class OfflineSurveyEngine {
    */
   private activatedFallbacks = new Set<string>();
 
-  constructor(session: PreloadedSession) {
+  /** `fallbacks`: skip-fallback questions already revealed when resuming a saved check-in (lib/pausedCheckin.ts). */
+  constructor(session: PreloadedSession, fallbacks: readonly string[] = []) {
     this.session = session;
+    for (const id of fallbacks) this.activatedFallbacks.add(id);
     const responses: Record<string, string> = {};
     if (session.answered) {
       Object.assign(responses, session.answered);
@@ -131,6 +133,11 @@ export class OfflineSurveyEngine {
     if (q.show_if && !evaluateShowIf(q.show_if, this.state.responses)) return false;
     if (q.is_fallback && !this.activatedFallbacks.has(q.id)) return false;
     return true;
+  }
+
+  /** Ids of the skip-fallback questions revealed so far. */
+  getActivatedFallbacks(): string[] {
+    return [...this.activatedFallbacks];
   }
 
   /** Reveal a skip-fallback question (called when its paired question is skipped). */

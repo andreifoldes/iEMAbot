@@ -108,6 +108,20 @@ export function escapeAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** True when rich text holds visible content (TipTap serialises "empty" as `<p></p>`). */
+const hasRichText = (html: string): boolean =>
+  html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
+
+/**
+ * Item text is rendered as HTML. Text from the rich-text editor carries its own markup, but text
+ * written without it (imports, scripts) separates paragraphs with newlines, which HTML collapses
+ * into one block: keep those breaks.
+ */
+export function keepLineBreaks(text: string): string {
+  if (/<[a-z!/][^>]*>/i.test(text)) return text;
+  return text.replace(/\r?\n/g, '<br>');
+}
+
 /** Map a single ESMira input to a PreloadedQuestion, or null if unsupported. */
 function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   const rt = input.responseType;
@@ -117,12 +131,13 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   // content — TipTap serialises "empty" as `<p></p>`/`<div><br></div>`, which would
   // otherwise render as a stray muted gap under the question.
   const descHtml = input.description ?? '';
-  const hasDescText = descHtml.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
+  const instructionHtml = input.instruction ?? '';
 
   const base = {
     id: input.name,
-    text: input.text ?? '',
-    subtext: hasDescText ? descHtml : '',
+    text: keepLineBreaks(input.text ?? ''),
+    subtext: hasRichText(descHtml) ? keepLineBreaks(descHtml) : '',
+    instruction: hasRichText(instructionHtml) ? keepLineBreaks(instructionHtml) : '',
     aria_label: input.screenReaderLabel?.trim() || undefined,
     spoken_text: input.spokenText?.trim() || undefined,
     required: input.required ?? false,
@@ -275,6 +290,9 @@ export interface AdaptOptions {
   practice?: boolean;
   /** Task ids drawn earlier for this run (a resumed check-in), so the same ones come back. */
   battery?: string[];
+  /** Question ids in the order shown earlier (a resumed check-in): randomized pages keep that order, so the saved
+   *  position still points at the question the participant stopped on. */
+  order?: string[];
   /** Random source in [0, 1); injectable for tests. */
   random?: () => number;
 }
@@ -293,6 +311,12 @@ function drawBattery(items: PreloadedQuestion[], opts: AdaptOptions): PreloadedQ
   return items.filter((x) => keep.has(x.id));
 }
 
+/** `items` in the order of `order`; any not in it (the questionnaire changed since) go last, shuffled. */
+function inOrder(items: PreloadedQuestion[], order: string[]): PreloadedQuestion[] {
+  const known = items.filter((x) => order.includes(x.id)).sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  return [...known, ...shuffle(items.filter((x) => !order.includes(x.id)))];
+}
+
 /** Build a PreloadedSession from a questionnaire (pages -> sections). */
 export function adaptQuestionnaire(
   studyId: number,
@@ -305,7 +329,7 @@ export function adaptQuestionnaire(
 
   q.pages.forEach((page, pageIdx) => {
     let mapped = page.inputs.map(mapInput).filter((x): x is PreloadedQuestion => x !== null);
-    if (page.randomized) mapped = shuffle(mapped);
+    if (page.randomized) mapped = opts.order ? inOrder(mapped, opts.order) : shuffle(mapped);
     mapped = drawBattery(mapped, opts);
     if (mapped.length === 0) return;
 

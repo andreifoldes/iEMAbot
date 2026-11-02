@@ -31,11 +31,12 @@ form, FAQ, contact email, reward instructions).
 | Field | Purpose | Designer UI |
 | --- | --- | --- |
 | `webPushEnabled` | Turn on Web Push reminders | [Push panel](./web-push.md) |
+| `schedule` | The study's one schedule: which questionnaires open when and when participants are prompted, on every channel (check-ins with days, ranges, prompts, limits and notifications; see [Scheduling](./scheduling.md)) | Schedule panel |
 | `webPhoneOnly` | Run the web app on smartphones only; other devices get an invite page with a QR code | Study settings, next to study availability |
-| `webSkipName` | Skip the "what name would you like to go by?" step; participants are identified only by their study id | Study settings, below the smartphone-only setting |
 | `webLocalOnly` | The web app sends nothing to the server: no answers, join or other events, telemetry, push or PID lock; answers stay on the device | **None**, source-edit only |
 | `webTaskActions` | A task card offers Start task, Skip task, Remind me later (pause on this device) and Skip check-in | **None**, source-edit only |
-| `webPacedMessages` | The welcome, description and consent bubbles of a first visit, and the closing bubbles after a check-in, appear one by one, each after the previous one's reading time | **None**, source-edit only |
+| `messagePacingWpm` | Reading speed (words per minute, default 238) at which consecutive bot messages are paced in the PWA, the Android app and Telegram; 0 = off | Study settings |
+| `webPacedMessages` | No longer read: reading-speed pacing of consecutive messages is always on, in the PWA, the Android app and Telegram (see [participant flow](../pwa/participant-flow.md)) | **None** |
 | `webSnapshot` | Show a playful read-out of the participant's own answers after each submission (only `checkin-readout` exists, see `web-pwa/src/lib/snapshot.ts`) | **None**, source-edit only |
 | `wearablesEnabled`, `wearablesProviders` | Offer wearable linking, restricted to chosen providers | [Wearables panel](./wearables.md) |
 | `wearablesDataTypes` | Narrow the synced data types | **None**, source-edit only |
@@ -45,20 +46,20 @@ form, FAQ, contact email, reward instructions).
 
 ## Questionnaire and page
 
-Questionnaire: `title`, `pages[]`, `actionTriggers[]`, `sumScores[]`, completion/duration filters, optional
-Merlin script blocks. Page: `header`, `footer`, `randomized`, `skipAfterSecs`, `relevance`, `inputs[]`.
+Questionnaire: `title`, `pages[]`, `sumScores[]`, optional Merlin script blocks; ESMira's `actionTriggers[]` are kept
+for in-app messages and other cues this server does not run. Questionnaires have no scheduling settings: when they
+are open and prompted is the study's `schedule`. Page: `header`, `footer`, `randomized`, `skipAfterSecs`, `relevance`, `inputs[]`.
 
 ### Fork-added questionnaire fields
 
 | Field | Effect |
 | --- | --- |
-| `completableOncePerDay` | Locks the questionnaire after a completion until the next scheduled day (passive ones reopen at midnight). Enforced in the PWA, not by the server. |
 | `changeResponseMode` | `previous` (default), `any`, or `none`: which earlier answers a participant may change. |
-| `notificationIncludeDeadline` | Appends "Complete by HH:MM" to the push text. |
 
-Existing upstream filters: start/end date, activation and expiry N days after joining, completable once,
-completable within X minutes of a notification, minimum gap between completions, completable only in a time
-window, script filter, group availability.
+ESMira's per-questionnaire filters and schedules (start/end date, activation and expiry N days after joining,
+completable once / per day / within X minutes of a notification, minimum gap, completable only in a time window,
+signal times, sensor triggers, notification deadline) were upgraded into the study's schedule in 3.7.0 and are no
+longer part of a questionnaire (see [Upgrading older configs](./scheduling.md#upgrade)).
 
 ## Input types
 

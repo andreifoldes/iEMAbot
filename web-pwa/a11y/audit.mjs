@@ -5,8 +5,8 @@
  * Playwright + axe-core through the participant journey — invite-code screen,
  * consent, name entry, the tutorial overview, and a practice run of every
  * questionnaire — running an axe scan (WCAG 2.0/2.1/2.2 A & AA) at each state, in
- * both the light and dark themes. Colour-contrast is checked against the actually
- * rendered colours, so both themes are covered.
+ * the light and dark themes and their high-contrast variants. Colour-contrast is
+ * checked against the actually rendered colours, so every theme is covered.
  *
  * Question-type coverage: by default the audit runs against a fixture study
  * (fixtures/study-all-types.json) served via request interception, so every
@@ -27,7 +27,8 @@
  *   A11Y_PORT        vite preview port (default: 4318)
  *   A11Y_BASE_URL    audit an already-running server instead of spawning preview
  *   A11Y_FAIL_ON     comma list of impacts that fail the gate (default critical,serious)
- *   A11Y_THEMES      comma list of themes to audit (default light,dark)
+ *   A11Y_THEMES      comma list of themes to audit (default light,dark,high-contrast,dark-high-contrast;
+ *                    a name containing "dark" / "high-contrast" switches that mode on)
  *   A11Y_LIVE_BUNDLE 1 = also walk morning/momentary/evening in every theme (slower)
  *   A11Y_CVD         0 = skip the colour-vision-deficiency check (default on, see cvd-scan.mjs)
  *   A11Y_CVD_IMPACT  impact assigned to colour-only findings (default serious = gates)
@@ -51,7 +52,7 @@ const MODE = process.env.A11Y_MODE || 'fixture';
 const KEY = process.env.A11Y_KEY || 'demo-study';
 const PORT = Number(process.env.A11Y_PORT || 4318);
 const FAIL_ON = (process.env.A11Y_FAIL_ON || 'critical,serious').split(',').map((s) => s.trim()).filter(Boolean);
-const THEMES = (process.env.A11Y_THEMES || 'light,dark').split(',').map((s) => s.trim()).filter(Boolean);
+const THEMES = (process.env.A11Y_THEMES || 'light,dark,high-contrast,dark-high-contrast').split(',').map((s) => s.trim()).filter(Boolean);
 const CVD_ENABLED = process.env.A11Y_CVD !== '0';
 const CVD_IMPACT = process.env.A11Y_CVD_IMPACT || 'serious';
 const CVD_SHOTS = process.env.A11Y_CVD_SHOTS === '1';
@@ -103,7 +104,8 @@ let viewportLabel = '';
 /**
  * WCAG 1.4.10 Reflow: at 320 CSS px (or a 256px-tall viewport, i.e. 400% zoom) content must
  * not need scrolling in two dimensions. Flags any element sticking out past the viewport
- * width, other than content inside its own scroll container.
+ * width, other than content inside its own scroll container. Also flags a page that scrolls vertically while
+ * the app shell is in its fixed layout (page-scroll).
  */
 async function checkReflow(page, screen, theme) {
   const overflow = await page.evaluate(() => {
@@ -124,8 +126,24 @@ async function checkReflow(page, screen, theme) {
       if (out.length >= 5) break;
     }
     const pageScrolls = document.documentElement.scrollWidth > vw + 1;
-    return { out, pageScrolls };
+    // In the shell's fixed layout (everything but the short-viewport reflow, where the page scrolls as one
+    // document by design) only the conversation scrolls; a taller page means something escaped the shell.
+    const shell = document.querySelector('.app-shell');
+    const fixedLayout = shell && getComputedStyle(shell).overflowY === 'hidden';
+    const pageHeight = document.documentElement.scrollHeight;
+    const vScroll = fixedLayout && pageHeight > window.innerHeight + 1
+      ? `${pageHeight}px tall in a ${window.innerHeight}px viewport` : '';
+    return { out, pageScrolls, vScroll };
   });
+  if (overflow.vScroll) {
+    findings.push({
+      mode: MODE, theme, screen,
+      id: 'page-scroll', impact: 'serious',
+      help: 'The page itself scrolls: the header and chat row no longer stay on screen',
+      helpUrl: 'https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html',
+      nodes: [{ target: '.app-shell', html: '', summary: `Page is ${overflow.vScroll}; only the conversation may scroll` }],
+    });
+  }
   if (!overflow.out.length && !overflow.pageScrolls) return;
   findings.push({
     mode: MODE, theme, screen,
@@ -136,6 +154,102 @@ async function checkReflow(page, screen, theme) {
   });
 }
 
+/**
+ * In the browser: problems with the app shell's fixed layout on the current screen (empty = fine). The page
+ * itself must not scroll, the conversation must be its own scroll area, and the header and chat row must stay at
+ * the top and bottom of the viewport at either end of the conversation. A probe `sr-only` span is put at the end
+ * of the conversation while measuring, so an absolutely positioned label there (as in a locked questionnaire card)
+ * is caught on every screen, whatever happens to be open when the audit runs.
+ */
+async function shellLayoutProblems() {
+  const out = [];
+  const header = document.querySelector('.app-header');
+  const footer = document.querySelector('.app-footer');
+  const main = document.querySelector('.app-shell > main');
+  if (!header || !footer || !main) return ['app shell (header / conversation / chat row) not found'];
+  const vh = window.innerHeight;
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const pageHeight = () => document.documentElement.scrollHeight;
+  const check = (when) => {
+    const h = header.getBoundingClientRect();
+    const f = footer.getBoundingClientRect();
+    if (Math.abs(h.top) > 1) out.push(`${when}: header top is ${Math.round(h.top)}px, not 0`);
+    if (Math.abs(f.bottom - vh) > 1) out.push(`${when}: chat row bottom is ${Math.round(f.bottom)}px, not the viewport bottom (${vh}px)`);
+  };
+  if (pageHeight() > vh + 1) {
+    const tall = [...document.querySelectorAll('body *')]
+      .filter((el) => el.getBoundingClientRect().bottom > vh + 1 && getComputedStyle(el).position === 'absolute')
+      .slice(0, 3).map((el) => el.outerHTML.slice(0, 80));
+    out.push(`the page itself scrolls (${pageHeight()}px tall in a ${vh}px viewport)${tall.length ? `; absolutely positioned: ${tall.join(' | ')}` : ''}`);
+  }
+  if (!/auto|scroll/.test(getComputedStyle(main).overflowY)) out.push('the conversation is not its own scroll area');
+  const probe = document.createElement('span');
+  probe.className = 'sr-only';
+  probe.textContent = 'layout probe';
+  main.appendChild(probe);
+  try {
+    main.scrollTop = main.scrollHeight;
+    await frame();
+    if (pageHeight() > vh + 1)
+      out.push(`an sr-only label at the end of the conversation makes the page ${pageHeight()}px tall (viewport ${vh}px): the conversation or shell is not positioned`);
+  } finally {
+    probe.remove();
+  }
+  main.scrollTop = 0; window.scrollTo(0, 0); await frame(); check('scrolled to the top');
+  main.scrollTop = main.scrollHeight; window.scrollTo(0, pageHeight()); await frame();
+  check('scrolled to the end');
+  return out;
+}
+
+/**
+ * Only the conversation scrolls: the header stays at the top and the chat row (menu, input, send button) at the
+ * bottom. Checked on the tutorial and on the questionnaire list (where not-yet-open questionnaires are locked
+ * cards), at the default font size and with it raised to 1.5x and 2x via CDP, as Android does with the system
+ * "Font size" setting. Regressions: a rem breakpoint in index.css fired on portrait phones with a large font, and
+ * the locked cards' sr-only labels stretched the page below the shell. See also src/lib/shellLayout.test.mts.
+ */
+async function auditStickyChrome(browser) {
+  log(`\n▶ Header and chat row stay fixed (default and large system font)`);
+  const report = (screen, problems) => {
+    auditedScreens.push(`${screen} [${THEMES[0]}]`);
+    if (!problems.length) return log(`  ✓ ${screen}`);
+    findings.push({
+      mode: MODE, theme: THEMES[0], screen,
+      id: 'sticky-chrome', impact: 'serious',
+      help: 'Header and chat row must stay on screen while only the conversation scrolls',
+      helpUrl: 'https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html',
+      nodes: problems.map((p) => ({ target: '.app-shell', html: '', summary: p })),
+    });
+    log(`  ✖ ${screen}: ${problems.join('; ')}`);
+  };
+  for (const fontPx of [16, 24, 32]) {
+    const context = await browser.newContext({
+      viewport: { width: 412, height: 830 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+      reducedMotion: 'reduce', serviceWorkers: 'block',
+    });
+    await context.addInitScript(SILENCE_SPEECH);
+    try {
+      const page = await context.newPage();
+      page.on('dialog', (d) => d.dismiss().catch(() => {}));
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Page.enable');
+      await cdp.send('Page.setFontSizes', { fontSizes: { standard: fontPx, fixed: fontPx } });
+      await installRouting(page);
+      // With the bug the onboarding chat row can end up under the conversation, so its Send button
+      // can't be tapped: report that as the finding rather than crashing the audit.
+      const reached = await reachTutorial(page).then(() => null, (e) => String(e.message || e).split('\n')[0]);
+      await sleep(300);
+      if (reached) { report(`sticky-chrome tutorial @font-${fontPx}px`, [`could not get through onboarding: ${reached}`]); continue; }
+      report(`sticky-chrome tutorial @font-${fontPx}px`, await page.evaluate(shellLayoutProblems));
+      await readyBtn(page).click();
+      await sleep(800);
+      report(`sticky-chrome questionnaire-list @font-${fontPx}px`, await page.evaluate(shellLayoutProblems));
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 /** Run one axe scan of the current DOM for a labelled screen, in the given theme. */
 async function scan(page, screen, theme) {
   if (viewportLabel) screen = `${screen} @${viewportLabel}`;
@@ -144,6 +258,19 @@ async function scan(page, screen, theme) {
   await checkReflow(page, screen, theme);
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   auditedScreens.push(`${screen} [${theme}]`);
+  // axe files text whose colour equals its background (1:1) under "incomplete", assuming
+  // it is hidden on purpose; here it is a label nobody can see (e.g. white-on-white in a
+  // high-contrast theme), so gate it like any other contrast failure.
+  const invisible = results.incomplete.find((v) => v.id === 'color-contrast')?.nodes
+    .filter((n) => n.any.some((c) => c.data?.messageKey === 'equalRatio')) ?? [];
+  if (invisible.length) {
+    results.violations.push({
+      id: 'color-contrast-invisible', impact: 'serious',
+      help: 'Text is the same colour as its background (1:1 contrast)',
+      helpUrl: 'https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html',
+      nodes: invisible.map((n) => ({ ...n, failureSummary: n.any.map((c) => c.message).join(' ') })),
+    });
+  }
   for (const v of results.violations) {
     findings.push({
       mode: MODE, theme, screen,
@@ -264,9 +391,11 @@ async function gotoApp(page, qs = '', opts = { waitUntil: 'domcontentloaded' }) 
 async function installRouting(page, { phoneOnly = false } = {}) {
   if (MODE !== 'fixture') return;
   // `phoneOnly` mimics a researcher ticking "Only allow participation on a smartphone".
-  const fixture = phoneOnly
-    ? { ...FIXTURE, dataset: FIXTURE.dataset.map((study) => ({ ...study, webPhoneOnly: true })) }
-    : FIXTURE;
+  // Message pacing is off (messagePacingWpm 0) so buttons appear without the reading pauses the
+  // short waits below would otherwise run into; the typing indicator is aria-hidden anyway.
+  const fixture = { ...FIXTURE, dataset: FIXTURE.dataset.map((study) => ({
+    ...study, messagePacingWpm: 0, ...(phoneOnly ? { webPhoneOnly: true } : {}),
+  })) };
   const body = JSON.stringify(fixture);
   await page.route('**/esmira/api/**', async (route) => {
     const url = route.request().url();
@@ -285,20 +414,18 @@ const readyBtn = (page) => page.getByRole('button', { name: /^I'm ready/ });
 
 /**
  * Advance from a fresh mount to the tutorial overview, handling the onboarding
- * gates: informed consent → name entry → the mandatory notifications step
- * (push-enabled studies). Returning visits (state already settled) fast-path
- * straight to the tutorial.
+ * gates: informed consent → the mandatory notifications step
+ * (push-enabled studies) → the microphone step (studies with voice items; only shown
+ * while the context has no microphone grant, see auditOnboarding). Returning visits
+ * (state already settled) fast-path straight to the tutorial.
  */
 async function reachTutorial(page) {
   await gotoApp(page, `?key=${encodeURIComponent(KEY)}&tutorial=1`);
   if (await present(readyBtn(page), 3500)) return; // returning visit → already at tutorial
   await tryClick(page.getByRole('button', { name: 'I consent' }), 5000);
-  if (await present(page.getByPlaceholder('Enter your name'), 3500)) {
-    await page.getByPlaceholder('Enter your name').fill('Audit Tester');
-    await page.getByRole('button', { name: 'Send' }).click();
-  }
   // Mandatory notifications step: opt out to continue (headless can't grant push).
   await tryClick(page.getByRole('button', { name: 'Continue without notifications' }), 5000);
+  await tryClick(page.getByRole('button', { name: 'Not now' }), 1500);
   await present(readyBtn(page), 8000);
 }
 
@@ -402,25 +529,48 @@ async function auditInstallScreens(browser) {
   }
 }
 
-/** One-time audit of the onboarding screens (consent, name, notifications), each
- *  in every theme via class-toggling, then leaves the app at the tutorial. */
+/** One-time audit of the onboarding screens (consent, name, notifications, microphone),
+ *  each in every theme via class-toggling, then leaves the app at the tutorial. */
 async function auditOnboarding(page) {
-  log(`\n▶ Auditing onboarding (consent → name → notifications)`);
+  log(`\n▶ Auditing onboarding (consent → name → notifications → microphone)`);
+  // The microphone step is skipped when access is already granted, so withdraw the
+  // context's grant until it has been audited (restored below for the voice-memo recorder).
+  await page.context().clearPermissions();
   await gotoApp(page, `?key=${encodeURIComponent(KEY)}&tutorial=1`);
   if (await present(page.getByRole('button', { name: 'I consent' }), 6000)) {
     for (const theme of THEMES) await scan(page, 'consent', theme);
     await page.getByRole('button', { name: 'I consent' }).click();
   }
-  if (await present(page.getByPlaceholder('Enter your name'), 4000)) {
-    for (const theme of THEMES) await scan(page, 'name-entry', theme);
-    await page.getByPlaceholder('Enter your name').fill('Audit Tester');
-    await page.getByRole('button', { name: 'Send' }).click();
-  }
   if (await present(page.getByRole('button', { name: 'Continue without notifications' }), 5000)) {
     for (const theme of THEMES) await scan(page, 'notifications-gate', theme);
     await page.getByRole('button', { name: 'Continue without notifications' }).click();
   }
+  if (await present(page.getByRole('button', { name: 'Allow microphone' }), 5000)) {
+    for (const theme of THEMES) await scan(page, 'microphone-gate', theme);
+    // --use-fake-ui-for-media-stream accepts the system prompt.
+    await page.getByRole('button', { name: 'Allow microphone' }).click();
+  }
+  await page.context().grantPermissions(['microphone']);
   await present(readyBtn(page), 8000);
+}
+
+/**
+ * The daily "Notifications are off" card above the questionnaire list (lib/notificationNudge.ts). Declining
+ * at onboarding counts as the day's ask, so forget that and return as a participant whose browser has not
+ * allowed notifications (headless: permission undecided).
+ */
+async function auditNotificationNudge(page, theme) {
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('esmira_notif_nudge_')) localStorage.removeItem(k);
+  });
+  await gotoApp(page, `?key=${encodeURIComponent(KEY)}`);
+  await tryClick(page.getByRole('button', { name: 'No thanks' }), 2500); // tutorial offer, if shown
+  if (await present(page.getByRole('group', { name: 'Notifications are off' }), 6000)) {
+    await scan(page, 'notification-nudge', theme);
+    await tryClick(page.getByRole('button', { name: 'Not now' }));
+  } else {
+    log(`    · notification-nudge [${theme}] — card not shown`);
+  }
 }
 
 /** Audit the app-chrome modals (menu, settings + subpanels, details, contact). */
@@ -435,7 +585,7 @@ async function auditModals(page, theme) {
       await scan(page, 'settings-appearance', theme);
       const back = () => tryClick(page.getByRole('button', { name: 'Back' }));
       if (await tryClick(page.getByRole('button', { name: 'Send error report' }))) { await scan(page, 'settings-error-report', theme); await back(); }
-      if (await tryClick(page.getByRole('button', { name: 'Notifications not working?' }))) { await scan(page, 'settings-notifications', theme); await back(); }
+      if (await tryClick(page.getByRole('button', { name: 'Notifications', exact: true }))) { await scan(page, 'settings-notifications', theme); await back(); }
       if (await tryClick(page.getByRole('button', { name: 'Connect wearables' }))) { await scan(page, 'settings-wearables', theme); await back(); }
       if (await tryClick(page.getByRole('button', { name: 'About ESMira' }))) { await scan(page, 'settings-about', theme); }
       await tryClick(page.getByRole('button', { name: 'Close Settings' }));
@@ -471,6 +621,15 @@ async function advanceSurvey(page, theme, stepLabel) {
     if (await present(page.getByRole('dialog'), 3000)) { await scan(page, `${stepLabel}:recorder`, theme); }
     await tryClick(page.getByRole('button', { name: 'Close', exact: true }));
     return await tryClick(M.getByRole('button', { name: 'Skip' }), 1000);
+  }
+  // typed (keystroke) answer → start writing in the chat row, audit the composer, send
+  if (await present(M.getByRole('button', { name: 'Write your answer' }), 400)) {
+    await M.getByRole('button', { name: 'Write your answer' }).click();
+    const box = page.getByRole('textbox', { name: 'Write your answer' });
+    if (!await present(box, 3000)) return false;
+    await box.fill('A calm day.\nI went for a walk and read a book in the evening.');
+    await scan(page, `${stepLabel}:writer`, theme);
+    return await tryClick(page.getByRole('button', { name: 'Send' }));
   }
   // cognitive launch card → Skip (never open the external task iframe)
   if (await present(M.getByRole('button', { name: /^Start the/ }), 400)) {
@@ -640,6 +799,8 @@ const SILENCE_SPEECH = () => {
 
     await auditInstallScreens(browser);
 
+    await auditStickyChrome(browser);
+
     await auditOnboarding(page);
 
     for (const theme of THEMES) {
@@ -653,6 +814,7 @@ const SILENCE_SPEECH = () => {
         await walkQuestionnaire(page, 'Momentary', 'momentary', theme);
         await walkQuestionnaire(page, 'Evening', 'evening', theme);
       }
+      await auditNotificationNudge(page, theme);
     }
 
     // Reflow passes: 320 CSS px wide, and a 256px-tall viewport (≈400% zoom of a laptop).

@@ -6,43 +6,19 @@ import { BaseObservable } from "../../observable/BaseObservable";
 import { ObservableTypes } from "../../observable/types/ObservableTypes";
 import "../../number.extensions"
 import { Lang } from "../../singletons/Lang";
-import { Scheduler } from "../../helpers/Scheduler";
-import { b0 } from "@fullcalendar/core/internal-common";
-import { Action } from "./Action";
-import { SignalTime } from "./SignalTime";
-import { getMidnightMillis } from "../../constants/methods";
-
-const ONE_DAY_MS = 86400000
 
 export class Questionnaire extends DataStructure {
 	public internalId = this.primitive<number>("internalId", -1)
 	public publishedAndroid = this.primitive<boolean>("publishedAndroid", true)
 	public publishedIOS = this.primitive<boolean>("publishedIOS", true)
 	public publishedWeb = this.primitive<boolean>("publishedWeb", true)
-	public durationStart = this.primitive<number>("durationStart", 0)
-	public durationEnd = this.primitive<number>("durationEnd", 0)
-	public durationPeriodDays = this.primitive<number>("durationPeriodDays", 0)
-	public durationStartingAfterDays = this.primitive<number>("durationStartingAfterDays", 0)
-	public completableOnce = this.primitive<boolean>("completableOnce", false)
-	// At most one completion per local calendar day, regardless of how many signals
-	// fire that day (and for passive questionnaires with no signals). Enforced in the
-	// PWA's availability gating; the common "one bundle per day" case.
-	public completableOncePerDay = this.primitive<boolean>("completableOncePerDay", false)
 	// PWA chat flow only: which answered items show a "Change response" affordance.
 	// "previous" = only the last item (t-1), "any" = every prior item, "none" = disabled
 	// (e.g. for cognitive tasks, which must not be re-attempted).
 	public changeResponseMode = this.primitive<string>("changeResponseMode", "previous")
-	public completableOncePerNotification = this.primitive<boolean>("completableOncePerNotification", false)
-	public completableMinutesAfterNotification = this.primitive<number>("completableMinutesAfterNotification", 0)
-	public limitCompletionFrequency = this.primitive<boolean>("limitCompletionFrequency", false)
-	public completionFrequencyMinutes = this.primitive<number>("completionFrequencyMinutes", 60)
-	public completableAtSpecificTime = this.primitive<boolean>("completableAtSpecificTime", false)
-	public completableAtSpecificTimeStart = this.primitive<number>("completableAtSpecificTimeStart", -1)
-	public completableAtSpecificTimeEnd = this.primitive<number>("completableAtSpecificTimeEnd", -1)
-	// Web push only: when true, the "availability"/"reminder" notification body tells the
-	// participant by when they must complete this questionnaire ("Complete by HH:MM"),
-	// derived from the completion window end (see PushScheduler.php). Off by default.
-	public notificationIncludeDeadline = this.primitive<boolean>("notificationIncludeDeadline", false)
+	// PWA tutorial overview only: offer a practice run of this questionnaire (off for e.g. a
+	// second daytime check-in that is identical to the first).
+	public includeInTutorial = this.primitive<boolean>("includeInTutorial", true)
 	public limitToGroup = this.primitive<number>("limitToGroup", 0)
 	public minDataSetsForReward = this.primitive<number>("minDataSetsForReward", 0)
 	public isBackEnabled = this.primitive<boolean>("isBackEnabled", true)
@@ -55,6 +31,8 @@ export class Questionnaire extends DataStructure {
 
 	public title = this.translatable("title", "")
 
+	// ESMira action triggers (in-app messages, event cues) are not run by this server and have no editor here; kept
+	// as they are. When a questionnaire is open and prompted is the study's schedule (data/study/StudySchedule.ts).
 	public actionTriggers = this.objectArray("actionTriggers", ActionTrigger)
 	public pages = this.objectArray("pages", Page)
 	public sumScores = this.objectArray("sumScores", SumScore)
@@ -71,71 +49,5 @@ export class Questionnaire extends DataStructure {
 			return this.title.get()
 		else
 			return `${this.title.get()} (${Lang.get("group")} ${this.limitToGroup.get()})`
-	}
-
-	public hasSchedules(): boolean {
-		const schedule = this.actionTriggers.get().find((actionTrigger) => {
-			return actionTrigger.schedules.get().length
-		})
-		return !!schedule
-	}
-
-	/**
-	 * Needs to stay in sync with sharedCode.Questionnaire in kotlin
-	 */
-	public isActive(joinedTimestamp: number, now: number, useLegacyScheduling: boolean = false) {
-		const durationCheck = useLegacyScheduling ? (
-			(this.durationPeriodDays.get() == 0 || now <= joinedTimestamp + this.durationPeriodDays.get() * ONE_DAY_MS)
-			&& (this.durationStartingAfterDays.get() == 0 || now >= joinedTimestamp + this.durationStartingAfterDays.get() * ONE_DAY_MS)
-		) : (
-			(this.durationPeriodDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) <= this.durationPeriodDays.get())
-			&& (this.durationStartingAfterDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) >= this.durationStartingAfterDays.get())
-		)
-
-		return durationCheck
-			// && (this.limitToGroup.get() == 0 || this.limitToGroup.get() == group)
-			&& ((this.durationStart.get() == 0 || now >= this.durationStart.get())
-				&& (this.durationEnd.get() == 0 || now <= this.durationEnd.get()))
-		// && (!this.completableOnce.get() || lastCompleted == 0L)
-	}
-
-	/**
-	 * Used for {@link Scheduler}
-	 * Needs to stay in sync with sharedCode.Questionnaire in kotlin
-	 */
-	public willBeActiveIn(joinedTimestamp: number, now: number, useLegacyScheduling: boolean = false): number {
-		const durationValue = this.durationStart.get() - now
-		const startingAfterDaysValue = useLegacyScheduling ?
-			(joinedTimestamp + this.durationStartingAfterDays.get() * ONE_DAY_MS - now) :
-			((this.durationStartingAfterDays.get() == 0 || Scheduler.getDatesDiff(now, joinedTimestamp) >= this.durationStartingAfterDays.get()) ? 0 :
-				getMidnightMillis(joinedTimestamp) + this.durationStartingAfterDays.get() * ONE_DAY_MS - now
-			)
-
-		let value: number
-		if (durationValue <= 0)
-			value = startingAfterDaysValue.coerceAtLeast(0) // durationValue is negative, so we ignore it
-		else if (startingAfterDaysValue <= 0)
-			value = durationValue.coerceAtLeast(0) // startingAfterDaysValue is negative, so we ignore it
-		else
-			value = durationValue.coerceAtLeast(startingAfterDaysValue)
-
-		return value.coerceAtLeast(0)
-	}
-
-	public countScheduledAlarms(): number {
-		let alarms: number = 0
-
-		for (let actionTrigger of this.actionTriggers.get()) {
-			if (actionTrigger.schedules.get().length > 0) {
-				const reminders = actionTrigger.actions.get().length > 0 ? actionTrigger.actions.get()[0].reminder_count.get() : 0
-
-				for (let signalTime of actionTrigger.schedules.get()[0].signalTimes.get()) {
-					let notifications = signalTime.random ? signalTime.frequency.get() : 1
-					alarms += (reminders + 1) * notifications
-				}
-			}
-		}
-
-		return alarms
 	}
 }

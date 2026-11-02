@@ -40,7 +40,16 @@ registerRoute(
     const target = new URL(`/${url.pathname.slice(TASK_PREFIX.length)}`, url.origin);
     target.search = url.search;
     const hit = await caches.match(target.toString(), { ignoreSearch: true });
-    return hit ?? fetch(target.toString());
+    const upstream = hit ?? (await fetch(target.toString()));
+    // Re-wrap: a Response keeps the URL it was fetched from (/webapp/...), and the browser resolves a
+    // module script's relative imports against THAT, so the task would leave this path and go to the
+    // network. A fresh Response has no URL of its own, so the request URL (under the task route) stays
+    // the base for everything the task imports.
+    return new Response(await upstream.blob(), {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: upstream.headers,
+    });
   },
 );
 
@@ -83,18 +92,15 @@ interface PushItem {
   qid: number;
   /** Per-occurrence identity ("type:qid:sendTime") for the shown-once-a-day ledger. */
   key?: string;
-  /** When this occurrence's completion window opened (epoch ms). */
+  /** When the check-in's window opened and closes (epoch ms). */
   windowStart?: number;
-  /** When the completion window closes (epoch ms); null/absent = open until end of day. */
   deadline?: number | null;
-  /** Whether the questionnaire is one-shot (completableOnce). */
-  once?: boolean;
-  /** completableOncePerDay — one completion any time this local day satisfies it. */
-  dailyOnce?: boolean;
-  /** completableOncePerNotification — a completion of THIS occurrence (occKey) satisfies it. */
-  onceNotif?: boolean;
-  /** Window key `${dayIndex}:${startTimeOfDay}` matching the app's occ map (availability.ts). */
+  /** The window's key (lib/schedule.ts), as the app records a completion against it. */
   occKey?: string | null;
+  /** The check-in's completion limit ('window', 'day', 'once', 'none') and its study day [dayFrom, dayTo). */
+  limit?: string;
+  dayFrom?: number;
+  dayTo?: number;
   title?: string;
   body?: string;
 }
@@ -111,6 +117,8 @@ interface PushPayload {
   items?: PushItem[];
   /** printf template ("You have %d questionnaires…") used when some items are dropped. */
   bodyTemplate?: string;
+  /** Replace what is showing without sound or vibration: the "study complete" message (PushSender::studyEndPayload). */
+  silent?: boolean;
 }
 
 /** Report a push funnel event ('received'/'clicked') to the backend. Best-effort. */
@@ -230,37 +238,47 @@ function itemKey(it: PushItem): string {
   return it.key || `${it.qid}:${it.windowStart ?? 0}`;
 }
 
-/** Whether two timestamps fall on the same local calendar day (device-local, matching the
- *  app's availability.ts isToday — the SW runs on the participant's device). */
-function isSameLocalDay(a: number, b: number): boolean {
-  const da = new Date(a), db = new Date(b);
-  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
-}
-
-/** Has this questionnaire's current occurrence already been completed (or otherwise
- *  satisfied for now under the study's completion rules)? */
+/** Whether two timestamps fall on the same study day: the local calendar day shifted by the study's day
+ *  start (device-local, matching the app's availability.ts dayStartOf — the SW runs on the participant's device). */
+/** Has this check-in been completed since it was sent, by the schedule's rule (Schedule::applyCompletions)? */
 async function itemCompleted(sid: number, uid: string, it: PushItem): Promise<boolean> {
   const rec = await swGetCompletion(sid, uid, it.qid);
   if (!rec) return false;
-  // Completed at/after this occurrence's window opened → already handled.
+  // The questionnaire was completed since this window opened, or this very window was.
   if (typeof it.windowStart === 'number' && rec.lastAt >= it.windowStart) return true;
-  // One-shot questionnaire completed at least once (covers completion on an earlier day).
-  if (it.once && rec.count > 0) return true;
-  // Once-per-day questionnaire already completed earlier the SAME local day — even before
-  // this signal fired. The app locks it for the day, so don't re-prompt.
-  if (it.dailyOnce && isSameLocalDay(rec.lastAt, Date.now())) return true;
-  // Once-per-notification questionnaire whose THIS specific occurrence was completed
-  // (exact occ-key match; occ is mirrored from availability.ts's per-window record).
-  if (it.onceNotif && it.occKey && rec.occ && rec.occ[it.occKey]) return true;
+  if (it.occKey && rec.occ && rec.occ[it.occKey]) return true;
+  // The check-in's limit: once in the study, or once per study day.
+  if (it.limit === 'once' && rec.count > 0) return true;
+  if (it.limit === 'day' && typeof it.dayFrom === 'number' && typeof it.dayTo === 'number') {
+    const times = [rec.lastAt, ...Object.values(rec.occ ?? {})];
+    if (times.some((t) => typeof t === 'number' && t >= (it.dayFrom as number) && t < (it.dayTo as number))) return true;
+  }
   return false;
 }
 
+/**
+ * Take down reminders whose check-in has closed (the `expiresAt` showReminder stamps in). A web notification cannot
+ * expire by itself the way the Android app's does (setTimeoutAfter), so this runs whenever the service worker or
+ * the open app gets the chance: on every push, and when the app is opened (lib/push.ts closeExpiredNotifications).
+ * The server also gives each push a TTL up to that close, so a push held back while the phone was offline is not
+ * delivered after it.
+ */
+async function closeExpired(now = Date.now()): Promise<void> {
+  for (const n of await self.registration.getNotifications()) {
+    const exp = (n.data as { expiresAt?: number } | undefined)?.expiresAt;
+    if (typeof exp === 'number' && exp <= now) n.close();
+  }
+}
+
 async function showReminder(payload: PushPayload): Promise<void> {
+  await closeExpired();
   const tag = payload.tag || DEFAULT_TAG;
   let title = payload.title || 'iEMAbot';
   let body = payload.body ?? '';
 
   let shownKeys: string[] = [];
+  // When the check-in's window closes (the last one, for a counted notification); undefined = no known end.
+  let expiresAt: number | undefined;
   const items = Array.isArray(payload.items) ? payload.items : [];
   if (items.length && payload.sid && payload.uid) {
     const remaining: PushItem[] = [];
@@ -286,6 +304,7 @@ async function showReminder(payload: PushPayload): Promise<void> {
         : `You have ${remaining.length} questionnaires to complete.`;
     }
     shownKeys = remaining.map(itemKey);
+    if (remaining.every((it) => typeof it.deadline === 'number')) expiresAt = Math.max(...remaining.map((it) => it.deadline as number));
   }
 
   // Never stack: clear any existing ESMira notification, then show exactly one.
@@ -294,14 +313,18 @@ async function showReminder(payload: PushPayload): Promise<void> {
   await swRecordShown(shownKeys, Date.now());
   await self.registration.showNotification(title, {
     body,
+    // Same images as the Android app's notifications: NOTIFICATION_ICON / NOTIFICATION_BADGE in
+    // lib/notificationSpec.ts (not imported, see swOpenState on why the SW stays self-contained).
     icon: '/pwa/pwa-192x192.png',
     // badge is Android's status-bar/notification-corner icon: tinted by the OS
     // using only the alpha channel, so it must be a white silhouette on
     // transparent — not the full-colour logo (which renders as a solid blob).
     badge: '/pwa/badge-96x96.png',
     tag,
-    renotify: true,
-    data: { url: payload.url || '/pwa/', sid: payload.sid, uid: payload.uid },
+    // A reminder that replaces the last one alerts again; the silent "study complete" message only takes its place.
+    renotify: !payload.silent,
+    silent: !!payload.silent,
+    data: { url: payload.url || '/pwa/', sid: payload.sid, uid: payload.uid, expiresAt },
   } as NotificationOptions);
 }
 

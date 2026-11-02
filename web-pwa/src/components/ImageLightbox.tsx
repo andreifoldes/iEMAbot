@@ -224,7 +224,7 @@ export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
           transition: gesturing || reduceMotion ? 'none' : 'transform 0.25s ease-out',
         }}
       />
-      <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/60 text-xs font-medium pointer-events-none">
+      <p className="absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] text-center text-white/60 text-xs font-medium pointer-events-none">
         Pinch or double-tap to zoom
       </p>
       <button

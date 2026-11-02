@@ -156,7 +156,7 @@ export class Content extends SectionContent {
 				{TitleRow(Lang.getWithColon("questionnaires"))}
 				<div class="vertical">
 					{study.questionnaires.get().map((questionnaire) =>
-						questionnaire.isActive(Date.now(), Date.now()) &&
+						study.schedule.checkins.get().some((c) => c.questionnaireId.get() == questionnaire.internalId.get()) &&
 						<a class="verticalPadding" href={this.getUrl(`attend,qId:${questionnaire.internalId.get()}`)}>{questionnaire.getTitle()}</a>
 					)}
 				</div>

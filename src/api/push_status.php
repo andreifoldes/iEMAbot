@@ -5,7 +5,9 @@ use backend\fileSystem\loader\UserDataLoader;
 use backend\fileSystem\PathsFS;
 use backend\JsonOutput;
 use backend\Main;
-use backend\notifications\PushScheduler;
+use backend\notifications\ParticipantNotificationPrefs;
+use backend\notifications\ParticipantWithdrawals;
+use backend\schedule\Schedule;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -22,10 +24,19 @@ if($studyId <= 0 || $userId === '' || !Main::strictCheckInput($userId)) {
 }
 
 try {
+	// Left the study (sign-out / quit event, or withdrawn by a researcher): the app resets itself
+	// and stops its own reminders when it sees this. Checked first, so it also works for studies
+	// without web push (the native Android app plans its reminders on the device).
+	if(ParticipantWithdrawals::isWithdrawn($studyId, $userId)) {
+		echo JsonOutput::successObj(['nextNotification' => null, 'joinedAt' => null, 'withdrawn' => true]);
+		return;
+	}
+	// Switched off in the app (on this or another device): the app shows it and keeps the switch in step.
+	$notificationsOff = ParticipantNotificationPrefs::isOff($studyId, $userId);
 	$defaultLang = Configs::get('defaultLang') ?: 'en';
 	$study = json_decode(Configs::getDataStore()->getStudyStore()->getStudyLangConfigAsJson($studyId, $defaultLang), true);
 	if(!is_array($study) || empty($study['webPushEnabled'])) {
-		echo JsonOutput::successObj(['nextNotification' => null, 'joinedAt' => null]);
+		echo JsonOutput::successObj(['nextNotification' => null, 'joinedAt' => null, 'withdrawn' => false, 'notificationsOff' => $notificationsOff]);
 		return;
 	}
 
@@ -50,11 +61,10 @@ try {
 		catch(Throwable $e) { /* use subscribe time */ }
 	}
 
-	// Earliest occurrence in the next 14 days. Uses a throwaway realized map so a
-	// status read never locks in random times the sender will roll later.
+	// Earliest prompt or reminder in the next 14 days, from the schedule (random draws are deterministic, so this is
+	// the time the sender will actually use; a wake-up or event not known yet counts as its fallback).
 	$horizon = $now + 14 * 86400000;
-	$realized = [];
-	$occurrences = PushScheduler::computeDueOccurrences($study, $anchor, $tz, $now, $horizon, -1, $realized);
+	$occurrences = Schedule::upcoming($study, $studyId, $userId, Schedule::inputs($study, $studyId, $userId, $now), $anchor, $tz, $now, $now, $horizon);
 	$next = null;
 	foreach($occurrences as $occ) {
 		if($next === null || $occ['timestamp'] < $next)
@@ -64,7 +74,7 @@ try {
 	// time). The client adopts it so an already-enrolled participant's timeline isn't
 	// shifted by a client-side backfill. Null when there's no subscription on file.
 	$joinedAt = file_exists($subFile) ? $anchor : null;
-	echo JsonOutput::successObj(['nextNotification' => $next, 'joinedAt' => $joinedAt]);
+	echo JsonOutput::successObj(['nextNotification' => $notificationsOff ? null : $next, 'joinedAt' => $joinedAt, 'withdrawn' => false, 'notificationsOff' => $notificationsOff]);
 }
 catch(Throwable $e) {
 	Main::reportError($e);

@@ -1,5 +1,6 @@
 <?php
 
+use backend\bugReports\GithubIssueReports;
 use backend\exceptions\CriticalException;
 use backend\Main;
 use backend\Configs;
@@ -61,5 +62,13 @@ catch(Throwable $e) {
 	Main::reportError($e);
 	echo JsonOutput::error('Internal server error');
 	return;
+}
+
+// The message is saved; filing an error report as a GitHub issue must never fail the request.
+try {
+	GithubIssueReports::enqueue((int) $studyId, (string) $userId, (string) $content);
+}
+catch(Throwable $e) {
+	Main::reportError($e);
 }
 echo JsonOutput::successObj();
