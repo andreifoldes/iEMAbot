@@ -16,6 +16,12 @@
       "path": "^deploy\\.sh$",
       "reason": "REMOTE_DIR hard-codes a real user's home path. Parameterise via an env var, or accept.",
       "pending": true
+    },
+    {
+      "rule": "unix-home-path",
+      "path": "(?:^|/)\\.claude/logs/",
+      "reason": "A session log from before the fork's first release is still in history (commit 313db75, the v0.1.0 'init' commit). It is gone from the tree; removing it from history needs a rewrite that would move the v0.1.0 tag.",
+      "pending": true
     }
   ]
 }

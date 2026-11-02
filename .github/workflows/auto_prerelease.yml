@@ -12,6 +12,9 @@ env:
 
 jobs:
   build-and-release:
+    # Upstream-only: tags from package.json and pushes to upstream's Docker Hub namespace.
+    # This fork releases by hand (see the Releases page), so skip it here.
+    if: github.repository == 'KL-Psychological-Methodology/ESMira-web'
     runs-on: ubuntu-latest
 
     steps:
