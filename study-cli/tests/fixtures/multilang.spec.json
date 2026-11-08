@@ -1,0 +1,26 @@
+{
+  "title": { "en": "Mood study", "de": "Stimmungsstudie" },
+  "languages": ["en", "de"],
+  "studyDescription": { "en": "About the study.", "de": "Über die Studie." },
+  "questionnaires": [
+    {
+      "title": { "en": "Daily", "de": "Täglich" },
+      "pages": [
+        {
+          "header": { "en": "Today", "de": "Heute" },
+          "inputs": [
+            {
+              "name": "mood_now",
+              "responseType": "list_single",
+              "text": { "en": "How do you feel?", "de": "Wie fühlst du dich?" },
+              "listChoices": { "en": ["Good", "Bad"], "de": ["Gut", "Schlecht"] }
+            },
+            { "name": "only_english", "text": "No translation for this one." },
+            { "name": "shared_url", "responseType": "image", "url": "https://example.org/a.png", "text": "Look" }
+          ]
+        }
+      ]
+    }
+  ],
+  "schedule": { "checkins": [{ "questionnaire": "Daily" }] }
+}

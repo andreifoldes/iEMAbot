@@ -8,6 +8,8 @@ use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\Main;
 use backend\schedule\Schedule;
+use GuzzleHttp\Client;
+use Http\Adapter\Guzzle7\Client as GuzzleAdapter;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 use Throwable;
@@ -32,6 +34,26 @@ class PushSender {
 	/** The study-complete message is held for a phone that is offline for a day at most. */
 	const STUDY_END_TTL = 86400;
 
+	/** Seconds before a push service that does not answer is given up on (what web-push 9 used). */
+	const HTTP_TIMEOUT = 30;
+
+	/**
+	 * web-push 11 no longer ships an HTTP client, it needs a PSR-18 one. We hand it Guzzle explicitly
+	 * (php-http/guzzle7-adapter) so the timeout is set here and does not depend on client discovery:
+	 * a bare Guzzle client has no timeout, and one hung push service would stall the whole send run.
+	 */
+	private static function newWebPush($subject, $publicKey, $privateKey): WebPush {
+		$client = new GuzzleAdapter(new Client([
+			'timeout'         => self::HTTP_TIMEOUT,
+			'connect_timeout' => self::HTTP_TIMEOUT,
+		]));
+		return new WebPush(['VAPID' => [
+			'subject'    => $subject,
+			'publicKey'  => $publicKey,
+			'privateKey' => $privateKey,
+		]], [], $client);
+	}
+
 	public static function run(): array {
 		$publicKey  = Configs::get('vapid_public_key');
 		$privateKey = Configs::get('vapid_private_key');
@@ -47,11 +69,7 @@ class PushSender {
 		if(empty($subject))
 			$subject = 'mailto:noreply@esmira';
 
-		$webPush = new WebPush(['VAPID' => [
-			'subject'    => $subject,
-			'publicKey'  => $publicKey,
-			'privateKey' => $privateKey,
-		]]);
+		$webPush = self::newWebPush($subject, $publicKey, $privateKey);
 
 		$now        = Main::getMilliseconds();
 		$defaultLang = Configs::get('defaultLang') ?: 'en';
@@ -78,7 +96,7 @@ class PushSender {
 					continue;
 				$file = $folder . $entry;
 				$data = self::readJsonFile($file);
-				if($data === null || empty($data['subscription']['endpoint']))
+				if($data === null || empty($data['subscription']['endpoint']) || !PushEndpoint::isAllowed($data['subscription']['endpoint']))
 					continue;
 
 				$userId = (string) ($data['userId'] ?? $entry);
@@ -94,6 +112,8 @@ class PushSender {
 				if(!array_key_exists($lang, $studiesByLang))
 					$studiesByLang[$lang] = self::loadStudy($studyStore, $studyId, $lang);
 				$study = $studiesByLang[$lang] ?? $defaultStudy;
+				// The app language the participant's device reported (used when the study sets none).
+				$study = NotificationText::withUiLang($study, is_string($data['uiLang'] ?? null) ? $data['uiLang'] : '');
 
 				$stateFile = $file . '.state';
 				$state     = self::readJsonFile($stateFile);
@@ -250,11 +270,7 @@ class PushSender {
 		if(empty($subject))
 			$subject = 'mailto:noreply@esmira';
 
-		$webPush = new WebPush(['VAPID' => [
-			'subject'    => $subject,
-			'publicKey'  => $publicKey,
-			'privateKey' => $privateKey,
-		]]);
+		$webPush = self::newWebPush($subject, $publicKey, $privateKey);
 
 		$folder = PathsFS::folderPushSubscriptions($studyId);
 		$queued = 0;
@@ -264,7 +280,7 @@ class PushSender {
 				if(self::isStateFile($entry))
 					continue;
 				$data = json_decode(@file_get_contents($folder . $entry), true);
-				if(!is_array($data) || empty($data['subscription']['endpoint']))
+				if(!is_array($data) || empty($data['subscription']['endpoint']) || !PushEndpoint::isAllowed($data['subscription']['endpoint']))
 					continue;
 				$userId = (string) ($data['userId'] ?? $entry);
 				if(ParticipantWithdrawals::isWithdrawn($studyId, $userId) || ParticipantNotificationPrefs::isOff($studyId, $userId))
@@ -325,11 +341,7 @@ class PushSender {
 		if(empty($subject))
 			$subject = 'mailto:noreply@esmira';
 
-		$webPush = new WebPush(['VAPID' => [
-			'subject'    => $subject,
-			'publicKey'  => $publicKey,
-			'privateKey' => $privateKey,
-		]]);
+		$webPush = self::newWebPush($subject, $publicKey, $privateKey);
 
 		if(ParticipantWithdrawals::isWithdrawn($studyId, $userId))
 			return ['error' => 'This participant has left the study', 'queued' => 0, 'succeeded' => 0];
@@ -339,6 +351,8 @@ class PushSender {
 		$data = self::readJsonFile($file);
 		if($data === null || empty($data['subscription']['endpoint']))
 			return ['error' => 'No subscription found for this participant', 'queued' => 0, 'succeeded' => 0];
+		if(!PushEndpoint::isAllowed($data['subscription']['endpoint']))
+			return ['error' => 'The stored subscription does not point to a known push service', 'queued' => 0, 'succeeded' => 0];
 
 		try {
 			$sub = Subscription::create([
@@ -442,7 +456,7 @@ class PushSender {
 			'count'        => $count,
 			'items'        => $items,
 			// The SW uses this when it drops some completed items and must re-count.
-			'bodyTemplate' => NotificationSpec::COALESCED_BODY,
+			'bodyTemplate' => NotificationSpec::coalescedTemplate(NotificationText::langFor($study)),
 		];
 	}
 
@@ -458,7 +472,7 @@ class PushSender {
 		$body = is_string($study['studyEndNotification'] ?? null) ? trim($study['studyEndNotification']) : '';
 		return [
 			'title'    => NotificationSpec::studyTitle($study),
-			'body'     => $body !== '' ? $body : NotificationSpec::STUDY_END_BODY,
+			'body'     => $body !== '' ? $body : NotificationSpec::studyEndBody(NotificationText::langFor($study)),
 			'url'      => '/pwa/',
 			'tag'      => self::REMINDER_TAG,
 			'renotify' => false,

@@ -5,6 +5,7 @@ namespace backend\sqlite;
 
 use backend\Configs;
 use backend\fileSystem\loader\MessagesArchivedLoader;
+use backend\fileSystem\loader\MessagesPendingLoader;
 use backend\fileSystem\loader\MessagesUnreadLoader;
 use backend\fileSystem\PathsFS;
 use backend\Paths;
@@ -25,10 +26,12 @@ class CollectedDataBackfill {
 	private string $delimiter;
 	/** @var callable(string): void */
 	private $log;
+	/** @var array<int, array<string, int>> rows newly inserted per study, per table */
+	private array $perStudy = [];
 	/** @var array<string, int> rows newly inserted, per table */
 	private array $counts = [
 		'responses' => 0, 'web_access' => 0, 'media' => 0, 'push_events' => 0,
-		'client_info' => 0, 'wearable_measurements' => 0, 'participant_messages' => 0,
+		'client_info' => 0, 'wearable_measurements' => 0, 'wearable_events' => 0, 'participant_messages' => 0, 'researcher_messages' => 0,
 	];
 
 	public function __construct(PDO $pdo, callable $log) {
@@ -45,9 +48,99 @@ class CollectedDataBackfill {
 				continue;
 			$studyId = (int) $name;
 			($this->log)("study $studyId");
+			$before = $this->counts;
 			$this->importStudy($studyId);
+			foreach($this->counts as $table => $count)
+				$this->perStudy[$studyId][$table] = $count - $before[$table];
 		}
 		return $this->counts;
+	}
+
+	/** @return array<int, array<string, int>> rows newly inserted by the last run(), per study and table */
+	public function insertedPerStudy(): array {
+		return $this->perStudy;
+	}
+
+	/**
+	 * Every response row found in the study's CSV files, as the row hashes the database would use.
+	 * Used to compare the files with the database; nothing is written.
+	 * @return array{hashes: array<string, array<string, true>>, lines: array<string, int>}
+	 *   hashes: "kind|questionnaireId" => set of row hashes; lines: same key => data lines read (duplicates included)
+	 */
+	public function responseHashes(int $studyId): array {
+		$hashes = [];
+		$lines = [];
+		foreach($this->responseFiles($studyId) as [$file, $identifier]) {
+			if($identifier === PathsFS::FILENAME_WEB_ACCESS)
+				continue;
+			$isEvents = $identifier === PathsFS::FILENAME_EVENTS;
+			if(!$isEvents && !ctype_digit($identifier))
+				continue;
+			$kind = $isEvents ? CollectedDataDb::KIND_EVENT : CollectedDataDb::KIND_QUESTIONNAIRE;
+			$questionnaireId = $isEvents ? null : (int) $identifier;
+			$key = "$kind|" . ($questionnaireId ?? '');
+			$hashes[$key] ??= [];
+			$lines[$key] ??= 0;
+			foreach($this->readRows($file) as $row) {
+				$hashes[$key][CollectedDataDb::rowHash($studyId, $kind, $questionnaireId, $row)] = true;
+				++$lines[$key];
+			}
+		}
+		return ['hashes' => $hashes, 'lines' => $lines];
+	}
+
+	/**
+	 * Rows of the live response files whose copy in the database holds other cells than the file. The file is
+	 * the primary store, so the file is right. Dated copies are older snapshots and are not compared.
+	 * @return array<int, array{hash: string, identifier: string, kind: string, questionnaireId: ?int, row: array<string, string>}>
+	 */
+	public function changedRows(int $studyId): array {
+		$changed = [];
+		$lookup = $this->pdo->prepare('SELECT data FROM responses WHERE row_hash = ?');
+		foreach($this->responseFiles($studyId) as [$file, $identifier]) {
+			if(basename($file, '.csv') !== $identifier)
+				continue; // a dated copy
+			$isEvents = $identifier === PathsFS::FILENAME_EVENTS;
+			if(!$isEvents && !ctype_digit($identifier))
+				continue;
+			$kind = $isEvents ? CollectedDataDb::KIND_EVENT : CollectedDataDb::KIND_QUESTIONNAIRE;
+			$questionnaireId = $isEvents ? null : (int) $identifier;
+			foreach($this->readRows($file) as $row) {
+				$hash = CollectedDataDb::rowHash($studyId, $kind, $questionnaireId, $row);
+				$lookup->execute([$hash]);
+				$stored = $lookup->fetchColumn();
+				if($stored === false)
+					continue; // not in the database at all: that is "missing", not "changed"
+				$dbRow = json_decode((string) $stored, true) ?: [];
+				foreach($row as $column => $value) {
+					if((string) ($dbRow[$column] ?? '') !== $value) {
+						$changed[] = ['hash' => $hash, 'identifier' => $identifier, 'kind' => $kind, 'questionnaireId' => $questionnaireId, 'row' => $row];
+						break;
+					}
+				}
+			}
+		}
+		return $changed;
+	}
+
+	/**
+	 * Overwrite the database copy of every changed row with the file's row.
+	 * @return int rows corrected
+	 */
+	public function refreshChanged(): int {
+		$update = $this->pdo->prepare('UPDATE responses SET data = ? WHERE row_hash = ?');
+		$folder = PathsFS::folderStudies();
+		$corrected = 0;
+		foreach(scandir($folder) ?: [] as $name) {
+			if($name === '' || $name[0] === '.' || !ctype_digit($name) || !is_dir($folder . $name))
+				continue;
+			foreach($this->changedRows((int) $name) as $changed) {
+				$update->execute([json_encode($changed['row'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE), $changed['hash']]);
+				$corrected += $update->rowCount();
+				($this->log)("study $name {$changed['identifier']}.csv: corrected one row");
+			}
+		}
+		return $corrected;
 	}
 
 	private function importStudy(int $studyId): void {
@@ -57,7 +150,9 @@ class CollectedDataBackfill {
 			'push events' => fn() => $this->importPushEvents($studyId),
 			'client info' => fn() => $this->importClientInfo($studyId),
 			'wearables' => fn() => $this->importWearables($studyId),
+			'wearable events' => fn() => $this->importWearableEvents($studyId),
 			'messages' => fn() => $this->importMessages($studyId),
+			'researcher messages' => fn() => $this->importResearcherMessages($studyId),
 		];
 		foreach($steps as $label => $step) {
 			try {
@@ -91,15 +186,70 @@ class CollectedDataBackfill {
 		}
 	}
 
-	private function importResponses(int $studyId): void {
-		$dir = PathsFS::folderResponses($studyId);
-		foreach(glob($dir . '*.csv') ?: [] as $file) {
-			// Live files are "<id>.csv"; files moved aside when a study's keys changed or backed up are
-			// "<date>_<id>.csv" / "<date>_<n>_<id>.csv". Rows are keyed by sender and time, so rows that
-			// also exist in the live file are skipped and the older ones are recovered.
+	/**
+	 * Live files are "<id>.csv"; files moved aside when a study's keys changed or backed up are
+	 * "<date>_<id>.csv" / "<date>_<n>_<id>.csv". Rows are keyed by sender and time, so rows that
+	 * also exist in the live file are skipped and the older ones are recovered. Live files come first:
+	 * when a row is in both, the live file's version is the right one and must be the one that is kept.
+	 * @return \Generator<int, array{0: string, 1: string}> file path and the identifier it holds
+	 *   (a questionnaire id, "events" or "web_access")
+	 */
+	private function responseFiles(int $studyId): \Generator {
+		$files = [];
+		foreach(glob(PathsFS::folderResponses($studyId) . '*.csv') ?: [] as $file) {
 			$identifier = basename($file, '.csv');
-			if(preg_match('/^\d{4}-\d{2}-\d{2}_(?:\d+_)?(\d+|events|web_access)$/', $identifier, $match))
-				$identifier = $match[1];
+			$isCopy = (bool) preg_match('/^\d{4}-\d{2}-\d{2}_(?:\d+_)?(\d+|events|web_access)$/', $identifier, $match);
+			$files[] = [$isCopy ? 1 : 0, $file, $isCopy ? $match[1] : $identifier];
+		}
+		usort($files, fn($a, $b) => [$a[0], $a[1]] <=> [$b[0], $b[1]]);
+		foreach($files as [, $file, $identifier])
+			yield [$file, $identifier];
+	}
+
+	/**
+	 * Lines of the study's response CSV files that have more cells than their header. The database keeps
+	 * the columns of the header, so the extra cells of such a line exist only in the file.
+	 * @return array<string, int> file name => number of such lines
+	 */
+	public function rowsWiderThanHeader(int $studyId): array {
+		$wide = [];
+		foreach($this->responseFiles($studyId) as [$file, $identifier]) {
+			if($identifier === PathsFS::FILENAME_WEB_ACCESS)
+				continue;
+			$width = null;
+			foreach($this->readCsv($file) as $fields) {
+				if($width === null) {
+					$width = count($fields);
+					continue;
+				}
+				if(count($fields) > $width)
+					$wide[basename($file)] = ($wide[basename($file)] ?? 0) + 1;
+			}
+		}
+		return $wide;
+	}
+
+	/**
+	 * The rows of a response CSV, keyed by its header. A line with more cells than the header is skipped: the
+	 * database keeps the header's columns, so a copy cut to that width would be a wrong row (its last cells
+	 * would be the first cells of another record), and it would keep the real row out. See rowsWiderThanHeader().
+	 * @return \Generator<int, array<string, string>>
+	 */
+	private function readRows(string $file): \Generator {
+		$header = null;
+		foreach($this->readCsv($file) as $fields) {
+			if($header === null) {
+				$header = $fields;
+				continue;
+			}
+			if(count($fields) > count($header))
+				continue;
+			yield $this->combine($header, $fields);
+		}
+	}
+
+	private function importResponses(int $studyId): void {
+		foreach($this->responseFiles($studyId) as [$file, $identifier]) {
 			if($identifier === PathsFS::FILENAME_WEB_ACCESS) {
 				$this->importWebAccess($studyId, $file);
 				continue;
@@ -109,14 +259,9 @@ class CollectedDataBackfill {
 			if(!$isEvents && !ctype_digit($identifier))
 				continue;
 
-			$header = null;
 			$batch = [];
-			foreach($this->readCsv($file) as $fields) {
-				if($header === null) {
-					$header = $fields;
-					continue;
-				}
-				$batch[] = $this->combine($header, $fields);
+			foreach($this->readRows($file) as $row) {
+				$batch[] = $row;
 				if(count($batch) >= 500)
 					$this->flushResponses($studyId, $isEvents, $identifier, $batch);
 			}
@@ -253,11 +398,10 @@ class CollectedDataBackfill {
 			$info = json_decode((string) @file_get_contents($folder . $entry), true);
 			if(!is_array($info))
 				continue;
-			CollectedDataDb::upsertClientInfo(
+			$this->counts['client_info'] += CollectedDataDb::upsertClientInfo(
 				$this->pdo, $studyId, Paths::getFromUrlFriendly($entry),
 				!empty($info['installed']), (string) ($info['device'] ?? 'unknown'), (int) ($info['updated'] ?? 0)
 			);
-			++$this->counts['client_info'];
 		}
 	}
 
@@ -290,6 +434,33 @@ class CollectedDataBackfill {
 		}
 	}
 
+	/** Provider notifications (WearablesEventArchive): current layout, or the older one without `detail` and the local period. */
+	private function importWearableEvents(int $studyId): void {
+		foreach(glob(PathsFS::folderWearablesEventArchive($studyId) . '*.csv') ?: [] as $file) {
+			$header = null;
+			$rows = [];
+			foreach($this->readCsv($file) as $fields) {
+				if($header === null) {
+					$header = $fields;
+					continue;
+				}
+				if(count($fields) !== count($header))
+					continue;
+				$row = $this->combine($header, $fields);
+				if(!ctype_digit((string) ($row['received_at'] ?? '')))
+					continue;
+				$rows[] = [
+					(string) ($row['userId'] ?? ''), (string) ($row['provider'] ?? ''), (string) ($row['event'] ?? ''),
+					(string) ($row['detail'] ?? ''), (int) $row['received_at'],
+					(string) ($row['interval_start'] ?? ''), (string) ($row['interval_end'] ?? ''),
+					(string) ($row['local_start'] ?? ''), (string) ($row['local_end'] ?? ''),
+				];
+			}
+			foreach(array_chunk($rows, self::CHUNK) as $chunk)
+				$this->counts['wearable_events'] += CollectedDataDb::insertWearableEvents($this->pdo, $studyId, $chunk);
+		}
+	}
+
 	/**
 	 * Participant messages sit in the unread folder and, once read, in the archive. The archive
 	 * also holds researcher messages; those were delivered (delivered > 0), participant ones never.
@@ -313,6 +484,33 @@ class CollectedDataBackfill {
 						$this->pdo, $studyId, $userId, (string) $message->from, (string) $message->content, (int) $message->sent
 					);
 				}
+			}
+		}
+	}
+
+	/**
+	 * Messages the researchers sent: still waiting in the pending folder, or handed to the app and archived. The archive also holds
+	 * the participant's own messages, which come from the participant's id (see MessagesStoreFS::receiveMessage).
+	 */
+	private function importResearcherMessages(int $studyId): void {
+		$sources = [
+			[PathsFS::folderMessagesPending($studyId), fn(string $user) => MessagesPendingLoader::importFile($studyId, $user), 'pending'],
+			[PathsFS::folderMessagesArchive($studyId), fn(string $user) => MessagesArchivedLoader::importFile($studyId, $user), 'archived'],
+		];
+		foreach($sources as [$folder, $load, $state]) {
+			if(!is_dir($folder))
+				continue;
+			foreach(array_diff(scandir($folder) ?: [], ['.', '..']) as $entry) {
+				if($entry[0] === '.')
+					continue;
+				$userId = Paths::getFromUrlFriendly($entry);
+				$rows = [];
+				foreach($load($userId) as $message) {
+					if($state === 'archived' && (string) $message->from === $userId)
+						continue;
+					$rows[] = [(string) $message->from, (string) $message->content, (int) $message->sent, $state, (int) $message->delivered, (int) $message->read];
+				}
+				$this->counts['researcher_messages'] += CollectedDataDb::upsertResearcherMessages($this->pdo, $studyId, $userId, $rows);
 			}
 		}
 	}

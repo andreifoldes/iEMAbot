@@ -16,7 +16,7 @@ This is the same check that gates a production deploy (see the deploy workflow).
   (`fixtures/study-all-types.json`) served through request interception: likert,
   single- & multiple-choice, yes/no, free text, number, time, duration, date,
   visual-analogue scale, voice memo (recorder modal included), cognitive-task
-  launch card, and info/image. The fixture is the real `ssrc` sample study (its
+  launch card, and info/image. The fixture is a real sample study (its
   morning / momentary / evening bundle) **plus** an injected "All Question Types"
   questionnaire, so the sample bundle is exercised too.
 - **Four themes** (light, dark, high contrast, dark high contrast), so colour-contrast
@@ -70,7 +70,8 @@ prove the detector fails on a colour-only indicator.
 
 ```bash
 # one-time: install axe + Playwright + Chromium
-npm install            # (or `npm run a11y:setup` from the repo root)
+npm ci --ignore-scripts && npm run browsers   # (or `npm run a11y:setup` from the repo root)
+# package-lock.json is committed; to change a dependency use `npm install <pkg>` here and commit the lock.
 
 # build the PWA first (the audit serves dist/pwa), then audit
 (cd .. && npm run build)
@@ -86,7 +87,7 @@ A human-readable summary and the full machine-readable results are written to
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `A11Y_MODE` | `fixture` | `fixture` = offline, deterministic, all question types. `live` = drive the real study over the network (needs VPN/connectivity; catches server drift). |
-| `A11Y_KEY` | `ssrc` | Study invite code used in `live` mode. |
+| `A11Y_KEY` | `demo-study` | Study invite code used in `live` mode. |
 | `A11Y_FAIL_ON` | `critical,serious` | Impact levels that fail the gate. |
 | `A11Y_THEMES` | `light,dark,high-contrast,dark-high-contrast` | Themes to audit. A name containing `dark` or `high-contrast` turns that mode on. |
 | `A11Y_LIVE_BUNDLE` | – | `1` = walk morning/momentary/evening in *every* theme (slower). |

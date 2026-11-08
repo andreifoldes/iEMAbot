@@ -1,36 +1,35 @@
-# ESMira participant PWA
+# iEMAbot participant PWA
 
-A chat-style participant web interface for ESMira, modelled on the
-[iEMAbot](https://iemabot.surrey.ac.uk/pwa) PWA (Material Design 3, Inter,
-single-question-per-screen cards, animated progress, WhatsApp-style thread).
+The participant web app for iEMAbot, a fork of ESMira. It is a chat-style interface (Material Design 3, Inter,
+one question card at a time, animated progress, WhatsApp-style thread) built with React 19, Vite and Tailwind 4,
+installable as a PWA. The same code is also bundled into the Android app (`android-app/`).
 
-It is a **drop-in front end**: it talks only to ESMira's existing public API and
-makes **no backend changes**.
+**Full documentation is on the project site:** <https://andreifoldes.github.io/iEMAbot/>. Start with the
+[PWA overview](https://andreifoldes.github.io/iEMAbot/pwa/overview). This file only covers building and
+running the app.
 
-- **Read** the study: `GET {root}api/studies.php?access_key=KEY`
-- **Write** responses: `POST {root}api/datasets.php` — the same endpoint the
-  native apps use; the body is the exact shape `QuestionnaireSaver::saveDataset()`
-  produces, so `CreateDataSet` writes byte-identical CSV. The researcher
-  dashboard, file storage, study format and admin/designer are untouched.
+## How it talks to the server
 
-`{root}` is derived from the served base path (`/esmira/pwa/` → `/esmira/`), so it
-works under any sub-path.
+The app uses ESMira's public API plus the endpoints this fork added to the server (`src/api/`):
+
+- **Read** the study: `GET /esmira/api/studies.php?access_key=KEY`.
+- **Write** responses: `POST /esmira/api/datasets.php`, the endpoint the native ESMira apps use, so the server
+  writes the same data as for any other client.
+- **Fork endpoints** for web push, the schedule engine, wearable linking, participant messages, client
+  telemetry and file uploads (voice memos, keystroke logs).
+
+The API root is pinned to `/esmira/` (override at build time with `VITE_API_ROOT`; the Android bundle takes
+it as a runtime setting). The app itself is served at `/pwa/`.
 
 ## What it supports
 
-Question types (ESMira `responseType` → UI): `likert`, `list_single` (choice),
-`list_multiple` (multi-choice), `binary` (yes/no), `text_input`, `number`,
-`time`/`duration`, `date`, `va_scale`, and static `text` (rendered as an info
-bubble — this is how cognitive link-outs appear). Pages become chat "sections"
-(the page header is shown as a section divider); `randomized` pages are shuffled
-per session. Submitted values match the stock web client exactly (likert `1..N`,
-binary `0`/`1`, choice = label, multi = `name~i` booleans, time = `HH:MM`, etc.).
+Every ESMira question type that works on the web, plus voice memos with a typing fallback, "other, please
+specify", relevance conditions, image lightbox and embedded cognitive tasks. Reminders use Web Push, scheduled
+from the study's schedule, and the app handles wearable linking and offline use (queued uploads, cached
+studies and tasks). The researcher-facing reference is
+[Question types](https://andreifoldes.github.io/iEMAbot/backend/question-types).
 
-## Not included (ESMira web has no backend for these)
-
-Push notifications, scheduled prompts, WebSocket delivery, wearable linking. The
-flow is pull-driven: the participant opens the link and the "conversation" plays
-out locally. Photo/voice capture is deferred (would use `api/file_uploads.php`).
+Not rendered: `photo` and `video` items, and the native-only sensor types.
 
 ## Develop
 
@@ -40,29 +39,24 @@ npm install
 # Proxies /esmira/api/* to a running ESMira (default: the live instance).
 # Point at a local container with ESMIRA_PROXY=http://localhost:8081
 npm run dev
-# open http://localhost:5174/esmira/pwa/?key=YOUR_ACCESS_KEY
+# open http://localhost:5174/pwa/?key=YOUR_ACCESS_KEY
 ```
 
-## Build & deploy
+| Command | What it does |
+| --- | --- |
+| `npm test` | Unit tests (Node's built-in runner) |
+| `npm run lint` | Type check for the app and the service worker |
+| `npm run build` | Production build into `../dist/pwa/` |
+| `npx vite build --mode native` | The bundle shipped inside the Android app |
 
-The app builds into the repo's `dist/pwa/` so ESMira's Docker image
-(`COPY ./dist /var/www/html`) serves it at `/esmira/pwa/`.
+## Build and deploy
 
-ESMira's webpack build cleans `dist/`, so the PWA must build **after** it. Use the
-root script:
+The app builds into the repo's `dist/pwa/`, and the Docker image copies `dist/` into the web root. ESMira's
+webpack build cleans `dist/`, so the PWA must build **after** it. Use the root script:
 
 ```bash
 npm run build:all     # = npm run prod (ESMira) && npm run build:pwa (this app)
 ```
 
-Then build/deploy the Docker image as usual. No Apache/.htaccess change is needed
-for the path-based rollout — `/esmira/pwa/` is a static SPA directory.
-
-### Rollout
-
-1. **Phase A (safe):** ship behind the explicit path `/esmira/pwa/?key=KEY`. The
-   stock Mithril participant flow at `/esmira/?key=KEY` is unchanged. Give
-   participants the `/pwa/` link.
-2. **Phase B (flip default):** once validated, branch participant URLs in
-   `src/index.php` so `/esmira/?key=KEY` serves this app while `?admin` keeps the
-   Mithril designer. (Not done yet — deliberate, so the live flow is undisturbed.)
+Builds and deploys run through CI. See
+[CI and release](https://andreifoldes.github.io/iEMAbot/deployment/ci-and-release).

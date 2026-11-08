@@ -2,6 +2,7 @@
 
 use backend\Configs;
 use backend\JsonOutput;
+use backend\Main;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -11,7 +12,7 @@ if(!Configs::getDataStore()->isReady()) {
 }
 
 $defaultLangCode = Configs::get('defaultLang');
-$lang = $_GET['lang'] ?? $defaultLangCode;
+$lang = Main::sanitizeLangCode($_GET['lang'] ?? $defaultLangCode);
 $serverStore = Configs::getDataStore()->getServerStore();
 
 $type = $_GET['type'] ?? '';

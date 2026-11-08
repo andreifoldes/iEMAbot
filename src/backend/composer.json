@@ -1,9 +1,11 @@
 {
     "name": "esmira/backend",
     "description": "ESMira backend PHP dependencies (web push).",
+    "license": "AGPL-3.0-only",
     "require": {
-        "php": ">=8.1",
-        "minishlink/web-push": "^9.0"
+        "php": ">=8.2",
+        "minishlink/web-push": "^11.0",
+        "php-http/guzzle7-adapter": "^1.1"
     },
     "config": {
         "optimize-autoloader": true

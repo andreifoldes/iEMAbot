@@ -46,6 +46,21 @@ export function normalizeServerBase(input: string): string | null {
   return `${url.origin}${path}`;
 }
 
+/**
+ * Whether the app may send participant data to this server root: https, or http only for the machine itself and
+ * the Android emulator's host alias (development). Anything else would send answers and recordings in clear text.
+ */
+export function isSecureOrLocalServer(base: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:') return true;
+  return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]', '10.0.2.2'].includes(url.hostname);
+}
+
 export function getStoredServerBase(): string | null {
   try {
     return localStorage.getItem(STORE_KEY);

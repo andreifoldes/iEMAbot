@@ -19,6 +19,8 @@ export interface AdminToolsInterface {
 	permissions: AccountPermissions
 	freeDiskSpace: number
 	totalDiskSpace: number
+	/** The code lives in a container image, so the one-click update does not apply: see backend/SelfHost.php. */
+	containerImage: boolean
 
 	hasPermission(name: keyof AccountPermissions, studyId: number): boolean
 }

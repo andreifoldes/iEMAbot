@@ -9,8 +9,8 @@ use backend\wearables\WearablesTokenStore;
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
 if(\backend\Cors::handleNativeAppRequest()) return;
-// Disconnects a participant's wearable: removes the stored token, synced data and sync
-// cursor for that provider. Mirrors api/push_subscribe.php's validation header.
+// Disconnects a participant's wearable: removes the stored token and the sync cursor for that
+// provider, which stops any further collection. Data collected so far stays with the study. Mirrors api/push_subscribe.php's validation header.
 
 $dataStore = Configs::getDataStore();
 if(!$dataStore->isReady()) {

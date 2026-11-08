@@ -1,3 +1,4 @@
+import { ALWAYS_OPEN_CHECKIN } from "../data/study/StudySchedule";
 import { Study } from "../data/study/Study";
 import { PluginFrontendInstructions } from "../plugin/PluginInterfaces";
 import m from "mithril";
@@ -318,6 +319,18 @@ export class StudyLoader {
 		const newQuestionnaire = study.questionnaires.push(questionnaireData)
 		this.autoValidateQuestionnaire(study, newQuestionnaire)
 		return newQuestionnaire
+	}
+
+	/**
+	 * For a questionnaire a researcher just added in the dashboard. A questionnaire without a check-in is never open, so a new study
+	 * would show its participants nothing. A study without check-ins cannot have anyone answering yet, so its first questionnaire is
+	 * simply open, until the researcher plans a check-in, which offers to replace this one (sections/schedule.tsx). Not part of
+	 * addQuestionnaire, whose result study-cli's fixtures pin down.
+	 */
+	public openIfFirstCheckin(study: Study, questionnaire: Questionnaire): void {
+		if(study.schedule.checkins.get().length != 0)
+			return
+		study.schedule.checkins.push({ questionnaireId: questionnaire.internalId.get(), ...ALWAYS_OPEN_CHECKIN })
 	}
 
 	public autoValidateQuestionnaire(study: Study, questionnaire: Questionnaire): void {

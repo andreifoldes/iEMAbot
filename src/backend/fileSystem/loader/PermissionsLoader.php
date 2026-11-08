@@ -15,7 +15,7 @@ class PermissionsLoader {
 		if(self::$cache)
 			return self::$cache;
 		$path = PathsFS::filePermissions();
-		return self::$cache = file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return self::$cache = file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), false) : [];
 	}
 	
 	/**

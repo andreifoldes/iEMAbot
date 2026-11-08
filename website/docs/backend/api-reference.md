@@ -34,8 +34,8 @@ clients keep working.
 | `wearables_connect.php` | POST | Start OAuth; returns `authUrl`. | **fork** |
 | `wearables_oauth.php` | GET | OAuth redirect target; exchanges the code. | **fork** |
 | `wearables_status.php` | POST | Connected providers, last sync and `needsReconnect` (provider rejected the link). | **fork** |
-| `wearables_disconnect.php` | POST | Delete token, data and cursor for a provider. | **fork** |
-| `phone_sensing.php` | POST | Android app's upload of phone sensing data (light, activity, accelerometer, app usage), one batch per request; see [Phone sensing](./phone-sensing.md). | **fork** |
+| `wearables_disconnect.php` | POST | Delete the token and cursor for a provider: collection stops, data collected so far stays. | **fork** |
+| `phone_sensing.php` | POST | Android app's upload of phone sensing data (light, activity, accelerometer, app usage), one batch per request; see [Phone sensing](./channels/phone-sensing.md). | **fork** |
 
 The remaining upstream participant endpoints are `access.php`, `app_install_instructions.php`,
 `questionnaire.php`, `reward.php`, `save_errors.php`, `save_merlin_log.php`, `server_statistics.php`,
@@ -58,7 +58,7 @@ All go through `admin.php?type=<Name>`, grouped by required permission.
 | message | list/send/delete messages, `ListParticipants` |
 | read | `ListData`, `GetData` (CSV), `CreateMediaZip`, `GetMedia`, Merlin logs, **`GetWearableDataZip`**, **`GetWearableInfo`** |
 | reward | reward-code management |
-| write | `SaveStudy`, `DeleteStudy`, `FreezeStudy`, `EmptyData`, `BackupStudy`, **`GetPushInfo`**, **`GetPushStats`**, **`SendTestPush`**, **`SendTestPushToParticipant`**, **`WithdrawParticipant`** |
+| write | `SaveStudy`, `DeleteStudy`, `FreezeStudy`, `EmptyData`, `BackupStudy`, **`GetPushInfo`**, **`GetPushStats`**, **`SendTestPush`**, **`SendTestPushToParticipant`**, **`WithdrawParticipant`**, **`DeleteParticipantData`** |
 | create | `CreateStudy` |
 | admin | accounts, server config (`GetServerConfig` now also returns `webOnlyMode`), error reports, plugins, snapshots, updates, `RebuildStudyIndex` |
 

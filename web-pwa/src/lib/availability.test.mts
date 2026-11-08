@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire, EsmiraStudy, ScheduleCheckin } from '../types.ts';
+import './testI18n.mts';
 
 const store: Record<string, string> = {};
 (globalThis as unknown as { localStorage: Storage }).localStorage = {

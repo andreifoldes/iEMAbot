@@ -7,6 +7,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { answersText, pvtSummary, snapshotMessages } from './snapshot.ts';
+import './testI18n.mts';
 
 const study = { webSnapshot: 'checkin-readout' };
 const likert = (id: string, text: string) => ({ id, text, type: 'likert' as const, scale_max: 5 });

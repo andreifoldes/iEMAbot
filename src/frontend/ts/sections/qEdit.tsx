@@ -1,6 +1,7 @@
 import {SectionContent} from "../site/SectionContent";
 import m, {Vnode} from "mithril";
 import {Lang} from "../singletons/Lang";
+import {sanitizeHtml} from "../helpers/sanitizeHtml";
 import upSvg from "../../imgs/icons/moveUp.svg?raw"
 import copySvg from "../../imgs/icons/copy.svg?raw"
 import downSvg from "../../imgs/icons/moveDown.svg?raw"
@@ -318,7 +319,7 @@ export class Content extends SectionContent {
 							<div class="fillFlexSpace">
 								<div class="verticalPadding highlight smallText">{`${Lang.getDynamic("input_" + input.responseType.get())} ${input.required.get() ? '*' : ''} (${input.name.get()})`}</div>
 
-								<div class="verticalPadding">{m.trust(input.text.get())}</div>
+								<div class="verticalPadding">{m.trust(sanitizeHtml(input.text.get()))}</div>
 
 								{this.choicesPreview(input)}
 							</div>

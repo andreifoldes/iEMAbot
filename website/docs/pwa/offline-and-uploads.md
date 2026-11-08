@@ -40,7 +40,7 @@ stateDiagram-v2
 
 The service worker cannot read `localStorage`, so `completionMirror.ts` keeps an IndexedDB copy of the
 completion log (store `completions`, DB `esmira_state`). The worker uses it to suppress reminders for work
-already done; see [Web Push](../backend/web-push.md#suppressing-reminders).
+already done; see [Web Push](../backend/channels/web-push.md#suppressing-reminders).
 
 ## Upload protocol (visible to participants)
 

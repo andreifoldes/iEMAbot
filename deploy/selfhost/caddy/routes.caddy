@@ -1,0 +1,29 @@
+# What the server exposes. `route` keeps these in the written order.
+#   /pwa/*     the participant app
+#   /esmira/*  the researcher dashboard and the API (the container serves it from its root)
+#   /webapp/*  optional: cognitive tasks you host yourself, from the webapp folder next to compose.yml
+(iemabot_routes) {
+	route {
+		# The app denies these itself; this keeps a mistake in one layer from exposing participant data or keys.
+		@private path /esmira/backend/* /esmira/esmira_data/* /esmira/cli/* /esmira/.* /esmira/*/.*
+		respond @private 404
+
+		@root path /
+		redir @root /pwa/ 302
+		redir /pwa /pwa/ 308
+		redir /esmira /esmira/ 308
+
+		handle /pwa/* {
+			reverse_proxy app:80
+		}
+		handle_path /esmira/* {
+			reverse_proxy app:80
+		}
+		handle_path /webapp/* {
+			root * /srv/webapp
+			encode zstd gzip
+			file_server
+		}
+		respond 404
+	}
+}

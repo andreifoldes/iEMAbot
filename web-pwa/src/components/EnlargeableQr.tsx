@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 /** The QR library only ships to the browsers that actually show a code. */
 const InstallQr = lazy(() => import('./InstallQr'));
@@ -40,7 +41,7 @@ export function QrDialog({ url, onClose }: { url: string; onClose: () => void })
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="QR code, enlarged"
+      aria-label={t('pwa_qr_dialog')}
       className="fixed inset-0 z-[80] bg-black/75 flex items-center justify-center p-6"
       onClick={onClose}
     >
@@ -48,7 +49,7 @@ export function QrDialog({ url, onClose }: { url: string; onClose: () => void })
         <button
           ref={closeRef}
           onClick={onClose}
-          aria-label="Close enlarged QR code"
+          aria-label={t('pwa_qr_close')}
           className="absolute -top-3 -right-3 z-10 w-10 h-10 rounded-full bg-white text-slate-900 shadow-lg flex items-center justify-center"
         >
           <X size={20} aria-hidden="true" />
@@ -75,7 +76,7 @@ export function EnlargeableQr({ url }: { url: string }) {
         ref={triggerRef}
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
-        aria-label="Enlarge QR code"
+        aria-label={t('pwa_qr_enlarge')}
         className="rounded-xl cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Suspense fallback={<QrSpinner size={176} />}>

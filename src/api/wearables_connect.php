@@ -35,6 +35,11 @@ if($json->serverVersion < Main::ACCEPTED_SERVER_VERSION) {
 	return;
 }
 
+if(!\backend\channels\SecretBox::hasKey('wearables_token_key')) { // the tokens could not be stored: stop before the participant signs in at the provider
+	echo JsonOutput::error('Wearables are not set up on this server.');
+	return;
+}
+
 $userId   = $json->userId;
 $studyId  = (int) $json->studyId;
 $provider = (string) $json->provider;

@@ -1,0 +1,206 @@
+{
+  "_": {
+    "id": 1111,
+    "packageVersion": "9.9.9",
+    "serverVersion": 12,
+    "published": true,
+    "webPhoneOnly": true,
+    "messagePacingWpm": 200,
+    "wearablesEnabled": true,
+    "wearablesProviders": [
+      "withings"
+    ],
+    "wearablesDataTypes": [],
+    "accessKeys": [
+      "sleepmood",
+      "sm2026"
+    ],
+    "langCodes": [
+      "en"
+    ],
+    "title": "Sleep and mood study",
+    "studyDescription": "<p>How you sleep and feel.</p>",
+    "informedConsentForm": "You agree to take part.",
+    "contactEmail": "lab@example.org",
+    "questionnaires": [
+      {
+        "internalId": 20001,
+        "virtualInputs": [
+          "derived_flag"
+        ],
+        "title": "Morning check-in",
+        "actionTriggers": [],
+        "pages": [
+          {
+            "header": "Sleep",
+            "inputs": [
+              {
+                "responseType": "time",
+                "name": "bed_time",
+                "text": "When did you go to bed?",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "likert",
+                "name": "sleep_quality",
+                "required": true,
+                "likertSteps": 7,
+                "leftSideLabel": "bad",
+                "rightSideLabel": "good",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "name": "sleep_note",
+                "maxLength": 200,
+                "listChoices": [],
+                "subInputs": []
+              }
+            ]
+          },
+          {
+            "inputs": [
+              {
+                "responseType": "list_single",
+                "name": "mood_today",
+                "other": true,
+                "listChoices": [
+                  "Good",
+                  "Okay",
+                  "Bad"
+                ],
+                "subInputs": []
+              },
+              {
+                "responseType": "list_multiple",
+                "name": "activities",
+                "listChoices": [
+                  "Walk",
+                  "Read"
+                ],
+                "subInputs": []
+              }
+            ],
+            "relevance": "sleep_quality > 3"
+          }
+        ],
+        "sumScores": [
+          {
+            "name": "total_score",
+            "addList": [
+              "sleep_quality"
+            ],
+            "subtractList": []
+          }
+        ]
+      },
+      {
+        "internalId": 20002,
+        "virtualInputs": [],
+        "showPagination": false,
+        "title": "Evening",
+        "actionTriggers": [],
+        "pages": [
+          {
+            "inputs": [
+              {
+                "responseType": "dynamic_input",
+                "name": "dyn_item",
+                "listChoices": [],
+                "subInputs": [
+                  {
+                    "responseType": "likert",
+                    "text": "How stressed are you?",
+                    "listChoices": [],
+                    "subInputs": []
+                  },
+                  {
+                    "responseType": "likert",
+                    "text": "How energetic are you?",
+                    "listChoices": [],
+                    "subInputs": []
+                  }
+                ]
+              },
+              {
+                "responseType": "webapp",
+                "name": "reaction_task",
+                "text": "Reaction game",
+                "url": "https://example.org/task/index.html",
+                "webappDescription": "Tap as fast as you can.",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "record_audio",
+                "name": "voice_memo",
+                "maxLength": 120,
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "record_keystrokes",
+                "name": "typed_memo",
+                "minLength": 20,
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "va_scale",
+                "name": "energy_slider",
+                "maxValue": 100,
+                "instruction": "Slide to your level.",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "image",
+                "name": "show_picture",
+                "imageAlt": "A kitchen",
+                "url": "https://example.org/picture.png",
+                "listChoices": [],
+                "subInputs": []
+              }
+            ]
+          }
+        ],
+        "sumScores": []
+      }
+    ],
+    "eventUploadSettings": {
+      "notification": true
+    },
+    "publicStatistics": {
+      "charts": []
+    },
+    "personalStatistics": {
+      "charts": []
+    },
+    "pluginData": {},
+    "channels": {
+      "telegram": {
+        "enabled": true
+      }
+    },
+    "schedule": {
+      "dayStart": 14400000,
+      "checkins": [
+        {
+          "questionnaireId": 20001,
+          "startType": "fixed",
+          "startTime": 21600000,
+          "endType": "fixed",
+          "endTime": 36000000,
+          "prompt": "random",
+          "reminderCount": 2
+        },
+        {
+          "questionnaireId": 20002,
+          "limit": "day"
+        }
+      ]
+    },
+    "lang": "en"
+  }
+}

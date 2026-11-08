@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeServerBase, setServerBase, getApiRoot, clearServerBase } from './serverRoot.ts';
+import { normalizeServerBase, setServerBase, getApiRoot, clearServerBase, isSecureOrLocalServer } from './serverRoot.ts';
 
 test('normalizeServerBase appends /esmira/ to a bare origin', () => {
   assert.equal(normalizeServerBase('https://example.org'), 'https://example.org/esmira/');
@@ -30,4 +30,11 @@ test('getApiRoot falls back to the default, stored value wins', () => {
   assert.equal(getApiRoot(), 'https://example.org/esmira/');
   clearServerBase();
   assert.equal(getApiRoot(), '/esmira/');
+});
+
+test('isSecureOrLocalServer: https, or http only for this machine', () => {
+  for (const ok of ['https://example.org/esmira/', 'http://localhost/esmira/', 'http://127.0.0.1:8080/esmira/', 'http://10.0.2.2/esmira/'])
+    assert.equal(isSecureOrLocalServer(ok), true, ok);
+  for (const bad of ['http://example.org/esmira/', 'http://192.168.0.5/esmira/', 'http://localhost.evil.example/esmira/', 'ftp://example.org/', 'not a url', ''])
+    assert.equal(isSecureOrLocalServer(bad), false, bad);
 });

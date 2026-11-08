@@ -68,6 +68,10 @@ export class Content extends SectionContent {
 	private participantTestResults: Record<string, string> = {}
 	private withdrawUserId = ""
 	private withdrawResult: string | null = null
+	private eraseUserId = ""
+	private eraseConfirmId = ""
+	private eraseWithdraw = true
+	private eraseResult: string | null = null
 
 	public static preLoad(sectionData: SectionData): Promise<any>[] {
 		return [
@@ -142,6 +146,80 @@ export class Content extends SectionContent {
 		await this.reload(study)
 	}
 
+	/**
+	 * Remove everything one participant left in the study (answers in every copy, media, messages, push and chat state, wearable
+	 * data, database rows). For a participant who asked the research team to delete their data. The id is typed twice and the
+	 * browser asks again; the server checks both.
+	 */
+	private async eraseParticipant(study: Study): Promise<void> {
+		const userId = this.eraseUserId.trim()
+		const confirmId = this.eraseConfirmId.trim()
+		if(!userId)
+			return
+		if(userId !== confirmId) {
+			this.eraseResult = `❌ ${Lang.get("erase_participant_mismatch")}`
+			return
+		}
+		if(!confirm(Lang.get("erase_participant_confirm", userId)))
+			return
+		this.eraseResult = "…"
+		m.redraw()
+		try {
+			const r = await this.sectionData.loader.loadJson(
+				`${FILE_ADMIN}?type=DeleteParticipantData&study_id=${study.id.get()}`,
+				"post",
+				`user_id=${encodeURIComponent(userId)}&confirm_user_id=${encodeURIComponent(confirmId)}${this.eraseWithdraw ? "&withdraw=1" : ""}`
+			)
+			const total = Object.values(r.removed ?? {}).reduce((sum: number, n: any) => sum + Number(n), 0)
+			if(r.complete) {
+				this.eraseResult = `✅ ${Lang.get("erase_participant_done", total)}`
+				this.eraseUserId = ""
+				this.eraseConfirmId = ""
+			}
+			else
+				this.eraseResult = `❌ ${Lang.get("erase_participant_partial", (r.failed ?? []).join(", "))}`
+		} catch(e) {
+			this.eraseResult = `❌ ${Lang.get("erase_participant_failed")}`
+		}
+		await this.reload(study)
+	}
+
+	private eraseView(study: Study): Vnode<any, any> {
+		return <div class="verticalPadding">
+			<div class="center"><b>{Lang.get("erase_participant")}</b></div>
+			<div class="center"><small>{Lang.get("erase_participant_info")}</small></div>
+			<div class="center verticalPadding">
+				<input
+					type="text"
+					placeholder={Lang.get("withdraw_participant_id")}
+					value={this.eraseUserId}
+					oninput={(e: InputEvent) => { this.eraseUserId = (e.target as HTMLInputElement).value }}
+				/>
+				&nbsp;
+				<input
+					type="text"
+					placeholder={Lang.get("erase_participant_id_again")}
+					value={this.eraseConfirmId}
+					oninput={(e: InputEvent) => { this.eraseConfirmId = (e.target as HTMLInputElement).value }}
+					onkeydown={(e: KeyboardEvent) => { if(e.key === "Enter") this.eraseParticipant(study) }}
+				/>
+			</div>
+			<div class="center">
+				<label>
+					<input
+						type="checkbox"
+						checked={this.eraseWithdraw}
+						onchange={(e: Event) => { this.eraseWithdraw = (e.target as HTMLInputElement).checked }}
+					/>
+					&nbsp;{Lang.get("erase_participant_also_withdraw")}
+				</label>
+				&nbsp;
+				<button type="button" onclick={() => this.eraseParticipant(study)}>{Lang.get("erase_participant_button")}</button>
+				{this.eraseResult && <small>&nbsp;{this.eraseResult}</small>}
+			</div>
+		</div>
+	}
+
 	private withdrawnView(s: PushStats, study: Study): Vnode<any, any> {
 		const list = s.withdrawn ?? []
 		return <div>
@@ -158,6 +236,7 @@ export class Content extends SectionContent {
 				<button type="button" onclick={() => this.withdrawParticipant(study, this.withdrawUserId)}>{Lang.get("withdraw_participant")}</button>
 				{this.withdrawResult && <small>&nbsp;{this.withdrawResult}</small>}
 			</div>
+			{this.eraseView(study)}
 			{list.length === 0
 				? <div class="center"><small>{Lang.get("withdrawn_none")}</small></div>
 				: <table class="boxStyle" style="width:100%"><tbody>

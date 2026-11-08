@@ -58,9 +58,46 @@ class GithubIssueReportsTest extends BaseDataFolderTestSetup {
 			$this->posts[] = [$url, $token, $payload];
 			$status = array_shift($this->statuses) ?? 201;
 			return ['status' => $status, 'body' => $status === 201 ? ['number' => 1] : ['message' => 'Bad credentials']];
-		}, $now);
+		}, $now, function(string $url) {
+			$this->gets[] = $url;
+			return ['status' => 200, 'body' => ['private' => $this->repoIsPrivate, 'has_issues' => true]];
+		});
 	}
 
+	private $gets = [];
+	private $repoIsPrivate = true;
+	
+	function test_nothing_is_posted_to_a_repository_that_is_not_private() {
+		GithubIssueReports::enqueue(5, 'user-one-id', "--- iEMAbot error report ---\nParticipant note:\nmy note");
+		$this->repoIsPrivate = false;
+		$result = $this->run_();
+		$this->assertSame(0, $result['sent']);
+		$this->assertSame(1, $result['queued']);
+		$this->assertStringContainsString(GithubIssueReports::NOT_PRIVATE, $result['error']);
+		$this->assertSame([], $this->posts, 'nothing may leave for a public repository');
+		
+		//once it is private, the same report goes out
+		$this->repoIsPrivate = true;
+		$result = $this->run_();
+		$this->assertSame(1, $result['sent']);
+		$this->assertCount(1, $this->posts);
+	}
+	
+	function test_the_repository_is_only_looked_up_when_there_is_something_to_send() {
+		$this->run_();
+		$this->assertSame([], $this->gets);
+	}
+	
+	function test_a_failed_lookup_of_the_repository_posts_nothing() {
+		GithubIssueReports::enqueue(5, 'user-one-id', "--- iEMAbot error report ---\nParticipant note:\nmy note");
+		$result = GithubIssueReports::run(function() { $this->posts[] = 'posted'; return ['status' => 201, 'body' => []]; }, self::NOW,
+			function() { return ['status' => 502, 'body' => []]; });
+		$this->assertSame(0, $result['sent']);
+		$this->assertSame(1, $result['queued']);
+		$this->assertStringContainsString('502', $result['error']);
+		$this->assertSame([], $this->posts);
+	}
+	
 	function test_only_error_reports_are_queued() {
 		$this->assertFalse(GithubIssueReports::enqueue(1, 'u1', 'Hello, a normal message', self::NOW));
 		$this->assertTrue(GithubIssueReports::enqueue(1, self::USER, self::REPORT, self::NOW));
@@ -188,8 +225,10 @@ class GithubIssueReportsTest extends BaseDataFolderTestSetup {
 	function test_configure_writes_only_changes_and_check_reports_problems() {
 		GithubIssueReports::configure('owner/other', 'tok2');
 		$this->assertSame('owner/other', GithubIssueReports::repo());
-		$this->assertSame('', GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => true]]; }));
-		$this->assertStringContainsString('switched off', GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => false]]; }));
+		$this->assertSame('', GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => true, 'private' => true]]; }));
+		$this->assertStringStartsWith(GithubIssueReports::NOT_PRIVATE, GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => true, 'private' => false]]; }));
+		$this->assertStringStartsWith(GithubIssueReports::NOT_PRIVATE, GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => true]]; }), 'unknown counts as not private');
+		$this->assertStringContainsString('switched off', GithubIssueReports::check(function() { return ['status' => 200, 'body' => ['has_issues' => false, 'private' => true]]; }));
 		$this->assertStringContainsString('404', GithubIssueReports::check(function() { return ['status' => 404, 'body' => ['message' => 'Not Found']]; }));
 		GithubIssueReports::configure('', '');
 		$this->assertFalse(GithubIssueReports::isConfigured());

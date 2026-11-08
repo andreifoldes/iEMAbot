@@ -33,3 +33,20 @@ export function init(startHash: string, serverName: string, serverVersion: numbe
 		document.getElementById("legalLink")!.innerText = Lang.get("impressum")
 	})
 }
+
+/**
+ * The server passes the arguments of init() in the data-esmira-init attribute of <body> (a JSON array, see index.php)
+ * instead of an inline onload handler, so a Content-Security-Policy can forbid inline script.
+ * Runs once when the page has loaded, like the former onload handler.
+ */
+function initFromPage(): void {
+	const raw = document.body.dataset.esmiraInit
+	if(!raw)
+		return
+	const args = JSON.parse(raw) as Parameters<typeof init>
+	init(...args)
+}
+if(document.readyState === "complete")
+	initFromPage()
+else
+	window.addEventListener("load", initFromPage)

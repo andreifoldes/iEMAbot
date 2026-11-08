@@ -7,6 +7,8 @@ use backend\fileSystem\PathsFS;
 use backend\JsonOutput;
 use backend\Main;
 use backend\notifications\ParticipantWithdrawals;
+use backend\notifications\NotificationText;
+use backend\notifications\PushEndpoint;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -33,11 +35,16 @@ if($json->serverVersion < Main::ACCEPTED_SERVER_VERSION) {
 	return;
 }
 
+// TODO(security): tracked in the maintainers' internal notes.
 $userId = $json->userId;
 $studyId = (int) $json->studyId;
 
 if(!Main::strictCheckInput($userId)) {
 	echo JsonOutput::error('User is faulty');
+	return;
+}
+if(!$dataStore->getStudyStore()->studyExists($studyId)) { //also keeps this endpoint from creating folders for study ids that do not exist
+	echo JsonOutput::error('Unknown study');
 	return;
 }
 if($dataStore->getStudyStore()->isLocked($studyId)) {
@@ -67,22 +74,30 @@ try {
 			echo JsonOutput::error('Invalid subscription');
 			return;
 		}
+		//the server later sends requests to this URL: only the browser vendors' push services are accepted
+		if(!PushEndpoint::isAllowed($subscription->endpoint)) {
+			echo JsonOutput::error('Unsupported push service');
+			return;
+		}
+		if(!is_object($subscription->keys) || !isset($subscription->keys->p256dh, $subscription->keys->auth)
+			|| !is_string($subscription->keys->p256dh) || !is_string($subscription->keys->auth)) {
+			echo JsonOutput::error('Invalid subscription');
+			return;
+		}
 		$folder = PathsFS::folderPushSubscriptions($studyId);
 		if(!is_dir($folder))
 			FileSystemBasics::createFolder($folder, true);
 		// `created` doubles as a scheduling anchor when no UserData exists yet
 		// (a participant can subscribe at consent, before their first submission).
 		// `tzOffset` (JS getTimezoneOffset(), minutes) lets the scheduler fire
-		// signal times in the participant's local time.
-		FileSystemBasics::writeFile($file, json_encode([
+		// signal times in the participant's local time. `lang` and `uiLang` are what the app reports about its
+		// languages (see NotificationText::subscriptionLangs).
+		FileSystemBasics::writeFile($file, json_encode(array_merge([
 			'userId' => $userId,
-			'subscription' => $subscription,
+			'subscription' => ['endpoint' => $subscription->endpoint, 'keys' => ['p256dh' => $subscription->keys->p256dh, 'auth' => $subscription->keys->auth]], //only what the sender needs
 			'tzOffset' => isset($json->tzOffset) ? (int) $json->tzOffset : 0,
-			// Same language resolution as api/studies.php for this browser, so reminders are in
-			// the language the participant sees the study in.
-			'lang' => preg_match('/^[a-zA-Z_-]{2,10}$/', $lang = Main::getLang(false)) ? $lang : '',
 			'created' => Main::getMilliseconds(),
-		]));
+		], NotificationText::subscriptionLangs($json, Main::getLang(false)))));
 	}
 }
 catch(CriticalException $e) {

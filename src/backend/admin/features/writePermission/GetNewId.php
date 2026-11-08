@@ -11,10 +11,10 @@ use backend\exceptions\CriticalException;
 
 class GetNewId extends HasWritePermission {
 	private function getRandomStudyId(): int {
-		return rand(1000, 9999);
+		return random_int(1000, 9999);
 	}
 	private function getRandomQuestionnaireId(): int {
-		return rand(10000, 99999);
+		return random_int(10000, 99999);
 	}
 	
 	/**

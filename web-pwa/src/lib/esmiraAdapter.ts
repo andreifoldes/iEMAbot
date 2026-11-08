@@ -25,13 +25,14 @@ import type {
   PreloadedSession,
   ShowIf,
 } from '../types';
+import { t } from './i18n.ts';
 
 /**
  * Prompt shown in the free-text modal when a participant picks the "other"
  * option of a list_single that has ESMira's `other` flag enabled. Generic
  * because the chosen option's label (e.g. "Something else") is shown alongside.
  */
-const OTHER_SPECIFY_PROMPT = 'Please describe your answer.';
+const otherSpecifyPrompt = (): string => t('pwa_input_other_specify');
 
 /** responseTypes that contribute a value AND render in this web UI. */
 const RENDERABLE = new Set([
@@ -49,7 +50,7 @@ export function extractCognitive(html: string): { url: string; title: string; de
   if (!a) return null;
   const url = a[1];
   const titleM = html.match(/<b>(.*?)<\/b>/is);
-  const title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : 'Assessment';
+  const title = titleM ? titleM[1].replace(/<[^>]+>/g, '').trim() : t('pwa_input_assessment');
   const description = html
     .replace(a[0], '')
     .replace(/<b>.*?<\/b>/is, '')
@@ -124,7 +125,8 @@ export function keepLineBreaks(text: string): string {
 
 /** Map a single ESMira input to a PreloadedQuestion, or null if unsupported. */
 function mapInput(input: EsmiraInput): PreloadedQuestion | null {
-  const rt = input.responseType;
+  // The dashboard leaves defaults out of the saved study, and free text is the default: such a question has no type.
+  const rt = input.responseType ?? 'text_input';
   if (!RENDERABLE.has(rt)) return null;
 
   // Explanatory helper text (rich HTML). Only carried through when it holds real
@@ -157,7 +159,7 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   // migrated. Renders as the same 'cognitive' launch card.
   if (rt === 'webapp') {
     const url = input.url ?? '';
-    const title = (input.text ?? '').replace(/<[^>]+>/g, '').trim() || 'Assessment';
+    const title = (input.text ?? '').replace(/<[^>]+>/g, '').trim() || t('pwa_input_assessment');
     const sep = url.includes('?') ? '&' : '?';
     return {
       ...base,
@@ -166,7 +168,7 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
       description: input.webappDescription ?? '',
       // `v` busts any wrapper HTML cached before embed-mode shipped (see below).
       launch_url: url ? `${url}${sep}embed=1&v=3` : '',
-      launch_label: `Start the ${title}`,
+      launch_label: t('pwa_input_start_the', title),
     };
   }
 
@@ -186,7 +188,7 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
       // for days otherwise). Paired with `index.js?v=…` inside the wrapper HTML.
       // Bump both if the wrappers change again.
       launch_url: `${cog.url}${sep}embed=1&v=3`,
-      launch_label: `Start the ${cog.title}`,
+      launch_label: t('pwa_input_start_the', cog.title),
     };
   }
 
@@ -208,7 +210,7 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
       // apps. The last choice is the catch-all by convention — researchers add an
       // explicit label like "Something else" / "Other" as the last item.
       const otherSpecify = input.other && choices.length > 0
-        ? { options: [choices[choices.length - 1]], prompt: OTHER_SPECIFY_PROMPT }
+        ? { options: [choices[choices.length - 1]], prompt: otherSpecifyPrompt() }
         : null;
       return { ...base, type: 'choice', options: choices, other_specify: otherSpecify };
     }
@@ -218,9 +220,9 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
       return {
         ...base,
         type: 'yesno',
-        no_label: input.leftSideLabel || 'No',
+        no_label: input.leftSideLabel || t('pwa_input_no'),
         no_value: '0',
-        yes_label: input.rightSideLabel || 'Yes',
+        yes_label: input.rightSideLabel || t('pwa_input_yes'),
         yes_value: '1',
       };
     case 'text_input':

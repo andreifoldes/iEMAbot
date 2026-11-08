@@ -99,7 +99,7 @@ foreach($studyStore->getStudyIdList() as $studyId) {
 		
 		// Update ResponsesIndex
 		
-		$responseIndex = unserialize(file_get_contents(PathsFS::fileResponsesIndex($studyId, (string)$questionnaireId)));
+		$responseIndex = FileSystemBasics::readSerialized(file_get_contents(PathsFS::fileResponsesIndex($studyId, (string)$questionnaireId)), [ResponsesIndex::class]);
 		foreach($responseIndex->keys as &$key) {
 			$key = strtr($key, $matchTable);
 		}

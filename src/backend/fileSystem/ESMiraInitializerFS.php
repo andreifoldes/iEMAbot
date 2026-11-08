@@ -65,7 +65,7 @@ class ESMiraInitializerFS implements ESMiraInitializer {
 		
 		FileSystemBasics::createFolder(PathsFS::folderErrorReports());
 		FileSystemBasics::createFolder(PathsFS::folderLegal());
-		FileSystemBasics::createFolder(PathsFS::folderTokenRoot());
+		FileSystemBasics::createSecretFolder(PathsFS::folderTokenRoot());
 		FileSystemBasics::createFolder(PathsFS::folderStudies());
 		
 		if(!file_exists(PathsFS::fileStudyIndex()))
@@ -76,7 +76,7 @@ class ESMiraInitializerFS implements ESMiraInitializer {
 	
 	public function create($accountName, $password) {
 		//folder will not exist
-		FileSystemBasics::createFolder(dirname(Paths::FILE_CONFIG));
+		FileSystemBasics::createSecretFolder(dirname(Paths::FILE_CONFIG));
 		$pathDataFolder = Configs::get('dataFolder_path');
 		
 		$this->moveExistingDataFolder($pathDataFolder);

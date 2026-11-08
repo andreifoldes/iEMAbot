@@ -1,0 +1,13 @@
+# Caddy obtains and renews the HTTPS certificate for DOMAIN by itself.
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+import routes.caddy
+
+{$DOMAIN} {
+	# HTTPS ends here, so this is the place for it (see the security headers guide).
+	header Strict-Transport-Security "max-age=31536000"
+	import iemabot_routes
+}

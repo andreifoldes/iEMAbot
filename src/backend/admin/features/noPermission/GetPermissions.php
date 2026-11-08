@@ -7,6 +7,7 @@ use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\fileSystem\PathsFS;
 use backend\Permission;
+use backend\SelfHost;
 
 class GetPermissions extends NoPermission {
 
@@ -25,6 +26,7 @@ class GetPermissions extends NoPermission {
 					'hasErrors' => Configs::getDataStore()->getErrorReportStore()->hasErrorReports(),
 					'totalDiskSpace' => disk_total_space(PathsFS::folderData()),
 					'freeDiskSpace' => disk_free_space(PathsFS::folderData()),
+					'containerImage' => SelfHost::runsFromContainerImage(),
 				];
 			} else
 				$obj = [

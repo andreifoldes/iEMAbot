@@ -1,4 +1,5 @@
 import { KeyRound } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 /**
  * "Write this down" card for what the participant may need to type into the installed app: the
@@ -8,8 +9,8 @@ import { KeyRound } from 'lucide-react';
  */
 export function InviteCodeNote({ code, participantId }: { code: string; participantId?: string }) {
   const rows = [
-    { label: 'Invite code', value: code },
-    { label: 'Participant ID', value: participantId ?? '' },
+    { id: 'code', label: t('pwa_invite_code_label'), value: code },
+    { id: 'participantId', label: t('pwa_invite_participant_id'), value: participantId ?? '' },
   ].filter((r) => r.value);
   if (!rows.length) return null;
   return (
@@ -18,13 +19,13 @@ export function InviteCodeNote({ code, participantId }: { code: string; particip
         <KeyRound size={14} className="shrink-0 mt-0.5" aria-hidden="true" />
         <span>
           {rows.length > 1
-            ? "Write these down — you might need them:"
-            : "Write this down — you might need it:"}
+            ? t('pwa_invite_write_down_many')
+            : t('pwa_invite_write_down_one')}
         </span>
       </p>
       <dl className="mt-2 space-y-1.5">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between gap-4">
+          <div key={r.id} className="flex items-baseline justify-between gap-4">
             <dt className="text-xs text-on-surface-variant shrink-0">{r.label}</dt>
             <dd className="font-mono text-xl font-semibold tracking-wider text-on-surface break-all text-right select-all">
               {r.value}

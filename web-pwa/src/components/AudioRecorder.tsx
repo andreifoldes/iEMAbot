@@ -16,9 +16,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Pause, Play, Mic, Square, RotateCcw, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useDialogA11y } from '../lib/useDialogA11y';
 import { PromptImage } from './PromptImage';
 import { newAudioIdentifier } from '../lib/audioUploads';
+import { t } from '../lib/i18n';
 import type { PreloadedQuestion } from '../types';
 
 const BAR_COUNT = 44;
@@ -48,7 +50,7 @@ function firstLine(html: string): string {
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&');
   const line = text.split('\n').map((s) => s.trim()).find(Boolean);
-  return line || 'Voice memo';
+  return line || t('pwa_audio_voice_memo');
 }
 
 interface Props {
@@ -302,7 +304,7 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
           <h2 className="text-lg font-bold text-on-surface text-center leading-snug px-9">{title}</h2>
           <button
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t('pwa_audio_close')}
             className="absolute right-0 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high active:scale-95 transition"
           >
             <X size={22} aria-hidden="true" />
@@ -313,12 +315,12 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
           <div className="py-8 text-center">
             <p className="text-on-surface font-medium">
               {status === 'denied'
-                ? 'Microphone access is needed to record a voice memo.'
-                : "Recording isn't available on this device or browser."}
+                ? t('pwa_audio_mic_needed')
+                : t('pwa_audio_unavailable')}
             </p>
             {status === 'denied' && (
               <p className="mt-2 text-sm text-on-surface-variant">
-                Allow microphone access in your browser, then try again.
+                {t('pwa_audio_allow_mic')}
               </p>
             )}
             <div className="mt-6 flex justify-center gap-3">
@@ -327,14 +329,14 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
                   onClick={() => { setStatus('starting'); void start(); }}
                   className="bg-primary text-on-primary font-bold px-6 py-3 rounded-full active:scale-95 transition"
                 >
-                  Try again
+                  {t('pwa_audio_try_again')}
                 </button>
               )}
               <button
                 onClick={onCancel}
                 className="bg-surface-container-high text-on-surface font-semibold px-6 py-3 rounded-full active:scale-95 transition"
               >
-                Close
+                {t('pwa_audio_close')}
               </button>
             </div>
           </div>
@@ -355,7 +357,7 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
               // and the picture above shrinks to make room for them.
               <div
                 className="mt-3 shrink-0 text-center text-sm text-on-surface-variant leading-relaxed esmira-rich"
-                dangerouslySetInnerHTML={{ __html: detail }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail) }}
               />
             )}
 
@@ -424,14 +426,14 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
                 className="flex flex-col items-center gap-1 text-on-surface-variant disabled:opacity-40 active:scale-95 transition w-16"
               >
                 <RotateCcw size={22} aria-hidden="true" />
-                <span className="text-xs font-medium">Redo</span>
+                <span className="text-xs font-medium">{t('pwa_audio_redo')}</span>
               </button>
 
               {/* Center: Pause/Resume while recording, Play/Pause while reviewing. */}
               <button
                 onClick={review ? playPause : togglePause}
                 disabled={status === 'starting'}
-                aria-label={review ? (isPlaying ? 'Pause playback' : 'Play recording') : recording ? 'Pause' : 'Resume'}
+                aria-label={review ? (isPlaying ? t('pwa_audio_pause_playback') : t('pwa_audio_play_recording')) : recording ? t('pwa_audio_pause') : t('pwa_audio_resume')}
                 className="h-16 w-24 rounded-full border-2 border-outline-variant/60 flex items-center justify-center text-primary disabled:opacity-40 hover:bg-surface-container-high active:scale-95 transition"
               >
                 {review
@@ -448,7 +450,7 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
                   className="flex flex-col items-center gap-1 text-primary font-semibold active:scale-95 transition w-16"
                 >
                   <Check size={22} aria-hidden="true" />
-                  <span className="text-xs">Save</span>
+                  <span className="text-xs">{t('pwa_audio_save')}</span>
                 </button>
               ) : (
                 <button
@@ -457,7 +459,7 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
                   className="flex flex-col items-center gap-1 text-on-surface font-semibold disabled:opacity-40 active:scale-95 transition w-16"
                 >
                   <Square size={20} aria-hidden="true" className="fill-current" />
-                  <span className="text-xs">Stop</span>
+                  <span className="text-xs">{t('pwa_audio_stop')}</span>
                 </button>
               )}
             </div>
@@ -465,12 +467,12 @@ export function AudioRecorder({ question, reduceMotion, onCancel, onSave }: Prop
             {/* The recording hint yields its space to the prompt image on phones. */}
             {recordingPhase && !promptImage && (
               <p className="mt-4 shrink-0 text-center text-xs text-on-surface-variant">
-                Tap Stop when you are done — you can review your recording before it is saved.
+                {t('pwa_audio_stop_hint')}
               </p>
             )}
             {review && (
               <p className={cn('shrink-0 text-center text-xs text-on-surface-variant', promptImage ? 'mt-2' : 'mt-4')}>
-                You can play your recording back before saving, or Redo to record again.
+                {t('pwa_audio_review_hint')}
               </p>
             )}
           </>

@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import './testI18n.mts';
 
 const {
   normalize, windowsForDay, resolveWakeTod, resolveEventTod, eventFallbackTod, runsOnDay, applyCompletions, availabilityState, notification,

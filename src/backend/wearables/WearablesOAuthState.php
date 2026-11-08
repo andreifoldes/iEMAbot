@@ -20,9 +20,9 @@ class WearablesOAuthState {
 	public static function create(int $studyId, string $userId, string $provider): string {
 		$folder = PathsFS::folderWearablesOAuthStates();
 		if(!is_dir($folder))
-			FileSystemBasics::createFolder($folder, true);
+			FileSystemBasics::createSecretFolder($folder, true);
 		$state = bin2hex(random_bytes(24));
-		FileSystemBasics::writeFile(PathsFS::fileWearablesOAuthState($state), json_encode([
+		FileSystemBasics::writeSecretFile(PathsFS::fileWearablesOAuthState($state), json_encode([
 			'studyId'  => $studyId,
 			'userId'   => $userId,
 			'provider' => $provider,

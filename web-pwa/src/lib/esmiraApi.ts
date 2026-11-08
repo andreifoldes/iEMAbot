@@ -13,9 +13,12 @@ import type { EsmiraStudy, WearableStatus } from '../types';
 import { flushAudioQueue, markAudioReady } from './audioUploads';
 import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
 import { getApiRoot } from './serverRoot';
+import { t } from './i18n.ts';
+import { pushSubscribePayload } from './pushSubscribePayload.ts';
 import { clientAppType } from './platform';
 import { buildQuitPayload, withdrawnFromStatus } from './withdrawal';
-import { MAX_REJECTIONS, checkUploadReply, rejectionCost } from './uploadRetry';
+import { BETWEEN_UPLOADS_MS, MAX_REJECTIONS, TOO_SOON_ATTEMPTS, TOO_SOON_RETRY_MS, UploadTooSoon, checkUploadReply, dueForRetry, rejectionCost } from './uploadRetry';
+import { drainQueue, newQueueId, oneAtATime } from './uploadQueue';
 import type { ServerInputs } from './schedule';
 
 /**
@@ -69,14 +72,7 @@ export async function subscribeToPush(args: {
   const resp = await fetch(`${getApiRoot()}api/push_subscribe.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      userId: args.userId,
-      studyId: args.study.id,
-      serverVersion: args.serverVersion,
-      subscription: args.subscription,
-      // So the server can schedule "08:00" in the participant's local time, not its own.
-      tzOffset: new Date().getTimezoneOffset(),
-    }),
+    body: JSON.stringify(pushSubscribePayload(args)),
   });
   if (!resp.ok) throw new Error(`push_subscribe.php returned ${resp.status}`);
   const env = await resp.json();
@@ -396,7 +392,7 @@ export async function startWearableConnect(args: {
   userId: string;
   provider: string;
 }): Promise<string> {
-  if (localOnly) throw new Error('This study does not send any data');
+  if (localOnly) throw new Error(t('pwa_api_no_data'));
   const resp = await fetch(`${getApiRoot()}api/wearables_connect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -409,7 +405,7 @@ export async function startWearableConnect(args: {
   });
   if (!resp.ok) throw new Error(`wearables_connect.php returned ${resp.status}`);
   const env = await resp.json();
-  if (!env.success || !env.dataset?.authUrl) throw new Error(env.error || 'Could not start connection');
+  if (!env.success || !env.dataset?.authUrl) throw new Error(env.error || t('pwa_api_connect_failed'));
   return env.dataset.authUrl as string;
 }
 
@@ -451,7 +447,7 @@ export async function disconnectWearable(args: {
   });
   if (!resp.ok) throw new Error(`wearables_disconnect.php returned ${resp.status}`);
   const env = await resp.json();
-  if (!env.success) throw new Error(env.error || 'Disconnect failed');
+  if (!env.success) throw new Error(env.error || t('pwa_api_disconnect_failed'));
   return true;
 }
 
@@ -652,9 +648,15 @@ function questionnaireProtocolEntries(args: SubmitArgs, status: UploadProtocolEn
 const QUEUE_KEY = 'esmira_submit_queue';
 
 interface QueuedSubmit {
+  /** Lets a run of the queue update just this item (see uploadQueue). */
+  id: string;
   payload: DatasetPayload;
   /** Times the server refused it (see uploadRetry); failures while offline don't count. */
   attempts: number;
+  /** When the last attempt began. */
+  lastTry?: number;
+  /** When an attempt began that has not ended yet (see SENDING_EXPIRES_MS). */
+  sendingSince?: number;
   /** Links this queued payload back to its pending upload-protocol entries. */
   protocol?: { studyId: number; userId: string; ids: string[] };
   /** Voice-memo upload identifiers to release for upload once this dataset sends. */
@@ -663,10 +665,20 @@ interface QueuedSubmit {
   keystrokes?: { studyId: number; userId: string; identifiers: number[] };
 }
 
+/** What storage refused to hold. While there is any, this is the queue: the answers stay safe as long as the app is open. */
+let memoryQueue: QueuedSubmit[] | null = null;
+
 function loadQueue(): QueuedSubmit[] {
+  if (memoryQueue) return memoryQueue;
   try {
     const raw = localStorage.getItem(QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const queue: QueuedSubmit[] = raw ? JSON.parse(raw) : [];
+    // Queued by an older version of the app, without an id.
+    if (queue.some((item) => !item.id)) {
+      queue.forEach((item) => { item.id ??= newQueueId(); });
+      saveQueue(queue);
+    }
+    return queue;
   } catch {
     return [];
   }
@@ -675,19 +687,64 @@ function loadQueue(): QueuedSubmit[] {
 function saveQueue(q: QueuedSubmit[]): void {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-  } catch {
-    /* storage full/unavailable */
+    memoryQueue = null;
+  } catch (err) {
+    memoryQueue = q;
+    console.error('Could not save unsent answers on this device', err);
   }
+}
+
+/** Unsent answers exist only in memory, because the device refused to store them. The participant has to know. */
+export function unsentAnswersNotSaved(): boolean {
+  return (memoryQueue?.length ?? 0) > 0;
+}
+
+/** An attempt older than this was cut off (the app was closed, say), so another one may start. */
+const SENDING_EXPIRES_MS = 2 * 60 * 1000;
+/** Longer than a poor connection needs for a dataset, shorter than SENDING_EXPIRES_MS. */
+const UPLOAD_TIMEOUT_MS = 90 * 1000;
+
+function updateQueued(item: QueuedSubmit): void {
+  saveQueue(loadQueue().map((queued) => (queued.id === item.id ? item : queued)));
+}
+
+/**
+ * Saves it first, then sends it: from the moment the participant answers, the answer survives the app being closed or the
+ * phone switching off. It leaves the queue only when the server has it. If the server had it but the reply never arrived,
+ * it is sent again, and the server recognises it (CreateDataSet::isResendOfStoredAnswers).
+ */
+async function saveThenSend(item: Omit<QueuedSubmit, 'id' | 'attempts'>): Promise<boolean> {
+  const queued: QueuedSubmit = { ...item, id: newQueueId(), attempts: 0, lastTry: Date.now(), sendingSince: Date.now() };
+  saveQueue([...loadQueue(), queued]);
+  try {
+    await postDataset(queued.payload);
+  } catch (err) {
+    updateQueued({ ...queued, sendingSince: undefined, attempts: rejectionCost(err) });
+    retrySoonIfTooSoon(err);
+    return false;
+  }
+  saveQueue(loadQueue().filter((other) => other.id !== queued.id));
+  return true;
 }
 
 async function postDataset(payload: DatasetPayload): Promise<void> {
   if (localOnly) return;
-  const resp = await fetch(`${getApiRoot()}api/datasets.php`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  await checkUploadReply(resp, 'datasets.php');
+  for (let attempt = 1; ; attempt++) {
+    const resp = await fetch(`${getApiRoot()}api/datasets.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+    });
+    try {
+      await checkUploadReply(resp, 'datasets.php');
+      return;
+    } catch (err) {
+      // It clears within a second (say, right after a task's own upload): not worth telling the participant they are offline.
+      if (!(err instanceof UploadTooSoon) || attempt >= TOO_SOON_ATTEMPTS) throw err;
+      await new Promise((resolve) => setTimeout(resolve, BETWEEN_UPLOADS_MS));
+    }
+  }
 }
 
 /**
@@ -700,35 +757,39 @@ export async function submitQuestionnaire(args: SubmitArgs): Promise<boolean> {
   const payload = buildPayload(args);
   const audioIds = args.audioIdentifiers ?? [];
   const keystrokeIds = args.keystrokeIdentifiers ?? [];
-  try {
-    await postDataset(payload);
-    appendProtocol(args.study.id, args.userId, questionnaireProtocolEntries(args, 'sent'));
-    // Dataset reached the server → its pending-upload markers exist; release the
-    // voice memos / keystroke logs for upload and kick a flush (best-effort, non-blocking).
-    if (audioIds.length) {
-      await markAudioReady(args.study.id, args.userId, audioIds);
-      void flushAudioQueue();
-    }
-    if (keystrokeIds.length) {
-      await markKeystrokesReady(args.study.id, args.userId, keystrokeIds);
-      void flushKeystrokeQueue();
-    }
-    return true;
-  } catch (err) {
-    const entries = questionnaireProtocolEntries(args, 'pending');
-    appendProtocol(args.study.id, args.userId, entries);
-    const queue = loadQueue();
-    queue.push({
-      payload,
-      attempts: rejectionCost(err),
-      protocol: { studyId: args.study.id, userId: args.userId, ids: entries.map((e) => e.id) },
-      ...(audioIds.length ? { audio: { studyId: args.study.id, userId: args.userId, identifiers: audioIds } } : {}),
-      ...(keystrokeIds.length ? { keystrokes: { studyId: args.study.id, userId: args.userId, identifiers: keystrokeIds } } : {}),
-    });
-    saveQueue(queue);
-    return false;
+  const entries = questionnaireProtocolEntries(args, 'pending');
+  appendProtocol(args.study.id, args.userId, entries);
+  const protocol = { studyId: args.study.id, userId: args.userId, ids: entries.map((e) => e.id) };
+  const sent = await saveThenSend({
+    payload,
+    protocol,
+    ...(audioIds.length ? { audio: { studyId: args.study.id, userId: args.userId, identifiers: audioIds } } : {}),
+    ...(keystrokeIds.length ? { keystrokes: { studyId: args.study.id, userId: args.userId, identifiers: keystrokeIds } } : {}),
+  });
+  if (!sent) return false;
+  markProtocol(protocol.studyId, protocol.userId, protocol.ids, 'sent');
+  // Dataset reached the server → its pending-upload markers exist; release the
+  // voice memos / keystroke logs for upload and kick a flush (best-effort, non-blocking).
+  if (audioIds.length) {
+    await markAudioReady(args.study.id, args.userId, audioIds);
+    void flushAudioQueue();
   }
+  if (keystrokeIds.length) {
+    await markKeystrokesReady(args.study.id, args.userId, keystrokeIds);
+    void flushKeystrokeQueue();
+  }
+  return true;
 }
+
+/** The server refused for coming too soon: that passes in a moment, so don't wait for the app to next come to the front. */
+function retrySoonIfTooSoon(err: unknown): void {
+  if (!(err instanceof UploadTooSoon) || retryTimer !== null) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void flushSubmitQueue();
+  }, TOO_SOON_RETRY_MS);
+}
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 export interface JoinArgs {
   study: EsmiraStudy;
@@ -774,17 +835,11 @@ export async function submitJoined(args: JoinArgs): Promise<boolean> {
   if (localOnly) return true;
   const payload = buildJoinPayload(args);
   const id = newProtocolId();
-  try {
-    await postDataset(payload);
-    appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, sentAt: Date.now(), label: 'Joined study', eventType: 'joined', status: 'sent' }]);
-    return true;
-  } catch (err) {
-    const queue = loadQueue();
-    queue.push({ payload, attempts: rejectionCost(err), protocol: { studyId: args.study.id, userId: args.userId, ids: [id] } });
-    saveQueue(queue);
-    appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, label: 'Joined study', eventType: 'joined', status: 'pending' }]);
-    return false;
-  }
+  appendProtocol(args.study.id, args.userId, [{ id, time: args.joinedAt, label: 'Joined study', eventType: 'joined', status: 'pending' }]);
+  const protocol = { studyId: args.study.id, userId: args.userId, ids: [id] };
+  const sent = await saveThenSend({ payload, protocol });
+  if (sent) markProtocol(protocol.studyId, protocol.userId, protocol.ids, 'sent');
+  return sent;
 }
 
 /**
@@ -863,55 +918,47 @@ export async function submitCognitiveTrials(args: CognitiveTrialsArgs): Promise<
   const entry: UploadProtocolEntry = {
     id: newProtocolId(), time: now, label: args.trialsName, eventType: 'cognitive', status: 'sent',
   };
-  try {
-    await postDataset(payload);
-    appendProtocol(args.study.id, args.userId, [{ ...entry, sentAt: Date.now() }]);
-    return true;
-  } catch (err) {
-    appendProtocol(args.study.id, args.userId, [{ ...entry, status: 'pending' }]);
-    const queue = loadQueue();
-    queue.push({
-      payload,
-      attempts: rejectionCost(err),
-      protocol: { studyId: args.study.id, userId: args.userId, ids: [entry.id] },
-    });
-    saveQueue(queue);
-    return false;
-  }
+  appendProtocol(args.study.id, args.userId, [{ ...entry, status: 'pending' }]);
+  const protocol = { studyId: args.study.id, userId: args.userId, ids: [entry.id] };
+  const sent = await saveThenSend({ payload, protocol });
+  if (sent) markProtocol(protocol.studyId, protocol.userId, protocol.ids, 'sent');
+  return sent;
 }
 
 /**
- * Retry any queued submissions. Returns how many are still waiting to be sent. A submission is only
- * dropped after the server refused it MAX_REJECTIONS times; being offline never counts toward that,
- * so answers given without a connection wait for as long as it takes.
+ * Retry any queued submissions. Returns how many are still waiting to be sent. Nothing leaves the queue unless the server
+ * has it: being offline never counts against an upload, and one the server keeps refusing is tried once a day.
  */
-export async function flushSubmitQueue(): Promise<number> {
-  let queue = loadQueue();
-  if (queue.length === 0) return 0;
-  const remaining: QueuedSubmit[] = [];
-  for (const item of queue) {
-    if (item.attempts >= MAX_REJECTIONS) { // the server keeps refusing it: give up, and say so in the protocol
-      if (item.protocol) markProtocol(item.protocol.studyId, item.protocol.userId, item.protocol.ids, 'failed');
-      continue;
-    }
-    try {
-      await postDataset(item.payload);
+export const flushSubmitQueue = oneAtATime(async (): Promise<number> => {
+  const left = await drainQueue<QueuedSubmit>({ load: loadQueue, save: saveQueue }, {
+    skip: (item) => {
+      const now = Date.now();
+      return (item.sendingSince !== undefined && now - item.sendingSince < SENDING_EXPIRES_MS) // by another tab, or just now
+        || !dueForRetry(item.attempts, item.lastTry, now);
+    },
+    claim: (item) => ({ ...item, lastTry: Date.now(), sendingSince: Date.now() }),
+    send: (item) => postDataset(item.payload),
+    onSent: async (item) => {
       if (item.protocol) markProtocol(item.protocol.studyId, item.protocol.userId, item.protocol.ids, 'sent');
       // This dataset's pending-upload markers now exist server-side → release
       // any voice memos / keystroke logs that were waiting on it.
       if (item.audio) await markAudioReady(item.audio.studyId, item.audio.userId, item.audio.identifiers);
       if (item.keystrokes) await markKeystrokesReady(item.keystrokes.studyId, item.keystrokes.userId, item.keystrokes.identifiers);
-    } catch (err) {
-      remaining.push({ ...item, attempts: item.attempts + rejectionCost(err) });
-    }
-  }
-  queue = remaining;
-  saveQueue(queue);
+    },
+    afterFailure: (item, err) => {
+      retrySoonIfTooSoon(err);
+      const attempts = item.attempts + rejectionCost(err);
+      // Say so in the protocol. It stays queued, and turns to 'sent' if the server takes it after all.
+      if (attempts >= MAX_REJECTIONS && item.protocol) markProtocol(item.protocol.studyId, item.protocol.userId, item.protocol.ids, 'failed');
+      return { ...item, attempts, sendingSince: undefined };
+    },
+    pause: () => new Promise((resolve) => setTimeout(resolve, BETWEEN_UPLOADS_MS)),
+  });
   // Whether or not the queue drained fully, try uploading any ready recordings/logs.
   void flushAudioQueue();
   void flushKeystrokeQueue();
-  return queue.length;
-}
+  return left;
+});
 
 export function pendingSubmitCount(): number {
   return loadQueue().length;
@@ -1046,6 +1093,8 @@ export async function releasePidLock(
 }
 
 /** Wire up automatic flushing on reconnect / tab visibility. */
+const QUEUE_CHECK_MS = 60 * 1000;
+
 export function installSubmitQueueFlusher(): () => void {
   // flushSubmitQueue early-returns when the dataset queue is empty, so also flush
   // the audio queue directly — a memo may still be pending after its dataset sent.
@@ -1061,7 +1110,12 @@ export function installSubmitQueueFlusher(): () => void {
   window.addEventListener('online', onOnline);
   document.addEventListener('visibilitychange', onVisible);
   flushAll();
+  // A connection can come back without an 'online' event, and a participant can leave the app open for a long time.
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible' && navigator.onLine !== false) flushAll();
+  }, QUEUE_CHECK_MS);
   return () => {
+    clearInterval(timer);
     window.removeEventListener('online', onOnline);
     document.removeEventListener('visibilitychange', onVisible);
   };

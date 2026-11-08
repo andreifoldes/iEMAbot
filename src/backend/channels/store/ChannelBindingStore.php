@@ -40,8 +40,23 @@ class ChannelBindingStore {
 		$chatRef = SecretBox::decrypt((string) ($data['chatRef'] ?? ''), self::SECRET_KEY);
 		if($chatRef === null)
 			return null;
+		self::upgradeStored(PathsFS::fileChannelBinding($studyId, $userId), $data);
 		$data['chatRef'] = $chatRef;
 		return $data;
+	}
+
+	/** A binding written in plaintext by an older version (no key at the time) is re-encrypted when it is read. */
+	private static function upgradeStored(string $file, array $stored): void {
+		$upgraded = SecretBox::upgrade((string) ($stored['chatRef'] ?? ''), self::SECRET_KEY);
+		if($upgraded === null)
+			return;
+		try {
+			$stored['chatRef'] = $upgraded;
+			JsonFile::write($file, $stored);
+		}
+		catch(\Throwable $e) {
+			// best effort: reading must not fail because the file could not be rewritten
+		}
 	}
 
 	/** Create or update a binding (and its chat index entry). */
@@ -80,6 +95,7 @@ class ChannelBindingStore {
 			$chatRef = SecretBox::decrypt((string) ($data['chatRef'] ?? ''), self::SECRET_KEY);
 			if($chatRef === null)
 				continue;
+			self::upgradeStored($folder . $entry, $data);
 			$data['chatRef'] = $chatRef;
 			$out[] = $data;
 		}

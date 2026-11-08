@@ -21,7 +21,7 @@ use backend\Paths;
 use backend\ResponsesIndex;
 
 $changeResponsesIndex = function(int $studyId, string $identifier) {
-	$values = unserialize(file_get_contents(PathsFS::fileResponsesIndex($studyId, $identifier)));
+	$values = FileSystemBasics::readSerialized(file_get_contents(PathsFS::fileResponsesIndex($studyId, $identifier)), [ResponsesIndex::class]);
 	if(!$values)
 		throw new CriticalException("Could not unserialize responsesIndex $identifier for study $studyId");
 	if(!is_array($values)) //skip if data is already in new format
@@ -35,7 +35,7 @@ $changeResponsesIndex = function(int $studyId, string $identifier) {
 $changeMessageFormat = function(string $path): array {
 	$newMessages = [];
 	$oldMessages = file_exists($path)
-		? unserialize(file_get_contents($path))
+		? FileSystemBasics::readSerialized(file_get_contents($path), [Message::class])
 		: [];
 	
 	foreach($oldMessages as $message) {
@@ -126,7 +126,7 @@ foreach($studyStore->getStudyIdList() as $studyId) {
 		
 		$path = PathsFS::fileStudyStatisticsMetadata($studyId);
 		$oldMetadata = file_exists($path)
-			? unserialize(file_get_contents($path))
+			? FileSystemBasics::readSerialized(file_get_contents($path), [StudyStatisticsEntry::class, stdClass::class])
 			: new stdClass();
 		$newMetadata = [];
 		
@@ -163,7 +163,7 @@ foreach($studyStore->getStudyIdList() as $studyId) {
 		foreach($studyStore->getStudyParticipants($studyId) as $userId) {
 			try {
 				$path = PathsFS::fileUserData($studyId, $userId);
-				$array = unserialize(file_get_contents($path));
+				$array = FileSystemBasics::readSerialized(file_get_contents($path), [UserData::class]);
 				
 				if(!$array)
 					throw new CriticalException("Could not unserialize userdata $userId for study $studyId");

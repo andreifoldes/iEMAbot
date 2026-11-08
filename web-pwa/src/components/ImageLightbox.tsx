@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { useDialogA11y } from '../lib/useDialogA11y';
+import { t } from '../lib/i18n';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 5;
@@ -35,15 +36,15 @@ interface Props {
 
 export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
   const dialogRef = useDialogA11y<HTMLDivElement>(true, onClose);
-  const [t, setT] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
+  const [tf, setT] = useState<Transform>({ scale: 1, tx: 0, ty: 0 });
   const [gesturing, setGesturing] = useState(false);
 
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   // Live transform for gesture math (state lags a frame behind pointer events).
-  const tRef = useRef<Transform>(t);
-  tRef.current = t;
+  const tRef = useRef<Transform>(tf);
+  tRef.current = tf;
 
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ dist: number; scale: number } | null>(null);
@@ -201,7 +202,7 @@ export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
       tabIndex={-1}
       role="dialog"
       aria-modal="true"
-      aria-label={alt || 'Enlarged image'}
+      aria-label={alt || t('pwa_image_enlarged')}
       initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -220,17 +221,17 @@ export function ImageLightbox({ src, alt, reduceMotion, onClose }: Props) {
         draggable={false}
         className="max-w-full max-h-full"
         style={{
-          transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.scale})`,
+          transform: `translate(${tf.tx}px, ${tf.ty}px) scale(${tf.scale})`,
           transition: gesturing || reduceMotion ? 'none' : 'transform 0.25s ease-out',
         }}
       />
       <p className="absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] text-center text-white/60 text-xs font-medium pointer-events-none">
-        Pinch or double-tap to zoom
+        {t('pwa_image_zoom_hint')}
       </p>
       <button
         ref={closeRef}
         onClick={onClose}
-        aria-label="Close enlarged image"
+        aria-label={t('pwa_image_close')}
         className="absolute top-4 right-4 p-2.5 bg-white/15 hover:bg-white/25 rounded-full text-white transition-colors active:scale-95"
       >
         <X size={20} aria-hidden="true" />

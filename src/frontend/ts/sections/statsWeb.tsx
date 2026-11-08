@@ -1,5 +1,6 @@
 import {SectionContent} from "../site/SectionContent";
 import m, {Vnode} from "mithril";
+import {safeUrl} from "../helpers/sanitizeHtml";
 import {Lang} from "../singletons/Lang";
 import {DashRow} from "../components/DashRow";
 import {DashElement} from "../components/DashElement";
@@ -208,7 +209,7 @@ export class Content extends SectionContent {
 		return {
 			key: valueList.name,
 			view: <div class="verticalPadding smallText nowrap">
-				<a class="searchTarget" target="_blank" href={valueList.name}>{valueList.name}</a>
+				<a class="searchTarget" target="_blank" href={safeUrl(valueList.name) || undefined}>{valueList.name}</a>
 				<span class="bold">&nbsp;({valueList.count})</span>
 			</div>
 		}

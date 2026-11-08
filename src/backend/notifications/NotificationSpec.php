@@ -12,14 +12,21 @@ namespace backend\notifications;
 class NotificationSpec {
 	/** Shown when neither the questionnaire nor the study has a title. */
 	const APP_NAME = 'iEMAbot';
+	// The wording below is translated: see NotificationText (locales/<code>.json, English as the fallback).
 	/** Body for a check-in without notification text. */
-	const DEFAULT_BODY = 'You have a questionnaire to complete.';
-	/** Body when several questionnaires are due at the same minute and share one notification. */
-	const COALESCED_BODY = 'You have %d questionnaires to complete.';
+	public static function defaultBody(string $lang = 'en'): string {
+		return NotificationText::get('pwa_push_default_body', $lang);
+	}
+
+	/** Body when several questionnaires are due at the same minute and share one notification (%d = how many). */
+	public static function coalescedTemplate(string $lang = 'en'): string {
+		return NotificationText::template('pwa_push_coalesced_body', $lang);
+	}
+
 	/** The web-push message when a participant's study has ended (Study.studyEndNotification, when left empty). */
-	const STUDY_END_BODY = 'The study has finished. Thank you for taking part!';
-	/** Appended when a check-in opts in (includeDeadline). */
-	const DEADLINE_SUFFIX = ' Complete by %s.';
+	public static function studyEndBody(string $lang = 'en'): string {
+		return NotificationText::get('pwa_push_study_end_body', $lang);
+	}
 
 	// Look of the notification. The PWA's service worker and the Android app both use these files;
 	// android-app ships copies (res/drawable/ic_stat_esmira.xml is badge.svg's glyph,
@@ -48,9 +55,9 @@ class NotificationSpec {
 	}
 
 	/** $body plus " Complete by HH:MM." (24-hour, end of day shown as 23:59). */
-	public static function withDeadline(string $body, int $deadlineTod): string {
+	public static function withDeadline(string $body, int $deadlineTod, string $lang = 'en'): string {
 		$mins = min(intdiv($deadlineTod, 60000), 1439);
-		return $body . sprintf(self::DEADLINE_SUFFIX, sprintf('%02d:%02d', intdiv($mins, 60), $mins % 60));
+		return $body . ' ' . NotificationText::get('pwa_push_complete_by', $lang, sprintf('%02d:%02d', intdiv($mins, 60), $mins % 60));
 	}
 
 	/**
@@ -62,7 +69,7 @@ class NotificationSpec {
 	public static function coalesce(array $items, array $study): array {
 		if(count($items) === 1)
 			return [(string) $items[0]['title'], (string) $items[0]['body']];
-		return [self::studyTitle($study), sprintf(self::COALESCED_BODY, count($items))];
+		return [self::studyTitle($study), NotificationText::get('pwa_push_coalesced_body', NotificationText::langFor($study), count($items))];
 	}
 
 	/** FNV-1a 32-bit, unsigned. */

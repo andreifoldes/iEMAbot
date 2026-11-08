@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkAppUpdate, updateFrom } from './appUpdate.ts';
+import './testI18n.mts';
 
 const SERVER = 'https://iemabot.example.org/';
 const release = { versionCode: 29_900_000, versionName: '3.7.2', sha: 'abc1234', apk: 'app/iemabot.apk' };
@@ -23,4 +24,11 @@ test('nothing for a server without an app build or a malformed answer', () => {
 
 test('outside the native app there is nothing to check', async () => {
   assert.equal(await checkAppUpdate(SERVER), null);
+});
+
+test('the download must be on the server the app talks to', () => {
+  const same = { ...release, apk: 'https://iemabot.example.org/downloads/iemabot.apk' };
+  assert.equal(updateFrom(same, 45, SERVER)?.url, 'https://iemabot.example.org/downloads/iemabot.apk');
+  for (const apk of ['https://evil.example/iemabot.apk', '//evil.example/iemabot.apk', 'http://iemabot.example.org/iemabot.apk', 'https://iemabot.example.org.evil.example/a.apk'])
+    assert.equal(updateFrom({ ...release, apk }, 45, SERVER), null, apk);
 });

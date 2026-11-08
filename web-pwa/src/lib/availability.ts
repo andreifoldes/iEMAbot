@@ -8,6 +8,7 @@
 
 import type { EsmiraQuestionnaire } from '../types';
 import type { Availability } from './schedule.ts';
+import { t } from './i18n.ts';
 
 const DAY = 86400000;
 const MINUTE = 60000;
@@ -40,8 +41,8 @@ export function summarize(
   const avs = qs.map(availability);
   const open = avs.filter((a) => a.state === 'available').length;
   // "Choose" only makes sense when there is a choice; a single open questionnaire is just started.
-  if (open === 1) return { anyAvailable: true, message: 'Tap below to begin.' };
-  if (open > 1) return { anyAvailable: true, message: 'Choose a questionnaire to begin.' };
+  if (open === 1) return { anyAvailable: true, message: t('pwa_avail_summary_begin') };
+  if (open > 1) return { anyAvailable: true, message: t('pwa_avail_summary_choose') };
 
   const opens = avs.map((a) => a.opensAt).filter((x): x is number => typeof x === 'number').sort((a, b) => a - b);
   if (opens.length) {
@@ -49,14 +50,14 @@ export function summarize(
     // Windows can open mid-minute (e.g. a gap after the last check-in), so one that opens within the minute would
     // read "opens at <the time it is now>". The list shows it as soon as it opens (see App's availability timer).
     if (at - now < MINUTE)
-      return { anyAvailable: false, message: 'Your next questionnaire opens in a moment — it will appear below.' };
+      return { anyAvailable: false, message: t('pwa_avail_summary_moment') };
     if (isToday(at, now))
-      return { anyAvailable: false, message: `Nothing is open right now — your next questionnaire opens at ${fmtTime(at)}. Feel free to close the app; we'll remind you.` };
-    return { anyAvailable: false, message: `You're all set. Your study starts on ${fmtDate(at)} — there's nothing to do until then, so you can close the app. We'll remind you when it begins.` };
+      return { anyAvailable: false, message: t('pwa_avail_summary_today', fmtTime(at)) };
+    return { anyAvailable: false, message: t('pwa_avail_summary_later', fmtDate(at)) };
   }
   if (avs.length && avs.every((a) => a.state === 'ended' || a.state === 'completed'))
-    return { anyAvailable: false, message: 'You have completed the study. Thank you for taking part!' };
-  return { anyAvailable: false, message: 'There are no questionnaires available right now.' };
+    return { anyAvailable: false, message: t('pwa_avail_summary_done') };
+  return { anyAvailable: false, message: t('pwa_avail_summary_none') };
 }
 
 // ── enrollment anchor + completion store (localStorage) ───────────────────────

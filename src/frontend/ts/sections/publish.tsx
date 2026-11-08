@@ -5,7 +5,8 @@ import { BindObservable, BindValue } from "../components/BindObservable";
 import { Study } from "../data/study/Study";
 import { ObservablePrimitive } from "../observable/ObservablePrimitive";
 import { TabBar, TabContent } from "../components/TabBar";
-import { createAppUrl, createFallbackAppUrl, createQuestionnaireUrl, createStudyUrl, safeConfirm } from "../constants/methods";
+import { ServerInfo } from "../constants/ServerInfo";
+import { createAppUrl, createFallbackAppUrl, createParticipantUrl, createQuestionnaireUrl, createStudyUrl, safeConfirm } from "../constants/methods";
 import qrcode from "qrcode-generator"
 import { BtnAdd, BtnCopy, BtnCustom, BtnTrash } from "../components/Buttons";
 import { DashRow } from "../components/DashRow";
@@ -128,6 +129,17 @@ export class Content extends SectionContent {
 		</label>
 	}
 	
+	/** A questionnaire without a check-in is never open: participants would be told there is nothing to answer. */
+	private getUnscheduledWarning(study: Study): Vnode<any, any> | false {
+		const scheduled = study.schedule.checkins.get().map((checkin) => checkin.questionnaireId.get())
+		// "Cognitive Trials" only stores a task's trials: participants never open it (TRIALS_QN_TITLE in the participant app).
+		const unscheduled = study.questionnaires.get().filter((q) => scheduled.indexOf(q.internalId.get()) == -1 && q.getTitle() != "Cognitive Trials")
+		return unscheduled.length != 0 &&
+			<div class="center highlight spacingTop spacingBottom">
+				{Lang.get("warning_questionnaires_not_scheduled", unscheduled.map((q) => q.getTitle()).join(", "))}
+			</div>
+	}
+
 	private getPublishedStateView(): Vnode<any, any> {
 		const study = this.getStudyOrThrow()
 		return <div>
@@ -184,6 +196,7 @@ export class Content extends SectionContent {
 
 			)}
 			{this.getPublishedStateView()}
+			{this.getUnscheduledWarning(study)}
 			{(study.published.get() || study.accessKeys.get().length != 0) &&
 				<div>
 					{DashRow(
@@ -334,7 +347,7 @@ export class Content extends SectionContent {
 										<img alt="QrCode" src={imgUrl} />
 									</a>
 								</div>
-								<p class="smallText">{Lang.get("desc_qrCode")}</p>
+								<p class="smallText">{Lang.get(ServerInfo.webOnlyMode ? "desc_qrCode_web" : "desc_qrCode")}</p>
 							</div>
 					})
 				)}
@@ -346,9 +359,20 @@ export class Content extends SectionContent {
 		const infoTitle = study.questionnaires.get().length >= 1 ? Lang.get("questionnaire_view") : Lang.get("study")
 		const usesFallback = study.useFallback.get() && !!this.fallbackUrl
 		const publishedWeb = study.publishedWeb.get()
-		const publishedSmartphone = study.publishedAndroid.get() || study.publishedIOS.get()
+		// With web-only mode there is no app to install: those instructions would send participants to another project's.
+		const publishedSmartphone = !ServerInfo.webOnlyMode && (study.publishedAndroid.get() || study.publishedIOS.get())
 		
 		const categoryList: UrlCategory[] = []
+		
+		// First, so that it is also what the QR code holds unless something else is selected.
+		if(publishedWeb) {
+			const url = createParticipantUrl(accessKey, study.id.get())
+			categoryList.push({
+				title: Lang.get("participant_link"),
+				urls: [{ title: url, url, allowSelection: true }],
+				footer: Lang.get("participant_link_info")
+			})
+		}
 		
 		const entry: UrlCategory = {
 			title: Lang.get("study_urls"),
@@ -398,6 +422,14 @@ export class Content extends SectionContent {
 	private getPublishInfoView(study: Study): Vnode<any, any> {
 		const usesFallback = study.useFallback.get() && !!this.fallbackUrl
 		const smartphoneAndWeb = (study.publishedAndroid.get() || study.publishedIOS.get()) && study.publishedWeb.get()
+
+		if(ServerInfo.webOnlyMode)
+			return DashRow(DashElement("stretched", {
+				content: <div>
+					<h2>{Lang.get("publish_info_title")}</h2>
+					<p>{Lang.get("participant_link_info")}</p>
+				</div>
+			}))
 
 		return <div>
 			{

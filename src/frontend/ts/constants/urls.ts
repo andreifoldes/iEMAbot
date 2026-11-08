@@ -11,6 +11,8 @@ export const URL_BLOG_RSS = "https://kl-psychological-methodology.github.io/ESMi
 export const FILE_CHECK_HTACCESS = 'api/checkHtaccess/check.php'
 export const FILE_ADMIN = 'api/admin.php'
 export const FILE_RESPONSES = FILE_ADMIN + "?type=GetData&study_id=%1&q_id=%2"
+/** A researcher's download in a chosen format (csv with a formula guard, or xlsx), built from the database: %3 is the format */
+export const FILE_RESPONSES_AS = FILE_RESPONSES + "&format=%3"
 export const FILE_CREATE_MEDIA = FILE_ADMIN + "?type=CreateMediaZip&study_id=%1"
 export const FILE_MEDIA = FILE_ADMIN + "?type=GetMediaZip&study_id=%1"
 export const FILE_WEARABLE_DATA = FILE_ADMIN + "?type=GetWearableDataZip&study_id=%1"

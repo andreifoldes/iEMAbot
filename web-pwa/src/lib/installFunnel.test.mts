@@ -5,6 +5,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { funnelSteps } from './installFunnel.ts';
+import './testI18n.mts';
 
 describe('funnelSteps', () => {
   it('before install: step 1 is active, the rest are pending', () => {

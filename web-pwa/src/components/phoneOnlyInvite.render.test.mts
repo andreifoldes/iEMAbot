@@ -13,6 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { installFakeBrowser, UA } from '../lib/fakeBrowser.mts';
+import '../lib/testI18n.mts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const INVITE_URL = 'https://example.test/pwa/?key=demo&pid=1155';

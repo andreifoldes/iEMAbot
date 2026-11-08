@@ -2,6 +2,7 @@
 
 namespace backend\noJs\pages;
 
+use backend\HtmlSanitizer;
 use backend\exceptions\CriticalException;
 use backend\exceptions\PageFlowException;
 use Exception;
@@ -20,10 +21,7 @@ class GetParticipant implements Page {
 		$studyData = NoJsMain::getStudyData();
 		$study = $studyData->study;
 		return '<p>'
-			.($study->chooseUsernameInstructions
-				?? Lang::get('default_chooseUsernameInstructions')
-				?: Lang::get('default_chooseUsernameInstructions')
-			)
+			.(HtmlSanitizer::clean($study->chooseUsernameInstructions ?? '') ?: Lang::get('default_chooseUsernameInstructions'))
 			.'</p>
 	
 	<form method="post" action="" class="center">

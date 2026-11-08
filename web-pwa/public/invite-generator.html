@@ -109,11 +109,11 @@
       <div class="grid-2">
         <div class="field">
           <label for="access-key">Access key <span class="hint">(required)</span></label>
-          <input type="text" id="access-key" placeholder="demo-study" autocomplete="off" spellcheck="false" />
+          <input type="text" id="access-key" placeholder="my-study" autocomplete="off" spellcheck="false" />
         </div>
         <div class="field">
           <label for="study-id">Study ID <span class="hint">(optional — narrows to one study when access key covers multiple)</span></label>
-          <input type="number" id="study-id" placeholder="e.g. 4001" min="1" />
+          <input type="number" id="study-id" placeholder="e.g. 1234" min="1" />
         </div>
       </div>
     </div>
@@ -125,13 +125,30 @@
       <div class="field">
         <label>Source</label>
         <div class="radio-group">
-          <label><input type="radio" name="pid-mode" value="sequential" checked /> Generate sequential</label>
+          <label><input type="radio" name="pid-mode" value="random" checked /> Generate random (recommended)</label>
+          <label><input type="radio" name="pid-mode" value="sequential" /> Generate sequential</label>
           <label><input type="radio" name="pid-mode" value="custom" /> Enter custom list</label>
         </div>
       </div>
 
+      <!-- Random options -->
+      <div id="random-opts">
+        <div class="grid-2">
+          <div class="field">
+            <label for="rand-prefix">Prefix <span class="hint">(optional)</span></label>
+            <input type="text" id="rand-prefix" value="P-" maxlength="20" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="rand-count">Count</label>
+            <input type="number" id="rand-count" value="10" min="1" max="1000" />
+          </div>
+        </div>
+        <p class="hint" style="margin:0 0 6px;">Each ID is 12 random characters (60 bits), made in this browser. They cannot be guessed, so a participant ID is as good as a password for that participant in the app. IDs stay the same until you press the button.</p>
+        <button class="btn btn-secondary btn-sm" id="rand-new-btn" type="button">New random IDs</button>
+      </div>
+
       <!-- Sequential options -->
-      <div id="sequential-opts" class="grid-4">
+      <div id="sequential-opts" class="grid-4 hidden">
         <div class="field">
           <label for="pid-prefix">Prefix</label>
           <input type="text" id="pid-prefix" value="P" maxlength="20" />
@@ -149,6 +166,8 @@
           <input type="number" id="pid-padding" value="3" min="1" max="6" />
         </div>
       </div>
+
+      <p id="guessable-warning" class="hint hidden" style="margin:10px 0 0;color:#b45309;">⚠️ Numbered or hand-picked IDs can be guessed. Anyone who knows or guesses one can act as that participant in the app. Use random IDs unless you must match an existing numbering.</p>
 
       <!-- Custom list options -->
       <div id="custom-opts" class="hidden">
@@ -228,8 +247,36 @@
     }
   }
 
+  /* Random IDs: 12 characters from a 32-letter alphabet (no I, O, 0, 1) = 60 bits, from the browser's
+     crypto generator. 256 is a multiple of 32, so `byte & 31` is unbiased. */
+  const ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const ID_LENGTH = 12;
+  let randomBodies = [];
+
+  // TODO: LIVE CHECK V17, rest (per study, before it starts): the invite list that is handed out was made with this generator's random ids,
+  // not P001-style ones. Tracker Part 1. Done 2026-11-06: the live generator makes unique random ids.
+  function randomBody() {
+    const bytes = new Uint8Array(ID_LENGTH);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => ID_ALPHABET[b & 31]).join('');
+  }
+
+  function randomBodiesFor(count) {
+    const seen = new Set(randomBodies);
+    while (randomBodies.length < count) {
+      const body = randomBody();
+      if (!seen.has(body)) { seen.add(body); randomBodies.push(body); }
+    }
+    return randomBodies.slice(0, count);
+  }
+
   function getPids() {
     const mode = document.querySelector('input[name="pid-mode"]:checked').value;
+    if (mode === 'random') {
+      const prefix = document.getElementById('rand-prefix').value.trim();
+      const count = Math.min(1000, Math.max(1, parseInt(document.getElementById('rand-count').value, 10) || 10));
+      return randomBodiesFor(count).map(body => prefix + body);
+    }
     if (mode === 'sequential') {
       const prefix = document.getElementById('pid-prefix').value;
       const start = Math.max(0, parseInt(document.getElementById('pid-start').value, 10) || 1);
@@ -267,18 +314,21 @@
     previewEl.textContent = buildUrl(base, key, sid || null, pids[0]);
   }
 
-  ['base-url', 'access-key', 'study-id', 'pid-prefix', 'pid-start', 'pid-count', 'pid-padding', 'pid-list']
+  ['base-url', 'access-key', 'study-id', 'rand-prefix', 'rand-count', 'pid-prefix', 'pid-start', 'pid-count', 'pid-padding', 'pid-list']
     .forEach(id => document.getElementById(id).addEventListener('input', updatePreview));
   document.querySelectorAll('input[name="pid-mode"]').forEach(r => r.addEventListener('change', updatePreview));
 
   /* ── PID mode toggle ──────────────────────────────────────── */
   document.querySelectorAll('input[name="pid-mode"]').forEach(r => {
     r.addEventListener('change', () => {
-      const isSeq = r.value === 'sequential';
-      document.getElementById('sequential-opts').classList.toggle('hidden', !isSeq);
-      document.getElementById('custom-opts').classList.toggle('hidden', isSeq);
+      const mode = document.querySelector('input[name="pid-mode"]:checked').value;
+      document.getElementById('random-opts').classList.toggle('hidden', mode !== 'random');
+      document.getElementById('sequential-opts').classList.toggle('hidden', mode !== 'sequential');
+      document.getElementById('custom-opts').classList.toggle('hidden', mode !== 'custom');
+      document.getElementById('guessable-warning').classList.toggle('hidden', mode === 'random');
     });
   });
+  document.getElementById('rand-new-btn').addEventListener('click', () => { randomBodies = []; updatePreview(); });
 
   /* ── Generate ─────────────────────────────────────────────── */
   let generatedRows = [];

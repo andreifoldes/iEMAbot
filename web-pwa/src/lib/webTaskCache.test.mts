@@ -84,3 +84,10 @@ test('ready only when a copy exists AND the worker answers the probe', async () 
   globalThis.fetch = (async () => new Response('ok', { headers: { 'x-esmira-task-route': '1' } })) as typeof fetch;
   assert.equal(await webTaskReady(A, '/pwa/'), true);
 });
+
+test('only tasks under /webapp/ get an offline copy; any other same-origin path loads from the network', () => {
+  assert.equal(webCacheAvailable('https://srv.example', 'https://srv.example/esmira/api/studies.php'), false);
+  assert.equal(webCacheAvailable('https://srv.example', 'https://srv.example/other/task/index.html'), false);
+  assert.equal(webCacheAvailable('https://srv.example', 'https://srv.example/webapp/../esmira/x'), false);
+  assert.equal(webCacheAvailable('https://srv.example', 'https://srv.example/webapp/m2c2/assessments/a/index.html'), true);
+});

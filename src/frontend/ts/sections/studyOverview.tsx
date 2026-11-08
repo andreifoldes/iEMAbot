@@ -1,6 +1,7 @@
 import {SectionContent} from "../site/SectionContent";
 import m, {Vnode, VnodeDOM} from "mithril";
 import {Lang} from "../singletons/Lang";
+import {sanitizeHtml} from "../helpers/sanitizeHtml";
 import {TitleRow} from "../components/TitleRow";
 import {FILE_SAVE_ACCESS} from "../constants/urls";
 import {Requests} from "../singletons/Requests";
@@ -144,12 +145,12 @@ export class Content extends SectionContent {
 			{study.studyOver.get() &&
 				<div>
 					{DashRow(DashElement("stretched", { highlight: true, small: true, content: <div>{Lang.get("study_over_message")}</div> }))}
-					{study.postStudyNote.get() && <div class="horizontalPadding verticalPadding">{m.trust(study.postStudyNote.get())}</div>}
+					{study.postStudyNote.get() && <div class="horizontalPadding verticalPadding">{m.trust(sanitizeHtml(study.postStudyNote.get()))}</div>}
 				</div>
 			}
 
 			{study.studyDescription.get() &&
-				<div class="scrollBox spacingBottom">{m.trust(study.studyDescription.get())}</div>
+				<div class="scrollBox spacingBottom">{m.trust(sanitizeHtml(study.studyDescription.get()))}</div>
 			}
 
 			{!study.studyOver.get() && <>
@@ -178,7 +179,7 @@ export class Content extends SectionContent {
 			{!isOver && this.renderHowToJoin()}
 			{isOver && study.postStudyNote.get() &&
 				<div style={`margin-top:16px;font-size:14px;line-height:1.7;color:${C.onSurfaceVariant};`}>
-					{m.trust(study.postStudyNote.get())}
+					{m.trust(sanitizeHtml(study.postStudyNote.get()))}
 				</div>
 			}
 			{this.renderQrLightbox()}
@@ -245,7 +246,7 @@ export class Content extends SectionContent {
 				}
 				{study.studyDescription.get() &&
 					<div style={`font-size:15px;line-height:1.7;color:${C.onSurfaceVariant};text-align:left;`}>
-						{m.trust(study.studyDescription.get())}
+						{m.trust(sanitizeHtml(study.studyDescription.get()))}
 					</div>
 				}
 			</div>

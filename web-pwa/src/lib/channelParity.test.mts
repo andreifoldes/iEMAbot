@@ -15,6 +15,7 @@ import type { EsmiraQuestionnaire } from '../types.ts';
 import { adaptQuestionnaire, parseRelevance } from './esmiraAdapter.ts';
 import { OfflineSurveyEngine } from './surveyEngine.ts';
 import { buildEsmiraResponses } from './esmiraResponses.ts';
+import './testI18n.mts';
 
 const fixture = (name: string) =>
   JSON.parse(readFileSync(new URL(`../../../test/fixtures/channels/${name}.json`, import.meta.url), 'utf8'));

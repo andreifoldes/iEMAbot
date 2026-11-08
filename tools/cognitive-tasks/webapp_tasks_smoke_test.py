@@ -26,8 +26,8 @@ It does not play the task through to `m2c2:complete`; it guards against
 "the task never loads", which is how a broken deployment looks on a phone.
 
 Run:
-  python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py                # SSRC on Surrey
-  python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py --key demo-study
+  python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py                # study key from $ESMIRA_STUDY_KEY
+  python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py --key <study-key>
   python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py --url https://…/index.html
   python3 tools/cognitive-tasks/webapp_tasks_smoke_test.py --static-only  # no browser
 
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -47,7 +48,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 DEFAULT_API_ROOT = "https://iemabot.surrey.ac.uk/esmira/"
-DEFAULT_KEY = "demo-study"
+DEFAULT_KEY = os.environ.get("ESMIRA_STUDY_KEY", "")
 ADAPTER = Path(__file__).resolve().parents[2] / "web-pwa/src/lib/esmiraAdapter.ts"
 FALLBACK_SUFFIX = "embed=1&v=3"
 START_TIMEOUT_MS = 30_000
@@ -196,7 +197,7 @@ def check_browser(page_url: str, browser) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--api-root", default=DEFAULT_API_ROOT, help="ESMira root that serves api/studies.php")
-    ap.add_argument("--key", action="append", help="study access key (repeatable; default: ssrc)")
+    ap.add_argument("--key", action="append", help="study access key (repeatable; default: $ESMIRA_STUDY_KEY)")
     ap.add_argument("--url", action="append", help="check this task URL instead of reading a study")
     ap.add_argument("--static-only", action="store_true", help="skip the headless-browser check")
     args = ap.parse_args()
@@ -205,7 +206,10 @@ def main() -> int:
     if args.url:
         tasks = {u: ["--url"] for u in args.url}
     else:
-        for key in args.key or [DEFAULT_KEY]:
+        keys = args.key or ([DEFAULT_KEY] if DEFAULT_KEY else [])
+        if not keys:
+            ap.error("give --key <study-key> (or set ESMIRA_STUDY_KEY) or --url")
+        for key in keys:
             try:
                 for url, names in study_tasks(args.api_root, key).items():
                     tasks.setdefault(url, []).extend(names)

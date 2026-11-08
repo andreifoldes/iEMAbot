@@ -6,6 +6,7 @@ use backend\admin\HasAdminPermission;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\Paths;
+use backend\SelfHost;
 
 class UpdateStepDownload extends HasAdminPermission {
 	/**
@@ -16,6 +17,8 @@ class UpdateStepDownload extends HasAdminPermission {
 	const ALLOWED_URL_PREFIX = 'https://github.com/andreifoldes/iEMAbot/releases/download/';
 	
 	function exec(): array {
+		if(SelfHost::runsFromContainerImage())
+			throw new CriticalException('This server runs from a container image: update it by replacing the image (update.sh in the self-host kit). Nothing was changed');
 		if(!isset($_POST['url']))
 			throw new CriticalException('Missing data');
 		
@@ -29,6 +32,7 @@ class UpdateStepDownload extends HasAdminPermission {
 			unlink($pathUpdate);
 		}
 		
+		// TODO(security): tracked in the maintainers' internal notes.
 		$res = fopen($url, 'r');
 		if(!$res) {
 			throw new CriticalException("Downloading update from $url failed. Nothing was changed");

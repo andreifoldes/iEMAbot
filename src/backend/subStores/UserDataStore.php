@@ -62,16 +62,18 @@ abstract class UserDataStore {
 		}
 		
 		++$userData->dataSetCount;
-		if(($dataSet->eventType ?? '') == 'questionnaire' && ($dataSet->questionnaireInternalId ?? -1) != -1) {
+		$userData->lastDataSetTime = Main::getMilliseconds();
+		
+		$currentToken = $userData->token;
+		$accepted = $this->isNewUser($studyId) || $this->newStudyToken - $currentToken >= Configs::get('dataset_server_timeout');
+		// Only an accepted dataset counts (rewards read this): the app sends a refused one again.
+		if($accepted && ($dataSet->eventType ?? '') == 'questionnaire' && ($dataSet->questionnaireInternalId ?? -1) != -1) {
 			if(!isset($userData->questionnaireDataSetCount[$dataSet->questionnaireInternalId]))
 				$userData->questionnaireDataSetCount[$dataSet->questionnaireInternalId] = 1;
 			else
 				++$userData->questionnaireDataSetCount[$dataSet->questionnaireInternalId];
 		}
-		$userData->lastDataSetTime = Main::getMilliseconds();
-		
-		$currentToken = $userData->token;
-		return $this->isNewUser($studyId) || $this->newStudyToken - $currentToken >= Configs::get('dataset_server_timeout');
+		return $accepted;
 	}
 	
 	public function isOutdated(int $studyId, int $sentToken, bool $isReupload): bool {

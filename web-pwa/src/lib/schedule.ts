@@ -14,8 +14,9 @@
  */
 
 import type { EsmiraQuestionnaire, EsmiraStudy, ScheduleCheckin, ScheduleConfig } from '../types';
-import { DEFAULT_BODY, hash32, notificationTitle, withDeadline } from './notificationSpec.ts';
+import { defaultBody, hash32, notificationTitle, withDeadline } from './notificationSpec.ts';
 import { datesDiff, midnight, type Completions } from './availability.ts';
+import { t } from './i18n.ts';
 
 const DAY = 86400000;
 const MINUTE = 60000;
@@ -192,12 +193,12 @@ export function studyDayLabel(study: Pick<EsmiraStudy, 'schedule'>, joined: numb
   const index = now >= midnight(joined) ? datesDiff(now, joined) : 0;
   if (startsAt !== null || index < period.first) {
     const start = startsAt ?? midnight(midnight(joined) + period.first * DAY + DAY / 2);
-    return index === 0 ? `Day 0 · Starts ${fmtDate(start)}` : `Starts ${fmtDate(start)}`;
+    return index === 0 ? t('pwa_sched_day0_starts', fmtDate(start)) : t('pwa_sched_starts', fmtDate(start));
   }
   const day = index - period.first + 1;
-  if (period.last < 0) return `Day ${day}`;
+  if (period.last < 0) return t('pwa_sched_day', day);
   const total = period.last - period.first + 1;
-  return day <= total ? `Day ${day} of ${total}` : null;
+  return day <= total ? t('pwa_sched_day_of', day, total) : null;
 }
 
 /** The wake-up check-in: the first one starting right at wake-up (`wake` + 0 or split point 0), or -1. */
@@ -659,7 +660,7 @@ export function notification(
   const c = schedule.checkins[w.checkin];
   const q = study.questionnaires.find((x) => Number(x.internalId) === w.qid);
   const title = String(c.title).trim() !== '' ? String(c.title).trim() : notificationTitle(q ?? { title: '' }, study);
-  let body = String(c.text).trim() !== '' ? String(c.text).trim() : DEFAULT_BODY;
+  let body = String(c.text).trim() !== '' ? String(c.text).trim() : defaultBody();
   if (c.includeDeadline) {
     // The close relative to the window's day: midnight shows as 23:59, a close after midnight as that time.
     const closeTod = w.close - w.base;
@@ -756,7 +757,7 @@ function openingKnown(schedule: NormalizedSchedule, w: AbsWindow): 'time' | 'wak
 
 /** "Opens at 20:00" if today, else "Opens Sat 28 Jun, 20:00". */
 function opensReason(opensAt: number, now: number): string {
-  return midnight(opensAt) === midnight(now) ? `Opens at ${fmtTime(opensAt)}` : `Opens ${fmtDate(opensAt)}, ${fmtTime(opensAt)}`;
+  return midnight(opensAt) === midnight(now) ? t('pwa_avail_opens_at', fmtTime(opensAt)) : t('pwa_avail_opens_on', fmtDate(opensAt), fmtTime(opensAt));
 }
 
 /** Days looked ahead for "opens …". */
@@ -770,40 +771,54 @@ export function studyAvailability(
   study: Pick<EsmiraStudy, 'id' | 'schedule'>, userId: string, joined: number, now: number, completions: Completions,
 ): (q: { internalId: number }) => Availability {
   const schedule = scheduleConfig(study);
-  if (!schedule) return () => ({ state: 'locked', reason: 'Not scheduled' });
+  if (!schedule) return () => ({ state: 'locked', reason: t('pwa_avail_not_scheduled') });
   const days = localDays(study, userId, joined, now, loadServerInputs(study.id, userId), deviceCompletions(completions), -1, AVAILABILITY_HORIZON_DAYS);
   const windows = days.flatMap((d) => d.windows);
   const today = days.find((d) => d.date === localDate(now));
   const dayIndex = today?.index ?? datesDiff(now, joined);
   // While today's wake-up is not known yet: the latest it will be.
   const wakeBy = today && today.wake === null && today.wakeBy !== null && today.wakeBy > now ? today.wakeBy : null;
+  // Today's windows as if they got up at the usual time: check-ins timed from wake-up have none until it is known.
+  const planned = wakeBy === null ? [] : localDays(study, userId, joined, now, loadServerInputs(study.id, userId), deviceCompletions(completions), 0, 1, true)[0]
+    .windows.filter((w) => !w.done && w.open > now);
   return (q) => {
     const a = availabilityState(schedule, q.internalId, windows, now, dayIndex);
     switch (a.state) {
       case 'available': {
         const opened = windows.find((w) => w.qid === q.internalId && w.key === a.occKey)?.open;
-        return { state: 'available', reason: 'Available now', occKey: a.occKey ?? undefined, ...(opened !== undefined ? { openedAt: opened } : {}) };
+        return { state: 'available', reason: t('pwa_avail_now'), occKey: a.occKey ?? undefined, ...(opened !== undefined ? { openedAt: opened } : {}) };
       }
-      case 'completed': return { state: 'completed', reason: 'Completed' };
-      case 'ended': return { state: 'ended', reason: 'No longer available' };
+      case 'completed': return { state: 'completed', reason: t('pwa_avail_completed') };
+      case 'ended': return { state: 'ended', reason: t('pwa_avail_ended') };
       case 'upcoming': {
         const first = a.opensAt ?? Math.min(...schedule.checkins.filter((c) => Math.trunc(Number(c.questionnaireId)) === q.internalId)
           .map((c) => Math.max(midnight(midnight(joined) + Math.trunc(Number(c.dayFrom)) * DAY + DAY / 2), Number(c.dateFrom))));
         // Before the study starts: the time too, when the participant's answers fix it (see openingKnown).
         const w = a.opensAt === null ? undefined : windows.find((x) => x.qid === q.internalId && x.open === a.opensAt && !x.done);
         const known = w ? openingKnown(schedule, w) : 'date';
-        const reason = known === 'time' ? `Opens ${fmtDate(first)}, ${fmtTime(first)}`
-          : known === 'wake' ? `Opens ${fmtDate(first)}, after you get up` : `Available on ${fmtDate(first)}`;
+        const reason = known === 'time' ? t('pwa_avail_opens_on', fmtDate(first), fmtTime(first))
+          : known === 'wake' ? t('pwa_avail_opens_after_wake', fmtDate(first)) : t('pwa_avail_on', fmtDate(first));
         return { state: 'upcoming', opensAt: first, reason };
       }
-      default:
+      default: {
+        // Not planned today until wake-up is known: when it opens if they get up at the usual time (a randomly
+        // prompted one, the range its prompt falls in). Getting up earlier only moves it earlier.
+        const w = planned.find((x) => x.qid === q.internalId);
+        if (wakeBy !== null && w && (a.opensAt === null || w.open < a.opensAt)) {
+          const random = schedule.checkins[w.checkin].prompt === 'random' && w.end > w.start;
+          const reason = random
+            ? t('pwa_avail_opens_between_if_getup', fmtTime(w.start), fmtTime(w.end), fmtTime(wakeBy))
+            : t('pwa_avail_opens_at_if_getup', fmtTime(w.open), fmtTime(wakeBy));
+          return { state: 'locked', opensAt: random ? w.start : w.open, reason };
+        }
         if (a.opensAt !== null) {
           // A window that opens at the usual wake-up while today's wake-up is still unknown opens earlier if they get up earlier.
-          if (wakeBy !== null && a.opensAt === wakeBy) return { state: 'locked', opensAt: wakeBy, reason: `Opens after you get up (by ${fmtTime(wakeBy)})` };
+          if (wakeBy !== null && a.opensAt === wakeBy) return { state: 'locked', opensAt: wakeBy, reason: t('pwa_avail_opens_after_getup_by', fmtTime(wakeBy)) };
           return { state: 'locked', opensAt: a.opensAt, reason: opensReason(a.opensAt, now) };
         }
-        if (wakeBy !== null) return { state: 'locked', opensAt: wakeBy, reason: `Opens after you get up (by ${fmtTime(wakeBy)})` };
-        return { state: 'locked', reason: 'Done for today' };
+        if (wakeBy !== null) return { state: 'locked', opensAt: wakeBy, reason: t('pwa_avail_opens_after_getup_by', fmtTime(wakeBy)) };
+        return { state: 'locked', reason: t('pwa_avail_done_today') };
+      }
     }
   };
 }

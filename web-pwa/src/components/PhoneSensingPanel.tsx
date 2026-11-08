@@ -8,6 +8,7 @@
 import { Activity, Check, AlertTriangle, Sun, Smartphone, Move, Settings as SettingsIcon, Wifi } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../lib/utils';
+import { t } from '../lib/i18n';
 import { participantCanChooseNetwork, type PhoneSensingSettings, type PhoneSensingStatus, type UploadNetwork } from '../lib/phoneSensing';
 
 export interface PhoneSensingPanelProps {
@@ -20,9 +21,9 @@ export interface PhoneSensingPanelProps {
 }
 
 function networkRule(network: UploadNetwork, hours: number): string {
-  if (network === 'any') return 'Sent over any connection, Wi-Fi or mobile data.';
-  if (network === 'wifi_only') return 'Sent over Wi-Fi only. Connect to Wi-Fi now and then so your data reaches the research team.';
-  return `Sent over Wi-Fi, to spare your mobile data. If your phone has not been on Wi-Fi for ${hours} ${hours === 1 ? 'hour' : 'hours'}, mobile data is used.`;
+  if (network === 'any') return t('pwa_sensing_net_any');
+  if (network === 'wifi_only') return t('pwa_sensing_net_wifi_only');
+  return hours === 1 ? t('pwa_sensing_net_wifi_preferred_one', hours) : t('pwa_sensing_net_wifi_preferred_other', hours);
 }
 
 interface Row {
@@ -46,53 +47,52 @@ export function PhoneSensingPanel({ settings, status, onAllowActivity, onOpenUsa
   if (settings.light) {
     const ok = status?.lightSensor !== false;
     rows.push({
-      key: 'light', icon: <Sun size={18} aria-hidden="true" />, title: 'Ambient light',
-      detail: 'How bright it is around you, measured when you open and finish a questionnaire.',
-      ok, problem: ok ? undefined : 'This phone has no light sensor.',
+      key: 'light', icon: <Sun size={18} aria-hidden="true" />, title: t('pwa_sensing_light_title'),
+      detail: t('pwa_sensing_light_detail'),
+      ok, problem: ok ? undefined : t('pwa_sensing_light_problem'),
     });
   }
   if (settings.activity) {
     const noServices = status != null && !status.playServices;
     const granted = status?.activityPermission === 'granted';
     rows.push({
-      key: 'activity', icon: <Activity size={18} aria-hidden="true" />, title: 'Physical activity',
-      detail: 'Whether you are still, walking, running, cycling or in a vehicle, noted by Android throughout the day.',
+      key: 'activity', icon: <Activity size={18} aria-hidden="true" />, title: t('pwa_sensing_activity_title'),
+      detail: t('pwa_sensing_activity_detail'),
       ok: !noServices && granted,
-      problem: noServices ? 'Needs Google Play services, which this phone does not have.'
+      problem: noServices ? t('pwa_sensing_activity_no_services')
         : granted ? undefined
-        : status?.activityPermission === 'denied' ? 'Not allowed. Allow "Physical activity" for iEMAbot in Android\'s app settings.'
-        : 'Waiting for your permission.',
-      action: !noServices && !granted ? { label: 'Allow', onClick: onAllowActivity } : undefined,
+        : status?.activityPermission === 'denied' ? t('pwa_sensing_activity_denied')
+        : t('pwa_sensing_activity_waiting'),
+      action: !noServices && !granted ? { label: t('pwa_sensing_allow'), onClick: onAllowActivity } : undefined,
     });
   }
   if (settings.accelerometer) {
     const ok = status?.accelerometer !== false;
     rows.push({
-      key: 'accelerometer', icon: <Move size={18} aria-hidden="true" />, title: 'Movement',
-      detail: `The phone's motion sensor, from ${settings.accelBeforeMin} minutes before each questionnaire until ${settings.accelAfterMin} minutes after it. Android shows a notification while it records.`,
-      ok, problem: ok ? undefined : 'This phone has no motion sensor.',
+      key: 'accelerometer', icon: <Move size={18} aria-hidden="true" />, title: t('pwa_sensing_motion_title'),
+      detail: t('pwa_sensing_motion_detail', settings.accelBeforeMin, settings.accelAfterMin),
+      ok, problem: ok ? undefined : t('pwa_sensing_motion_problem'),
     });
   }
   if (settings.usage) {
     const granted = status?.usageAccess === true;
     rows.push({
-      key: 'usage', icon: <Smartphone size={18} aria-hidden="true" />, title: 'App usage',
+      key: 'usage', icon: <Smartphone size={18} aria-hidden="true" />, title: t('pwa_sensing_usage_title'),
       detail: settings.usage === 'events'
-        ? 'Which apps you open and when the screen turns on, off and unlocks. Only app names are shared, never what you do in them.'
+        ? t('pwa_sensing_usage_events')
         : settings.usage === 'daily'
-          ? 'How long you use each app per day and how often you unlock your phone. Only app names are shared, never what you do in them.'
-          : 'Which apps you open and when, and daily totals per app. Only app names are shared, never what you do in them.',
+          ? t('pwa_sensing_usage_daily')
+          : t('pwa_sensing_usage_both'),
       ok: granted,
-      problem: granted ? undefined : 'Switch on "Usage access" for iEMAbot in Android\'s settings.',
-      action: granted ? undefined : { label: 'Open settings', onClick: onOpenUsageAccess },
+      problem: granted ? undefined : t('pwa_sensing_usage_problem'),
+      action: granted ? undefined : { label: t('pwa_sensing_open_settings'), onClick: onOpenUsageAccess },
     });
   }
 
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
       <p className="text-sm text-on-surface-variant leading-relaxed">
-        This study collects some information from your phone to understand the moments around your
-        questionnaires. Here you can see what is collected and whether it is working.
+        {t('pwa_sensing_intro')}
       </p>
       <ul className="flex flex-col gap-2">
         {rows.map((r) => (
@@ -107,8 +107,8 @@ export function PhoneSensingPanel({ settings, status, onAllowActivity, onOpenUsa
               <p className="font-semibold text-sm text-on-surface flex items-center gap-1.5">
                 {r.title}
                 {r.ok
-                  ? <><Check size={14} className="text-green-700 dark:text-green-400" aria-hidden="true" /><span className="sr-only">(working)</span></>
-                  : <><AlertTriangle size={14} className="text-amber-700 dark:text-amber-400" aria-hidden="true" /><span className="sr-only">(not working)</span></>}
+                  ? <><Check size={14} className="text-green-700 dark:text-green-400" aria-hidden="true" /><span className="sr-only">{t('pwa_sensing_working')}</span></>
+                  : <><AlertTriangle size={14} className="text-amber-700 dark:text-amber-400" aria-hidden="true" /><span className="sr-only">{t('pwa_sensing_not_working')}</span></>}
               </p>
               <p className="text-xs text-on-surface-variant mt-0.5">{r.problem ?? r.detail}</p>
               {r.action && (
@@ -125,23 +125,21 @@ export function PhoneSensingPanel({ settings, status, onAllowActivity, onOpenUsa
         {canChoose ? (
           <button onClick={() => onWaitForWifi(!waitForWifi)} role="switch" aria-checked={waitForWifi}
             className="flex items-center justify-between gap-3 w-full min-h-11 text-left">
-            <span className="flex items-center gap-2 font-semibold text-sm text-on-surface"><Wifi size={18} aria-hidden="true" />Wait for Wi-Fi</span>
+            <span className="flex items-center gap-2 font-semibold text-sm text-on-surface"><Wifi size={18} aria-hidden="true" />{t('pwa_sensing_wait_wifi')}</span>
             <span aria-hidden="true" className={cn('w-11 h-6 rounded-full transition-colors relative shrink-0', waitForWifi ? 'bg-primary' : 'bg-outline')}>
               <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all', waitForWifi ? 'left-[22px]' : 'left-0.5')} />
             </span>
           </button>
         ) : (
-          <p className="flex items-center gap-2 font-semibold text-sm text-on-surface"><Wifi size={18} aria-hidden="true" />Sending your data</p>
+          <p className="flex items-center gap-2 font-semibold text-sm text-on-surface"><Wifi size={18} aria-hidden="true" />{t('pwa_sensing_sending')}</p>
         )}
         <p className="text-xs text-on-surface-variant">{networkRule(network, hours)}</p>
         <p className="text-xs text-on-surface-variant">
-          {status?.lastUpload ? `Last sent: ${new Date(status.lastUpload).toLocaleString()}` : 'Nothing sent yet.'}
+          {status?.lastUpload ? t('pwa_sensing_last_sent', new Date(status.lastUpload).toLocaleString()) : t('pwa_sensing_nothing_sent')}
         </p>
       </div>
       <p className="text-xs text-on-surface-variant">
-        Collected data is sent to the research server in the background. Your questionnaire answers are
-        always sent straight away, over any connection. Leaving the study stops the collection and deletes
-        anything not yet sent.
+        {t('pwa_sensing_footer')}
       </p>
     </div>
   );

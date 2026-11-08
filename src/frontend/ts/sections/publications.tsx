@@ -1,5 +1,6 @@
 import {SectionContent} from "../site/SectionContent";
 import m, {Vnode} from "mithril";
+import {sanitizeHtml, safeUrl} from "../helpers/sanitizeHtml";
 import {DashRow} from "../components/DashRow";
 import {DashElement} from "../components/DashElement";
 import {Lang} from "../singletons/Lang";
@@ -54,9 +55,9 @@ export class Content extends SectionContent {
 								content:
 									<div class="spacingLeft spacingRight">
 										<p class="hanging justify">
-											{!!pub.title && m.trust(pub.title)}
+											{!!pub.title && m.trust(sanitizeHtml(pub.title))}
 											<br />
-											{!!pub.url && <a class="showArrow" href={pub.url} target="_blank">{pub.url}</a>}
+											{!!pub.url && <a class="showArrow" href={safeUrl(pub.url) || undefined} target="_blank">{pub.url}</a>}
 										</p>
 									</div>
 							})

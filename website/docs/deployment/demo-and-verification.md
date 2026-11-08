@@ -21,6 +21,22 @@ rebuild). The admin password is random and printed once; the demo study's invite
 
 ## What is in the toolkit
 
+The demo study (`demo/demo-study.json`) holds a short check-in, a questionnaire with **every question type**, and a reminder test: the participant answers *Set a test reminder* with a time, and the server prompts *Test reminder* then, once a day. A type
+added to the code but not to it fails `lab-journey.py`.
+
+The checks that decide whether a new lab can work with a server, from the fastest (they all take its address, so they also
+run against a real one):
+
+| Script | Needs | What it proves |
+| --- | --- | --- |
+| `scripts/demo/lab-journey.py` | Python | Over the API, in a second: an admin creates a study, a participant finds it, answers to every question type and real media files arrive, and the admin downloads every one. |
+| `scripts/demo/lab-journey-browser.py` | Playwright | Nothing prepared: an admin clicks a study together, publishes it and copies the link offered; a participant signs up from it on a phone; the admin gets the answer. |
+| `scripts/demo/all-types-browser.py` | Playwright | A participant answers every type the app shows through its own controls, with `--skip-voice` the typed fallback too, and the answers arrive. |
+| `scripts/demo/upload-failsafe-browser.py` | Playwright | An answer survives the app being closed during its upload, and reaches the server exactly once. |
+| `scripts/demo/selfhost-e2e.sh` | Docker, Playwright | All of those on the self-host kit, plus install, backup, restore, update, going back and moving servers. |
+| `scripts/demo/azure-vps.sh` | Azure | The same on a real VM with a real certificate. Deleted afterwards with `down`. |
+
+
 | File | Purpose |
 | --- | --- |
 | `scripts/demo/docker-compose.demo.yml` | Builds **this repository's** image (the root `docker-compose.yml` pulls upstream's) and sets `ESMIRA_PATH_ALIAS=/esmira`. |

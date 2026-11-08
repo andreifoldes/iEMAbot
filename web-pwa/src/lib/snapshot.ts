@@ -2,7 +2,7 @@
  * End-of-questionnaire read-out for the ESRS 2026 mini check-in.
  *
  * A study opts in with the `webSnapshot` field set to `checkin-readout` (source-edit only, no editor
- * control). After the check-in the chat gets the same three messages as the Telegram bot's checkin-readout
+ * control). After the check-in the chat gets the same three messages as the Telegram bot's check-in
  * study (telegram-ema-bot, src/anonymous.py): a playful snapshot, the participant's own answers, and
  * a thank-you. Everything is computed in the browser from the answers just given.
  *
@@ -10,21 +10,19 @@
  * an answer. A question hidden by its show_if, or skipped, has no answer and so never appears.
  */
 import type { EsmiraStudy, PreloadedQuestion } from '../types';
+import { t } from './i18n.ts';
 
 export const CHECKIN_READOUT_PRESET = 'checkin-readout';
 
 const PA_ITEMS = ['alert', 'inspired', 'active'] as const;
 const NA_ITEMS = ['nervous', 'upset', 'afraid'] as const;
 
-/** Short names for the answers list; any other question falls back to its own text. */
-const LABELS: Record<string, string> = {
-  conf_enjoyment: 'Conference enjoyment',
-  conf_fuel: 'Keeping you going',
-  kss: 'Sleepiness (KSS)',
+/** Short names for the answers list (translation keys); any other question falls back to its own text. */
+const LABEL_KEYS: Record<string, string> = {
+  conf_enjoyment: 'pwa_snapshot_label_conf_enjoyment',
+  conf_fuel: 'pwa_snapshot_label_conf_fuel',
+  kss: 'pwa_snapshot_label_kss',
 };
-
-const THANK_YOU = 'Thank you so much for trying out iEMAbot at ESRS 2026! Enjoy the rest of the conference, '
-  + 'and come and say hello at our poster. If you fancy another go, just reopen this page.';
 
 /** Leading number of an answer such as "4" or "7: Sleepy, but no effort to keep awake". */
 function leadingNumber(value: string | undefined): number | null {
@@ -39,24 +37,24 @@ function mean(answers: Readonly<Record<string, string>>, items: readonly string[
 
 function moodLine(pa: number, na: number): string {
   let verdict: string;
-  if (pa >= 3.5 && na <= 2) verdict = 'Conference glow: high energy, low worries.';
-  else if (na >= 3) verdict = 'A bit frazzled. A coffee and a quiet corner may help.';
-  else if (pa < 2.5) verdict = 'Running on low power, so find a good talk or a snack.';
-  else verdict = 'Steady and balanced.';
-  return `Mood: positive ${pa.toFixed(1)}/5, negative ${na.toFixed(1)}/5. ${verdict}`;
+  if (pa >= 3.5 && na <= 2) verdict = t('pwa_snapshot_mood_glow');
+  else if (na >= 3) verdict = t('pwa_snapshot_mood_frazzled');
+  else if (pa < 2.5) verdict = t('pwa_snapshot_mood_low');
+  else verdict = t('pwa_snapshot_mood_steady');
+  return t('pwa_snapshot_mood_line', pa.toFixed(1), na.toFixed(1), verdict);
 }
 
 function sleepinessLine(kss: number): string {
   let verdict: string;
-  if (kss >= 7) verdict = 'Sleep debt detected. The coffee queue is calling.';
-  else if (kss >= 5) verdict = 'Somewhere between alert and drowsy.';
-  else verdict = 'Wide awake. Sleep researchers would be proud.';
-  return `Sleepiness (KSS): ${kss.toFixed(0)}/9. ${verdict}`;
+  if (kss >= 7) verdict = t('pwa_snapshot_kss_high');
+  else if (kss >= 5) verdict = t('pwa_snapshot_kss_mid');
+  else verdict = t('pwa_snapshot_kss_low');
+  return t('pwa_snapshot_kss_line', kss.toFixed(0), verdict);
 }
 
 /** The snapshot text, or null when there is nothing to say about this study. */
 function snapshotText(answers: Readonly<Record<string, string>>): string {
-  const lines = ['Your ESRS 2026 snapshot'];
+  const lines = [t('pwa_snapshot_title')];
   const pa = mean(answers, PA_ITEMS);
   const na = mean(answers, NA_ITEMS);
   if (pa !== null && na !== null) lines.push(moodLine(pa, na));
@@ -78,7 +76,7 @@ export function pvtSummary(trials: unknown): string | null {
   if (!valid.length) return null;
   const lapses = rows.filter((t) => t.is_lapse).length;
   const average = valid.reduce((a, b) => a + b, 0) / valid.length;
-  return `${valid.length} taps, average ${average.toFixed(0)} ms, ${lapses} lapse${lapses === 1 ? '' : 's'}`;
+  return t(lapses === 1 ? 'pwa_snapshot_pvt_one' : 'pwa_snapshot_pvt_other', valid.length, average.toFixed(0), lapses);
 }
 
 const plain = (html: string): string => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -92,16 +90,16 @@ export function answersText(
   answers: Readonly<Record<string, string>>,
   pvt: string | null,
 ): string {
-  const lines = ['Your answers'];
+  const lines = [t('pwa_snapshot_answers_title')];
   for (const q of questions) {
     const value = answers[q.id];
     if (q.type === 'cognitive') {
-      lines.push(`• ${plain(q.title || q.text) || 'Task'}: ${value === undefined ? 'skipped' : pvt ?? 'completed'}`);
+      lines.push(`• ${plain(q.title || q.text) || t('pwa_snapshot_task')}: ${value === undefined ? t('pwa_snapshot_skipped') : pvt ?? t('pwa_snapshot_completed')}`);
       continue;
     }
     if (value === undefined) continue;
     const suffix = q.type === 'likert' ? `/${q.scale_max ?? 5}` : '';
-    lines.push(`• ${LABELS[q.id] ?? plain(q.text)}: ${value}${suffix}`);
+    lines.push(`• ${LABEL_KEYS[q.id] ? t(LABEL_KEYS[q.id]) : plain(q.text)}: ${value}${suffix}`);
   }
   return lines.join('\n');
 }
@@ -117,5 +115,5 @@ export function snapshotMessages(
   pvt: string | null,
 ): string[] | null {
   if (study.webSnapshot !== CHECKIN_READOUT_PRESET) return null;
-  return [snapshotText(answers), answersText(questions, answers, pvt), THANK_YOU];
+  return [snapshotText(answers), answersText(questions, answers, pvt), t('pwa_snapshot_thank_you')];
 }

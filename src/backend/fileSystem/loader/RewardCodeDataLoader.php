@@ -17,7 +17,7 @@ class RewardCodeDataLoader {
 		$path = PathsFS::fileRewardCode($studyId, $code);
 		if(empty($code) || !file_exists($path))
 			throw new NoRewardCodeException('Code does not exist', NoRewardCodeException::DOES_NOT_EXIST);
-		return unserialize(file_get_contents($path));
+		return FileSystemBasics::readSerialized(file_get_contents($path), [RewardCodeData::class]);
 	}
 	
 	/**

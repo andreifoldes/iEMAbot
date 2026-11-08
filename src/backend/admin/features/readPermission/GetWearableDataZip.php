@@ -5,39 +5,37 @@ namespace backend\admin\features\readPermission;
 use backend\admin\HasReadPermission;
 use backend\exceptions\CriticalException;
 use backend\exceptions\PageFlowException;
-use backend\fileSystem\PathsFS;
+use backend\sqlite\WearableExport;
 use backend\Main;
 use ZipArchive;
 
 /**
- * Streams a zip of the study's collected wearable data (the per-participant CSV files
- * under .wearables_data/, plus the *.events.csv notification records). Requires read permission, like the response-data downloads.
+ * Streams a zip of the study's collected wearable data, built from the database: one CSV per participant and provider, plus the
+ * *.events.csv notification records. Requires read permission, like the response-data downloads.
  * Each CSV is self-describing (userId, provider, measurement_time, data_type, value,
  * fetched_at), so the URL-encoded file names do not need decoding.
  */
 class GetWearableDataZip extends HasReadPermission {
 
 	function execAndOutput() {
-		$folder = PathsFS::folderWearablesData($this->studyId);
-		$files = [];
-		if(is_dir($folder)) {
-			foreach(array_diff(scandir($folder), ['.', '..']) as $entry) {
-				if(substr($entry, -4) === '.csv')
-					$files[] = $entry;
-			}
+		$folder = sys_get_temp_dir() . '/esmira_wearables_' . bin2hex(random_bytes(8)) . '/';
+		if(!mkdir($folder, 0700))
+			throw new CriticalException('Could not create temporary folder');
+		try {
+			$files = WearableExport::writeFiles($this->studyId, $folder);
+			if(empty($files))
+				throw new PageFlowException('No wearable data for this study');
+			$this->outputZip($folder, $files);
 		}
-		// Notification records (when each provider reported new data), kept next to the fetched data.
-		$eventFolder = PathsFS::folderWearablesEventArchive($this->studyId);
-		$eventFiles = [];
-		if(is_dir($eventFolder)) {
-			foreach(array_diff(scandir($eventFolder), ['.', '..']) as $entry) {
-				if(substr($entry, -11) === '.events.csv')
-					$eventFiles[] = $entry;
-			}
+		finally {
+			foreach(glob($folder . '*') ?: [] as $file)
+				@unlink($file);
+			@rmdir($folder);
 		}
-		if(empty($files) && empty($eventFiles))
-			throw new PageFlowException('No wearable data for this study');
+	}
 
+	/** @param string[] $files names inside $folder */
+	private function outputZip(string $folder, array $files) {
 		$tmp = tempnam(sys_get_temp_dir(), 'esmira_wearables');
 		if($tmp === false)
 			throw new CriticalException('Could not create temporary file');
@@ -46,8 +44,6 @@ class GetWearableDataZip extends HasReadPermission {
 			throw new CriticalException('Could not create zip archive');
 		foreach($files as $entry)
 			$zip->addFile($folder . $entry, $entry);
-		foreach($eventFiles as $entry)
-			$zip->addFile($eventFolder . $entry, $entry);
 		$zip->close();
 
 		Main::setHeader('Cache-Control: no-cache, must-revalidate');

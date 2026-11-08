@@ -6,6 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire, EsmiraStudy, ScheduleCheckin, ScheduleConfig } from '../types.ts';
+import './testI18n.mts';
 
 const store: Record<string, string> = {};
 (globalThis as unknown as { localStorage: Storage }).localStorage = {
@@ -125,6 +126,30 @@ test('why a check-in is not open: when it opens, after getting up, not yet, done
   assert.equal(at(DAY0 + 12 * H)(s.questionnaires[2]).opensAt, new Date(2026, 9, 30, 10).getTime());
   complete(s, 'u5', 3, DAY0 + 12 * H);
   assert.deepEqual([at(DAY0 + 13 * H)(s.questionnaires[3]).state, at(DAY0 + DAY + 13 * H)(s.questionnaires[3]).state], ['completed', 'completed']);
+});
+
+test('before wake-up is known, daytime check-ins say when they open if the participant gets up at the usual time', () => {
+  // SSRC: the morning from getting up, Daytime 1 and 2 at a random time in the second and third quarter of the waking day.
+  const ssrc = (dayUntil: number) => study({ segments: 4, wakeFromCheckin: true, wakeDefault: 8 * H, bedDefault: 23 * H, wakeWindowStart: 5 * H, wakeWindowEnd: 12 * H, checkins: [
+    { questionnaireId: 1, startType: 'wake', endType: 'wake', endOffsetMin: 180, available: 'range', prompt: 'wake', promptGraceMin: 30, dayUntil },
+    { questionnaireId: 2, startSegment: 1, endSegment: 2, prompt: 'random', dayUntil },
+    { questionnaireId: 3, startSegment: 2, endSegment: 3, prompt: 'random', dayUntil },
+    { questionnaireId: 4, startType: 'bed', startOffsetMin: -120, endType: 'bed', endOffsetMin: 60, available: 'range', dayUntil },
+  ] });
+  const t = (h: number, m = 0) => new Date(DAY0 + h * H + m * M).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // 08:00-23:00 in four parts: Daytime 1 between 11:45 and 15:30, Daytime 2 between 15:30 and 19:15.
+  for (const [s, user] of [[ssrc(2), 'u13'], [ssrc(6), 'u14']] as const) { // the last study day, and one with days after it
+    const av = studyAvailability(s, user, JOINED, DAY0 + 7 * M, loadCompletions(s.id, user));
+    assert.equal(av(s.questionnaires[0]).reason, `Opens at ${t(5)}`);
+    assert.deepEqual([av(s.questionnaires[1]).reason, av(s.questionnaires[1]).opensAt], [`Opens between ${t(11, 45)} and ${t(15, 30)} if you get up at ${t(8)}`, DAY0 + 11 * H + 45 * M]);
+    assert.equal(av(s.questionnaires[2]).reason, `Opens between ${t(15, 30)} and ${t(19, 15)} if you get up at ${t(8)}`);
+    assert.equal(av(s.questionnaires[3]).reason, `Opens at ${t(21)}`);
+  }
+  // Up at 06:00: 06:00-23:00 in four parts puts Daytime 1 between 10:15 and 14:30, at a time now known.
+  complete(ssrc(2), 'u13', 0, DAY0 + 6 * H);
+  const daytime1 = studyAvailability(ssrc(2), 'u13', JOINED, DAY0 + 6 * H + M, loadCompletions(4001, 'u13'))(ssrc(2).questionnaires[1]);
+  assert.ok(daytime1.opensAt! >= DAY0 + 10 * H + 15 * M && daytime1.opensAt! <= DAY0 + 14 * H + 30 * M);
+  assert.match(daytime1.reason, /^Opens at /);
 });
 
 test('a window into the next day closes when that day\'s first check-in opens', () => {

@@ -2,6 +2,8 @@
 
 namespace backend\fileSystem\loader;
 
+use backend\dataClasses\StatisticsCondition;
+use backend\dataClasses\StudyStatisticsEntry;
 use backend\exceptions\CriticalException;
 use backend\fileSystem\PathsFS;
 use backend\FileSystemBasics;
@@ -12,7 +14,7 @@ class StudyStatisticsMetadataLoader {
 	static function importFile($studyId): array {
 		$pathStatisticsMetadata = PathsFS::fileStudyStatisticsMetadata($studyId);
 		return file_exists($pathStatisticsMetadata)
-			? unserialize(file_get_contents($pathStatisticsMetadata))
+			? FileSystemBasics::readSerialized(file_get_contents($pathStatisticsMetadata), [StudyStatisticsEntry::class, StatisticsCondition::class, stdClass::class]) // the conditions inside an entry come from json_decode()
 			: [];
 	}
 	

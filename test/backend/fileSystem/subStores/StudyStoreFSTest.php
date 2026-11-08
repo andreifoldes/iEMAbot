@@ -324,24 +324,6 @@ class StudyStoreFSTest extends BaseDataFolderTestSetup {
 		);
 	}
 	
-	function test_createStudy_with_updated_responses_where_filesize_is_too_big() {
-		$questionnaireId = 11111;
-		$config =  (object)[
-			'id' => $this->studyId,
-			'questionnaires' => [
-				(object) ['internalId' => $questionnaireId]
-			]
-		];
-		$path = PathsFS::fileResponsesBackup($this->studyId, (string) $questionnaireId);
-		$this->createStudy($config, [$questionnaireId => new ResponsesIndex(['key1', 'key2'])]);
-		
-		Configs::injectConfig('configs.max_filesize.injected.php');
-		
-		$this->assertFileDoesNotExist($path);
-		$this->createStudy($config, [$questionnaireId => new ResponsesIndex(['key1', 'key2', 'key3'])]);
-		$this->assertFileExists($path);
-	}
-	
 	function test_backupStudy() {
 		$studyStore = Configs::getDataStore()->getStudyStore();
 		
@@ -356,18 +338,16 @@ class StudyStoreFSTest extends BaseDataFolderTestSetup {
 		$this->createStudy($config, [$questionnaireId => new ResponsesIndex($questionnaireKeys)]);
 		
 		//path variables have to be created before backupStudy() or the they will account for the already existing backup files:
-		$pathQuestionnaire = PathsFS::fileResponses($this->studyId, (string) $questionnaireId);
 		$pathQuestionnaireBackup = PathsFS::fileResponsesBackup($this->studyId, (string) $questionnaireId);
-		$pathEvents = PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_EVENTS);
 		$pathEventsBackup = PathsFS::fileResponsesBackup($this->studyId, PathsFS::FILENAME_EVENTS);
-		$pathWebAccess = PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_WEB_ACCESS);
 		$pathWebAccessBackup = PathsFS::fileResponsesBackup($this->studyId, PathsFS::FILENAME_WEB_ACCESS);
 		
 		$studyStore->backupStudy($this->studyId);
 		
-		$this->assertEquals(file_get_contents($pathQuestionnaire), file_get_contents($pathQuestionnaireBackup));
-		$this->assertEquals(file_get_contents($pathEvents), file_get_contents($pathEventsBackup));
-		$this->assertEquals(file_get_contents($pathWebAccess), file_get_contents($pathWebAccessBackup));
+		// the dated copies are an export of the database at that moment (the server keeps no response files)
+		$this->assertEquals($this->exportedCsv($this->studyId, (string) $questionnaireId), file_get_contents($pathQuestionnaireBackup));
+		$this->assertEquals($this->exportedCsv($this->studyId, PathsFS::FILENAME_EVENTS), file_get_contents($pathEventsBackup));
+		$this->assertEquals($this->exportedCsv($this->studyId, PathsFS::FILENAME_WEB_ACCESS), file_get_contents($pathWebAccessBackup));
 	}
 	
 	function test_emptyStudy() {
@@ -422,15 +402,15 @@ class StudyStoreFSTest extends BaseDataFolderTestSetup {
 		
 		$this->assertNotEquals(
 			$expectedWebAccess,
-			file_get_contents(PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_WEB_ACCESS))
+			$this->exportedCsv($this->studyId, PathsFS::FILENAME_WEB_ACCESS)
 		);
 		$this->assertNotEquals(
 			$expectedQuestionnaire,
-			file_get_contents(PathsFS::fileResponses($this->studyId, (string) $questionnaireId))
+			$this->exportedCsv($this->studyId, (string) $questionnaireId)
 		);
 		$this->assertNotEquals(
 			$expectedEvents,
-			file_get_contents(PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_EVENTS))
+			$this->exportedCsv($this->studyId, PathsFS::FILENAME_EVENTS)
 		);
 		
 		$this->assertNotCount($expectedResponseFileCount, $responsesStore->getResponseFilesList($this->studyId)); //check for backups
@@ -450,15 +430,15 @@ class StudyStoreFSTest extends BaseDataFolderTestSetup {
 		
 		$this->assertEquals(
 			$expectedWebAccess,
-			file_get_contents(PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_WEB_ACCESS))
+			$this->exportedCsv($this->studyId, PathsFS::FILENAME_WEB_ACCESS)
 		);
 		$this->assertEquals(
 			$expectedQuestionnaire,
-			file_get_contents(PathsFS::fileResponses($this->studyId, (string) $questionnaireId))
+			$this->exportedCsv($this->studyId, (string) $questionnaireId)
 		);
 		$this->assertEquals(
 			$expectedEvents,
-			file_get_contents(PathsFS::fileResponses($this->studyId, PathsFS::FILENAME_EVENTS))
+			$this->exportedCsv($this->studyId, PathsFS::FILENAME_EVENTS)
 		);
 		
 		$this->assertCount($expectedResponseFileCount, $responsesStore->getResponseFilesList($this->studyId));

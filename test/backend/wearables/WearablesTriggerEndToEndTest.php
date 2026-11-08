@@ -24,6 +24,8 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 
 	protected function setUp(): void {
 		self::setUpBeforeClass();
+		\backend\sqlite\CollectedDataDb::reset(); // the data folder is recreated per test
+		Configs::$configs['wearables_token_key'] = \backend\channels\SecretBox::generateKey(); // tokens are only stored encrypted
 		Configs::$configs['wearables_googlehealth_webhook_secret'] = 's3cret';
 		Configs::$configs['wearables_googlehealth_skip_signature'] = true; // signature checking has its own tests
 	}
@@ -161,9 +163,15 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->assertSame([], $this->dueAfter('alice', $night + 60000));
 	}
 
+	/** What is stored of a participant's notifications for a provider: the header, then a row per notification in arrival order (empty when none). */
 	private function archiveRows(string $userId, string $provider): array {
-		$file = \backend\fileSystem\PathsFS::fileWearablesEventArchive(self::STUDY, $userId, $provider);
-		return file_exists($file) ? array_map(fn($line) => str_getcsv($line, ';', '"', ''), array_values(array_filter(explode("\n", file_get_contents($file))))) : [];
+		$stmt = \backend\sqlite\CollectedDataDb::connection()->prepare(
+			'SELECT user_id, provider, event, detail, received_at, interval_start, interval_end, local_start, local_end FROM wearable_events
+			 WHERE study_id = ? AND user_id = ? AND provider = ? ORDER BY id'
+		);
+		$stmt->execute([self::STUDY, $userId, $provider]);
+		$rows = array_map(fn($row) => array_map('strval', $row), $stmt->fetchAll(\PDO::FETCH_NUM));
+		return $rows ? array_merge([WearablesEventArchive::COLUMNS], $rows) : [];
 	}
 
 	function test_every_notification_is_kept_even_when_no_trigger_wants_it() {
@@ -232,24 +240,6 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->assertCount(3, $this->archiveRows('carol', 'googlehealth'));
 	}
 
-	function test_a_file_in_the_old_layout_is_converted_on_the_next_notification() {
-		$this->createStudyWithTrigger('withings', 'bed_out');
-		$this->link('carol', 'googlehealth', 'gh-user-1');
-		mkdir(\backend\fileSystem\PathsFS::folderWearablesEventArchive(self::STUDY), 0777, true);
-		$file = \backend\fileSystem\PathsFS::fileWearablesEventArchive(self::STUDY, 'carol', 'googlehealth');
-		file_put_contents($file, "\"userId\";\"provider\";\"event\";\"received_at\";\"interval_start\";\"interval_end\"\n"
-			. "\"carol\";\"googlehealth\";\"activity\";\"111\";\"\";\"\"\n");
-		$body = json_encode([['data' => ['healthUserId' => 'gh-user-1', 'dataType' => 'weight', 'operation' => 'UPSERT']]]);
-
-		GoogleHealthWebhook::handleRequest('POST', $body, 's3cret', '', self::WAKE);
-
-		$rows = $this->archiveRows('carol', 'googlehealth');
-		$this->assertSame(WearablesEventArchive::COLUMNS, $rows[0]);
-		$this->assertSame(['carol', 'googlehealth', 'activity', '', '111', '', '', '', ''], $rows[1]); // old row kept, new columns empty
-		$this->assertSame(['carol', 'googlehealth', 'weight', 'weight', (string) self::WAKE, '', '', '', ''], $rows[2]);
-		$this->assertSame(['t' => self::WAKE, 'provider' => 'googlehealth', 'kind' => 'weight'], WearablesEventArchive::last(self::STUDY, 'carol'));
-	}
-
 	function test_nothing_is_kept_when_the_study_has_wearables_off() {
 		$this->createStudy((object) ['id' => self::STUDY, 'wearablesEnabled' => false]);
 		$this->link('alice', 'withings', '4242');
@@ -259,14 +249,30 @@ class WearablesTriggerEndToEndTest extends BaseDataFolderTestSetup {
 		$this->assertSame([], $this->archiveRows('alice', 'withings'));
 	}
 
-	function test_disconnecting_removes_the_participants_archive() {
+	function test_disconnecting_stops_collecting_but_keeps_what_was_collected() {
 		$this->createStudyWithTrigger('withings', 'bed_out');
-		$this->link('alice', 'withings', '4242');
-		WearablesWebhook::handleWithings(['userid' => '4242', 'appli' => 44], self::WAKE);
-		$this->assertNotSame([], $this->archiveRows('alice', 'withings'));
+		$this->link('alice', 'withings', '7777'); // ids no earlier test used: the participant lookup is cached per provider user in a process
+		WearablesWebhook::handleWithings(['userid' => '7777', 'appli' => 44], self::WAKE);
+		$kept = $this->archiveRows('alice', 'withings');
+		$this->assertCount(2, $kept, 'header and one notification');
 
 		WearablesTokenStore::delete(self::STUDY, 'alice', 'withings');
 
-		$this->assertSame([], $this->archiveRows('alice', 'withings'));
+		$this->assertSame($kept, $this->archiveRows('alice', 'withings'), 'the archive stays');
+		$this->assertSame([], WearablesTokenStore::listProviders(self::STUDY, 'alice'));
+		// a second account, linked after the disconnect: the same file continues, and the old account no longer reaches the participant
+		$this->link('alice', 'withings', '7778');
+		$this->assertSame(1, WearablesWebhook::handleWithings(['userid' => '7778', 'appli' => 44], self::WAKE + self::H));
+		$this->assertCount(3, $this->archiveRows('alice', 'withings'));
+	}
+
+	function test_nothing_more_is_collected_for_a_disconnected_participant() {
+		$this->createStudyWithTrigger('withings', 'bed_out');
+		$this->link('bob', 'withings', '8888');
+		WearablesTokenStore::delete(self::STUDY, 'bob', 'withings');
+
+		$this->assertSame(0, WearablesWebhook::handleWithings(['userid' => '8888', 'appli' => 44], self::WAKE), 'no token, so the webhook finds nobody');
+		$this->assertSame([], $this->archiveRows('bob', 'withings'));
+		$this->assertSame(0, \backend\wearables\WearablesDataSync::run()['rows'], 'and the hourly sync has nothing to fetch');
 	}
 }

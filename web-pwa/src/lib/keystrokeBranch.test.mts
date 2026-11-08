@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire } from '../types.ts';
 import { adaptQuestionnaire } from './esmiraAdapter.ts';
 import { OfflineSurveyEngine } from './surveyEngine.ts';
+import './testI18n.mts';
 
 /** One page: a voice memo followed by its keystroke-text fallback (blank prompt → inherits). */
 function makeQuestionnaire(): EsmiraQuestionnaire {

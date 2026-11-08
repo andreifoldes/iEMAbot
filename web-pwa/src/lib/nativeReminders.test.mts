@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PlannedReminder } from './notificationPlan.ts';
 import { diffSchedule, syncReminders, requestReminderPermission, clearReminders } from './nativeReminders.ts';
+import './testI18n.mts';
 
 const r = (id: number): PlannedReminder => ({ id, at: id * 1000, deadline: id * 1000 + 3600_000, title: 't', body: 'b', questionnaireId: 1, occurrenceKey: `k${id}`, keys: [`availability:1:${id * 1000}`] });
 

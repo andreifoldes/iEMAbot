@@ -11,10 +11,12 @@
  * maps back to the cached original, falling through to the network on a miss. Relative imports inside
  * the task resolve below that same path, so the whole tree is served from the cache.
  *
- * Only same-origin tasks are handled. The copy is used only when the worker has answered a probe,
+ * Only same-origin tasks under /webapp/ are handled (the worker refuses every other path, see
+ * taskRoute.ts); any other task simply loads from the network. The copy is used only when the worker has answered a probe,
  * so an older worker without the route can never serve the app's own index page into the iframe.
  */
 
+import { isTaskPath } from './taskRoute.ts';
 import type { TaskManifest } from './taskCache.ts';
 
 const INDEX_KEY = 'esmira_task_cache_web';
@@ -41,7 +43,8 @@ export function proxyTaskUrl(taskUrl: string, base: string): string {
 
 export function webCacheAvailable(origin: string, taskUrl: string): boolean {
   try {
-    return typeof caches !== 'undefined' && new URL(taskUrl).origin === origin;
+    const url = new URL(taskUrl);
+    return typeof caches !== 'undefined' && url.origin === origin && isTaskPath(url.pathname);
   } catch { return false; }
 }
 

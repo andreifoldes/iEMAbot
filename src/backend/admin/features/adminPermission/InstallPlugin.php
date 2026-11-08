@@ -10,6 +10,7 @@ use backend\Paths;
 
 class InstallPlugin extends HasAdminPermission {
     function exec(): array {
+		// TODO(security): tracked in the maintainers' internal notes.
 		//get fileData:
 		
         $dataStore = Configs::getDataStore();

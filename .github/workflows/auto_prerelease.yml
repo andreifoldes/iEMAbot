@@ -18,10 +18,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 18
 
@@ -32,7 +32,7 @@ jobs:
         run: npm run prod
 
       - name: Create tag
-        uses: butlerlogic/action-autotag@1.1.2
+        uses: butlerlogic/action-autotag@7421fe0300091f3ef2134f627baaad42a156de10 # 1.1.4
         id: autotag
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
@@ -47,7 +47,7 @@ jobs:
 
       - name: Create named release
         if: ${{ steps.autotag.outputs.tagcreated == 'yes' }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -59,11 +59,11 @@ jobs:
 
       - name: Set up Docker Buildx
         if: ${{ steps.autotag.outputs.tagcreated == 'yes' }}
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to Docker Hub
         if: ${{ steps.autotag.outputs.tagcreated == 'yes' }}
-        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
@@ -71,14 +71,14 @@ jobs:
       - name: Extract metadata (tags, labels) for Docker
         if: ${{ steps.autotag.outputs.tagcreated == 'yes' }}
         id: meta
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        uses: docker/metadata-action@1ec73021df0717d8bef7700a897c064453280439
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
 
       - name: Build and push Docker image
         if: ${{ steps.autotag.outputs.tagcreated == 'yes' }}
         id: push
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: ./Dockerfile

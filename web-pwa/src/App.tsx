@@ -17,13 +17,14 @@ import {
   Download, Bug, ExternalLink, Watch, Lock, Check, Mic, Activity, XCircle,
 } from 'lucide-react';
 import { cn, splitQuestionHtml } from './lib/utils';
+import { sanitizeHtml } from './lib/sanitizeHtml';
 import { OfflineSurveyEngine } from './lib/surveyEngine';
 import type { PendingSpecify } from './lib/surveyEngine';
 import { adaptQuestionnaire, headerText } from './lib/esmiraAdapter';
 import {
   buildEsmiraResponses, fetchStudy, installSubmitQueueFlusher, submitQuestionnaire,
   submitCognitiveTrials, serverRootUrl, sendParticipantMessage, loadUploadProtocol,
-  flushSubmitQueue, pendingSubmitCount, loadErrorLog, clearErrorLog, installErrorLogger,
+  flushSubmitQueue, pendingSubmitCount, unsentAnswersNotSaved, loadErrorLog, clearErrorLog, installErrorLogger,
   subscribeToPush, unsubscribeFromPush, submitQuit, fetchNextNotification, fetchScheduleInputs, logEvent, reportClientInfo, sendWelcomePush, reportPushEvent,
   setNotificationPreference,
   submitJoined, setLocalOnly,
@@ -47,6 +48,7 @@ import {
 } from './lib/phoneSensing';
 import { withTimeout } from './lib/withdrawal';
 import { syncStudyTasks, resolveTaskUrl } from './lib/taskCache';
+import { TASK_IFRAME_SANDBOX } from './lib/taskRoute';
 import type { EsmiraStudy, EsmiraQuestionnaire, PreloadedQuestion, WearableStatus } from './types';
 import { SurveyInputs } from './components/SurveyInputs';
 import { AudioRecorder } from './components/AudioRecorder';
@@ -74,8 +76,10 @@ import { loadA11yPrefs, saveA11yPrefs, TEXT_SIZE_ROOT_PERCENT, type TextSize } f
 import { ImageLightbox } from './components/ImageLightbox';
 import { WearablesPanel } from './components/WearablesPanel';
 import { PhoneSensingPanel } from './components/PhoneSensingPanel';
-import { saveRecording } from './lib/audioUploads';
-import { saveKeystrokes } from './lib/keystrokeUploads';
+import { getCurrentLang, t } from './lib/i18n';
+import { isMachineTranslated, setStudyLang, useLang } from './lib/i18nStore';
+import { clearAudioQueue, saveRecording } from './lib/audioUploads';
+import { clearKeystrokeQueue, saveKeystrokes } from './lib/keystrokeUploads';
 import type { CaptureMode } from './lib/keystrokeCapture';
 
 type Phase = 'loading' | 'error' | 'consent' | 'notifications' | 'microphone' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
@@ -111,11 +115,11 @@ interface ChatMsg {
 // chat text starts at 18px, comfortable for older readers at the default setting.
 const TEXT_SIZE_CLASS = 'text-lg';
 
-const TEXT_SIZE_LABEL: Record<TextSize, string> = {
-  normal: 'Default',
-  large: 'Large',
-  xlarge: 'X-Large',
-  xxlarge: 'XX-Large',
+const TEXT_SIZE_KEY: Record<TextSize, string> = {
+  normal: 'pwa_text_size_default',
+  large: 'pwa_text_size_large',
+  xlarge: 'pwa_text_size_xlarge',
+  xxlarge: 'pwa_text_size_xxlarge',
 };
 
 function nowTime(): string {
@@ -125,19 +129,19 @@ function nowTime(): string {
 
 /** Human-readable echo of a participant's answer for the user bubble. */
 function formatAnswer(q: PreloadedQuestion, value: string): string {
-  if (q.type === 'audio') return '🎤 Voice memo';
+  if (q.type === 'audio') return t('pwa_survey_voice_memo');
   if (q.type === 'yesno') {
-    if (value === q.yes_value) return q.yes_label || 'Yes';
-    if (value === q.no_value) return q.no_label || 'No';
+    if (value === q.yes_value) return q.yes_label || t('pwa_survey_yes');
+    if (value === q.no_value) return q.no_label || t('pwa_survey_no');
   }
-  if (q.type === 'multi_choice') return value ? value.split(',').join(', ') : '(none)';
+  if (q.type === 'multi_choice') return value ? value.split(',').join(', ') : t('pwa_survey_none');
   if (q.type === 'duration') {
     // Stored value is total minutes (ESMira `duration` format); show it human-readably.
     const total = Number(value);
     if (Number.isFinite(total)) {
       const h = Math.floor(total / 60);
       const m = total % 60;
-      return h && m ? `${h} h ${m} min` : h ? `${h} h` : `${m} min`;
+      return h && m ? t('pwa_survey_duration_h_min', h, m) : h ? t('pwa_survey_duration_h', h) : t('pwa_survey_duration_min', m);
     }
   }
   return value;
@@ -197,6 +201,7 @@ function countQuestions(q: EsmiraQuestionnaire): number {
 
 
 export default function App() {
+  const lang = useLang(); // re-render the whole app when the language changes
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const accessKey = params.get('key') ?? params.get('access_key') ?? '';
   const studyIdParam = params.get('id') ? Number(params.get('id')) : undefined;
@@ -291,6 +296,7 @@ export default function App() {
   const [vapidKey, setVapidKey] = useState<string | null>(null);
   // Wearable providers with credentials configured on the server (from studies.php).
   const [wearableProviders, setWearableProviders] = useState<string[]>([]);
+  const [errorReportsToGithub, setErrorReportsToGithub] = useState(false);
   // Connected wearables for this participant (+ last sync), from wearables_status.php.
   const [wearableStatus, setWearableStatus] = useState<WearableStatus[]>([]);
   // Provider whose connect/disconnect is in flight; disables its buttons.
@@ -387,7 +393,7 @@ export default function App() {
 
   const pushTutorialIntro = useCallback((s: EsmiraStudy) => {
     pushBot(s.tutorialIntro?.trim()
-      || "Here's a quick tour. Below are the questionnaires this study uses — you can try a practice run of each (nothing you enter is saved). When you're ready, continue to the study.");
+      || t('pwa_app_tutorial_intro'));
     if (s.postInstallInstructions) pushBot(s.postInstallInstructions);
   }, [pushBot]);
 
@@ -420,15 +426,15 @@ export default function App() {
     }
     // A check-in the app starts by itself (autoStart, e.g. usual sleep times on day zero) starts straight away
     // while it is open, so it comes before the regular check-ins. So does a one-questionnaire check-in with an end
-    // snapshot (checkin-readout), like the Telegram bot, instead of a list with a single card.
+    // snapshot (webSnapshot), like the Telegram bot, instead of a list with a single card.
     const autoStarting = autoStartIds(s);
     const onboarding = open.find((q) => autoStarting.has(q.internalId));
     const autoStart = interrupted ?? onboarding ?? (s.webSnapshot && open.length === 1 ? open[0] : undefined);
     const { anyAvailable, message } = summarize(visible, now, availability);
-    const greeting = interrupted ? 'Your answers so far were saved on this phone.'
-      : onboarding ? 'First, a few questions to set up the study for you.' : autoStart ? "Let's go!" : message;
+    const greeting = interrupted ? t('pwa_list_saved_answers')
+      : onboarding ? t('pwa_list_first_setup') : autoStart ? t('pwa_list_lets_go') : message;
     awaitingOpenRef.current = !anyAvailable && !autoStart;
-    pushBot(lead ? `${lead} ${greeting}` : greeting);
+    pushBot(lead ? t('pwa_app_join_sentences', lead, greeting) : greeting);
     if (autoStart) setAutoStartId(autoStart.internalId);
     setPhase('list');
   }, [pushBot]);
@@ -443,7 +449,7 @@ export default function App() {
       return;
     }
     if (tutorialParam !== '0' && s.enableTutorialMode && !localStorage.getItem(tutorialSeenKey(s.id))) {
-      pushBot(s.tutorialOffer?.trim() || 'Would you like a quick guided tour of the questionnaires before you start?');
+      pushBot(s.tutorialOffer?.trim() || t('pwa_app_tutorial_offer'));
       logTutorialEvent('tutorial_offered');
       setPhase('tutorialOffer');
       return;
@@ -453,7 +459,7 @@ export default function App() {
 
   const acceptTutorial = useCallback(() => {
     if (!study) return;
-    pushUser('Yes, show me');
+    pushUser(t('pwa_app_tutorial_yes'));
     logTutorialEvent('tutorial_accepted');
     pushTutorialIntro(study);
     setPhase('tutorial');
@@ -461,16 +467,16 @@ export default function App() {
 
   const declineTutorial = useCallback(() => {
     if (!study) return;
-    pushUser('No thanks');
+    pushUser(t('pwa_app_tutorial_no'));
     logTutorialEvent('tutorial_declined');
     localStorage.setItem(tutorialSeenKey(study.id), '1');
-    enterList(study, 'No problem —');
+    enterList(study, t('pwa_app_tutorial_declined'));
   }, [study, enterList, pushUser, logTutorialEvent]);
 
   const finishTutorial = useCallback(() => {
     if (study) localStorage.setItem(tutorialSeenKey(study.id), '1');
     logTutorialEvent('tutorial_completed');
-    enterList(study!, 'Great — that\'s the tour done.');
+    enterList(study!, t('pwa_app_tutorial_done'));
   }, [study, enterList, logTutorialEvent]);
 
   // Ensure the enrollment anchor exists once the study + user are known (backstop for
@@ -650,7 +656,7 @@ export default function App() {
     const open = study.questionnaires.filter((q) => questionnaireAvailability.get(q.internalId)?.state === 'available');
     if (!open.length) return;
     awaitingOpenRef.current = false;
-    pushBot(open.length === 1 ? `${open[0].title} is open now — tap below to begin.` : 'Questionnaires are open now — choose one below to begin.');
+    pushBot(open.length === 1 ? t('pwa_list_open_now_one', open[0].title) : t('pwa_list_open_now_many'));
   }, [phase, study, questionnaireAvailability, pushBot]);
 
   // ── Retry queue flusher (re-installs cleanly on remount) ─────
@@ -674,15 +680,18 @@ export default function App() {
       return;
     }
     fetchStudy(effectiveKey, studyIdParam)
-      .then(async ({ study, serverVersion, vapidPublicKey, wearableProviders }) => {
+      .then(async ({ study, serverVersion, vapidPublicKey, wearableProviders, errorReportsToGithub: reportsToGithub }) => {
         // Remember the code only once it actually loaded a study.
         localStorage.setItem(LAST_KEY_STORE, effectiveKey);
         // Before anything else can send: a local-only study (webLocalOnly) uploads nothing.
         setLocalOnly(study.webLocalOnly === true);
+        // The study's language first, so the opening bubbles below are written in it.
+        await setStudyLang(study);
         setStudy(study);
         setServerVersion(serverVersion);
         setVapidKey(vapidPublicKey ?? null);
         setWearableProviders(wearableProviders ?? []);
+        setErrorReportsToGithub(reportsToGithub === true);
         // Researcher restricted this study to smartphones: show the invite page with a QR
         // code instead. Must come before the user id, PID lock and consent below, so a
         // computer visit leaves nothing behind that the phone would later trip over. A device
@@ -711,11 +720,8 @@ export default function App() {
           const lockStatus = await claimPidLock(String(study.id), invitedPid, deviceToken);
           if (lockStatus === 'conflict') {
             setPidConflict(invitedPid);
-            pushBot(`Welcome to ${study.title}.`);
-            pushBot(
-              `⚠️ Participant ID **${invitedPid}** is already active on another device for this study. ` +
-              `If you've switched devices, you can transfer this ID here. Otherwise, ask your researcher for a different invite link.`,
-            );
+            pushBot(t('pwa_app_welcome', study.title));
+            pushBot(t('pwa_pid_conflict', invitedPid));
             setPhase('pid-conflict');
             return;
           }
@@ -727,7 +733,7 @@ export default function App() {
         // (cleared as soon as the app leaves the loading phase, see below).
         instantRef.current = consented;
         // A description that greets the participant itself replaces the generic welcome line.
-        if (!/^welcome\b/i.test(headerText(study.studyDescription))) pushBot(`Welcome to ${study.title}.`);
+        if (!/^welcome\b/i.test(headerText(study.studyDescription))) pushBot(t('pwa_app_welcome', study.title));
         // studyDescription is rich text (HTML) in ESMira; render it formatted.
         // informedConsentForm is a plain-text field — keep it plain (line breaks preserved).
         if (study.studyDescription) pushBot(study.studyDescription, true);
@@ -744,7 +750,7 @@ export default function App() {
               setNotifOff(status.notificationsOff);
             }
             if (!status.withdrawn) return;
-            pushBot(`You have left ${study.title}. Reminders are switched off and this device is being reset.`);
+            pushBot(t('pwa_app_left_study', study.title));
             setPhase('loading'); // no further actions
             setTimeout(() => { void resetDevice({ notifyServer: false, study, userId: uid }); }, 2500);
           });
@@ -782,7 +788,7 @@ export default function App() {
         // A stored code that no longer resolves shouldn't trap the participant on
         // every launch — forget it so they can enter a fresh one.
         localStorage.removeItem(LAST_KEY_STORE);
-        setLoadError(e instanceof Error ? e.message : 'Could not load the study');
+        setLoadError(e instanceof Error ? e.message : t('pwa_error_load_study'));
         setPhase('error');
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -848,12 +854,12 @@ export default function App() {
   const onConsent = (agree: boolean) => {
     if (!study) return;
     if (!agree) {
-      pushUser('I do not consent');
-      pushBot('No problem — you can close this page. Thank you for your time.');
+      pushUser(t('pwa_consent_i_do_not_consent'));
+      pushBot(t('pwa_consent_declined_reply'));
       setPhase('loading'); // no further actions
       return;
     }
-    pushUser('I consent');
+    pushUser(t('pwa_consent_i_consent'));
     localStorage.setItem(`esmira_consent_${study.id}`, '1');
     // Enrollment = consent. Stamp the join time now (it drives "Joined at" and the
     // schedule anchor), anchor availability day-counting to it, and record the "joined"
@@ -916,6 +922,8 @@ export default function App() {
     try { sessionStorage.clear(); } catch { /* ignore */ }
     // Delete the completion-mirror IndexedDB.
     try { indexedDB.deleteDatabase('esmira_state'); } catch { /* ignore */ }
+    // Voice recordings and keystroke logs still waiting to upload belong to this identity too.
+    await Promise.all([clearAudioQueue(), clearKeystrokeQueue()]);
     // Delete every Cache Storage entry (app-shell precache, study definition, fonts).
     try {
       if ('caches' in window) {
@@ -938,7 +946,7 @@ export default function App() {
 
   // ── Sign out = leave the study on this device (and tell the server so). ──
   const signOut = () => {
-    if (!window.confirm("Sign out and reset this device? This clears everything stored here — you'll start sign-up again from the beginning.")) return;
+    if (!window.confirm(t('pwa_signout_confirm'))) return;
     void resetDevice({ notifyServer: true });
   };
 
@@ -1021,14 +1029,16 @@ export default function App() {
     setUpdateStatus('updating');
     try {
       const pending = await flushSubmitQueue();
-      const { study: fresh, serverVersion: sv, vapidPublicKey, wearableProviders: wp, fromCache } = await fetchStudy(effectiveKey, studyIdParam);
+      const { study: fresh, serverVersion: sv, vapidPublicKey, wearableProviders: wp, errorReportsToGithub: reportsToGithub, fromCache } = await fetchStudy(effectiveKey, studyIdParam);
       setUpdatePending(pending);
       if (fromCache) { setUpdateStatus('offline'); return; } // nothing new was downloaded: don't claim it was
       setLocalOnly(fresh.webLocalOnly === true);
+      await setStudyLang(fresh); // before the study is swapped in, so its text renders in the right language
       setStudy(fresh);
       setServerVersion(sv);
       setVapidKey(vapidPublicKey ?? null);
       setWearableProviders(wp ?? []);
+      setErrorReportsToGithub(reportsToGithub === true);
       setUpdateStatus('done');
     } catch {
       setUpdateStatus('error');
@@ -1066,8 +1076,8 @@ export default function App() {
     }
     if (succeeded < 1) {
       await showLocalNotification(
-        `Welcome to ${s.title}`,
-        "Notifications are on — we'll remind you when a questionnaire is ready.",
+        t('pwa_notif_welcome_title', s.title),
+        t('pwa_notif_on_body'),
       );
     }
     return succeeded >= 1;
@@ -1169,7 +1179,7 @@ export default function App() {
     localStorage.removeItem(`esmira_push_optout_${study.id}`);
     if (isNativeApp()) setReminderSyncTick((t) => t + 1);
     else void subscribePush();
-    pushBot("✅ Notifications are on — I'll remind you when a questionnaire is ready.");
+    pushBot(t('pwa_notif_on_reminder'));
   }, [study, subscribePush, pushBot, setReminderSyncTick]);
   // The permission may change in the settings while the app is in the background: re-check on return.
   useEffect(() => {
@@ -1228,12 +1238,12 @@ export default function App() {
       if (sense) {
         const missing = missingPermissions(sense, await phoneSensingStatus());
         if (missing.activity) {
-          pushBot('This study also notes whether you are still, walking or travelling around your questionnaires. Please tap Allow when Android asks about physical activity.');
+          pushBot(t('pwa_onboard_activity_prompt'));
           const st = await requestActivityPermission();
           if (st) setSensingStatus(st);
         }
         if (missing.usage) {
-          pushBot('This study also looks at which apps you use (app names only, never what you do in them). To allow this, open the menu, tap "Phone sensing" and switch on Usage access for iEMAbot.');
+          pushBot(t('pwa_onboard_usage_prompt'));
         }
       }
       if (!micPending(s)) { enterStudy(s); return; }
@@ -1242,7 +1252,7 @@ export default function App() {
         enterStudy(s);
         return;
       }
-      pushBot("Some questions in this study ask you to record a short voice answer, so the app needs your microphone. It's only used while you're recording, and you can listen back before you save.");
+      pushBot(t('pwa_onboard_mic_explain'));
       setMicStatus('ask');
       setPhase('microphone');
     })();
@@ -1278,8 +1288,8 @@ export default function App() {
           && localStorage.getItem(`esmira_push_optout_${s.id}`) !== '1'
           && (await reminderPermission()) === 'prompt') {
           pushBot(micPending(s)
-            ? 'Two quick permissions before you start: notifications, so I can remind you when a questionnaire is ready, and your microphone, for the questions where you record a voice answer. First, notifications.'
-            : "I'll remind you when a questionnaire is ready, so the app needs permission to show notifications.");
+            ? t('pwa_onboard_native_two_perms')
+            : t('pwa_onboard_native_notif'));
           setPhase('notifications');
           return;
         }
@@ -1298,8 +1308,8 @@ export default function App() {
       return;
     }
     pushBot(micPending(s)
-      ? "Two quick permissions before you start: notifications, so you don't miss a questionnaire, and your microphone, for the questions where you record a voice answer. First, notifications — I'll send a quick welcome to confirm they're working."
-      : "One last step — please turn on notifications so you don't miss a questionnaire. I'll send a quick welcome to confirm they're working.");
+      ? t('pwa_onboard_web_two_perms')
+      : t('pwa_onboard_web_notif'));
     setPhase('notifications');
   }, [notificationsSettled, continueAfterNotifications, subscribePush, maybeDeliverWelcome, pushBot, setReminderSyncTick]);
 
@@ -1312,8 +1322,8 @@ export default function App() {
       const perm = await requestReminderPermission();
       if (perm !== 'granted') markNudgeShown(study.id, userIdRef.current); // just declined: ask again tomorrow
       pushBot(perm === 'granted'
-        ? "✅ Notifications are on — I'll remind you when a questionnaire is ready."
-        : 'No problem — you can turn notifications on later in your phone\'s settings for this app.');
+        ? t('pwa_notif_on_reminder')
+        : t('pwa_onboard_notif_later_phone'));
       setReminderSyncTick((t) => t + 1);
       continueAfterNotifications(study);
     } finally {
@@ -1340,7 +1350,7 @@ export default function App() {
         // Permission granted but we couldn't register a push subscription (rare on a
         // supported browser). No real push is possible, so skip the confirmation and
         // continue — they'll still get notifications while the app is open.
-        pushBot("✅ Notifications are on. You'll get notifications while the app is open; for background reminders, install this app to your home screen.");
+        pushBot(t('pwa_onboard_notif_open_only'));
         continueAfterNotifications(study);
         return;
       }
@@ -1348,9 +1358,9 @@ export default function App() {
       localStorage.setItem(`esmira_push_welcomed_${study.id}_${userIdRef.current}`, '1');
       const serverSucceeded = await deliverWelcome(study);
       pushBot(serverSucceeded
-        ? "✅ Notifications are on — I've just sent you a welcome notification."
-        : "✅ Notifications are on — I've sent a welcome notification to this device.");
-      pushBot('Did it show up? Let me know so I can be sure notifications are reaching you.');
+        ? t('pwa_onboard_welcome_sent')
+        : t('pwa_onboard_welcome_sent_device'));
+      pushBot(t('pwa_onboard_welcome_confirm_ask'));
       setAwaitingWelcomeConfirm(true);
     } finally {
       setNotifBusy(false);
@@ -1364,8 +1374,8 @@ export default function App() {
     const uid = userIdRef.current;
     localStorage.setItem(`esmira_push_welcome_confirmed_${study.id}_${uid}`, '1');
     void reportPushEvent({ studyId: study.id, userId: uid, event: 'welcome_confirmed' });
-    pushUser('Yes, got it');
-    pushBot("Perfect — you're all set. I'll send a notification whenever a questionnaire is ready.");
+    pushUser(t('pwa_onboard_yes_got_it'));
+    pushBot(t('pwa_onboard_all_set'));
     setAwaitingWelcomeConfirm(false);
     continueAfterNotifications(study);
   }, [study, pushUser, pushBot, continueAfterNotifications]);
@@ -1377,14 +1387,14 @@ export default function App() {
     if (!study) return;
     const uid = userIdRef.current;
     void reportPushEvent({ studyId: study.id, userId: uid, event: 'welcome_missed' });
-    pushUser('No, nothing yet');
+    pushUser(t('pwa_onboard_no_nothing'));
     const shown = await showLocalNotification(
-      `Welcome to ${study.title}`,
-      "Notifications are on — we'll remind you when a questionnaire is ready.",
+      t('pwa_notif_welcome_title', study.title),
+      t('pwa_notif_on_body'),
     );
     pushBot(shown
-      ? "Thanks — I've shown one now and let the study team know, in case reminders don't reach you. You can carry on with the study."
-      : "Thanks — I've let the study team know so they can help make sure reminders reach you. You can still take part in the study.");
+      ? t('pwa_onboard_missed_shown')
+      : t('pwa_onboard_missed_not_shown'));
     setAwaitingWelcomeConfirm(false);
     continueAfterNotifications(study);
   }, [study, pushUser, pushBot, continueAfterNotifications]);
@@ -1418,10 +1428,10 @@ export default function App() {
     if (!study) return;
     localStorage.setItem(`esmira_push_optout_${study.id}`, '1');
     markNudgeShown(study.id, userIdRef.current); // the daily reminder starts tomorrow
-    pushUser('Not now');
+    pushUser(t('pwa_onboard_not_now'));
     pushBot(nudgeEnabled(study)
-      ? "No problem — I'll remind you tomorrow, or you can turn notifications on any time from Settings."
-      : 'No problem — you can turn notifications on any time from Settings.');
+      ? t('pwa_onboard_skip_tomorrow')
+      : t('pwa_onboard_skip_settings'));
     continueAfterNotifications(study);
   }, [study, pushBot, pushUser, continueAfterNotifications]);
 
@@ -1435,7 +1445,7 @@ export default function App() {
       const result = await requestMicrophone();
       if (result !== 'granted') { setMicStatus(result); return; }
       localStorage.setItem(micOnboardedKey(study.id), '1');
-      pushBot("✅ Microphone is ready. It's only switched on while you're recording an answer.");
+      pushBot(t('pwa_onboard_mic_ready'));
       enterStudy(study);
     } finally {
       setMicBusy(false);
@@ -1447,10 +1457,10 @@ export default function App() {
   const skipMicrophone = useCallback(() => {
     if (!study) return;
     localStorage.setItem(micOnboardedKey(study.id), '1');
-    pushUser(micStatus === 'ask' ? 'Not now' : 'Continue without microphone');
+    pushUser(micStatus === 'ask' ? t('pwa_onboard_not_now') : t('pwa_onboard_continue_no_mic'));
     pushBot(micStatus === 'ask'
-      ? "No problem — you'll be asked again the first time a question needs the microphone."
-      : 'No problem — you can still take part. Voice questions will need the microphone, so you may be asked again when one comes up.');
+      ? t('pwa_onboard_mic_skip_ask')
+      : t('pwa_onboard_mic_skip_blocked'));
     enterStudy(study);
   }, [study, micStatus, pushBot, pushUser, enterStudy]);
 
@@ -1628,9 +1638,9 @@ export default function App() {
       const av = questionnaireAvailability.get(internalId);
       if (av && av.state !== 'available') {
         pushBot(
-          av.state === 'completed' ? "You've already completed that questionnaire."
-          : av.state === 'ended' ? 'That questionnaire is no longer available.'
-          : `That questionnaire isn't open yet — ${av.reason}.`,
+          av.state === 'completed' ? t('pwa_list_already_completed')
+          : av.state === 'ended' ? t('pwa_list_no_longer_available')
+          : t('pwa_list_not_open_yet', av.reason),
         );
         return;
       }
@@ -1676,16 +1686,16 @@ export default function App() {
         const value = resume.responses[done.id];
         if (value === undefined) continue;
         if (done.type === 'cognitive') {
-          pushBot(done.title || 'Cognitive task');
-          pushUser('✓ Completed');
+          pushBot(done.title || t('pwa_survey_cognitive_task'));
+          pushUser(t('pwa_survey_completed'));
         } else {
           pushBot(settledQuestionHtml(done), !!done.is_html);
           pushUser(formatAnswer(done, value));
         }
       }
-      pushBot('Welcome back — carrying on where you left off.');
+      pushBot(t('pwa_survey_welcome_back'));
     }
-    if (practice) pushSection('Practice run — nothing you enter is saved');
+    if (practice) pushSection(t('pwa_survey_practice_run'));
     // Saved from the start, so a check-in closed before its first answer still reopens (with the same task battery).
     // This also replaces any saved answers the window check above turned down.
     else saveProgress();
@@ -1835,7 +1845,7 @@ export default function App() {
   // bubble would dump the markup. Settle them by their clean title instead —
   // matching how a *completed* cognitive task is settled.
   const settleQuestionIntoThread = (q: PreloadedQuestion, qid?: string) => {
-    if (q.type === 'cognitive') pushBot(q.title || 'Cognitive task', false, qid);
+    if (q.type === 'cognitive') pushBot(q.title || t('pwa_survey_cognitive_task'), false, qid);
     else pushBot(settledQuestionHtml(q), !!q.is_html, qid);
   };
 
@@ -1864,21 +1874,21 @@ export default function App() {
   // list. No push is scheduled, so the message promises a saved place, not a reminder.
   const handleRemindLater = () => {
     if (!engineRef.current || !study || !activeQRef.current) return;
-    pushUser('Remind me later');
+    pushUser(t('pwa_survey_remind_later'));
     const saved = saveProgress(true);
     if (!saved) clearPaused(study.id, userId, activeQRef.current.id);
     pushBot(saved
-      ? "Okay — I've saved your answers so far on this phone. Open the check-in below when you're ready to carry on."
-      : "Sorry, I couldn't save your answers on this phone, so this check-in was closed. You can start it again from the list.");
+      ? t('pwa_survey_remind_saved')
+      : t('pwa_survey_remind_failed'));
     leaveSurvey();
   };
 
   // Task-card "Skip check-in" (webTaskActions): drop the whole questionnaire, nothing is submitted.
   const handleSkipCheckin = () => {
     if (!study) return;
-    pushUser('Skip check-in');
+    pushUser(t('pwa_survey_skip_checkin'));
     if (activeQRef.current) clearPaused(study.id, userId, activeQRef.current.id);
-    pushBot('Okay, I skipped this check-in. None of your answers were submitted.');
+    pushBot(t('pwa_survey_skip_checkin_done'));
     leaveSurvey();
   };
 
@@ -1916,7 +1926,7 @@ export default function App() {
     // "Change response" affordance can rewind and re-ask it.
     const qid = currentQuestion.id;
     settleQuestionIntoThread(currentQuestion, qid);
-    pushUser('Skipped', qid);
+    pushUser(t('pwa_survey_skipped'), qid);
     const next = engine.skip();
     afterAdvance(next);
   };
@@ -1929,7 +1939,7 @@ export default function App() {
     // Tutorial practice run: render is identical to a live beep, but nothing is
     // sent and no join/completion state is recorded. Return to the tutorial.
     if (practiceRef.current) {
-      pushBot("✅ Practice complete — that's exactly what a real questionnaire looks like. Nothing was saved.");
+      pushBot(t('pwa_survey_practice_complete'));
       engineRef.current = null;
       activeQRef.current = null;
       practiceRef.current = false;
@@ -1990,11 +2000,11 @@ export default function App() {
     );
     if (study.webLocalOnly) {
       // Nothing was sent, so never claim the responses were recorded.
-      if (!messages) pushBot('✅ Thank you — you are all done. Nothing was sent to the server.');
+      if (!messages) pushBot(t('pwa_complete_local_only'));
     } else {
       pushBot(ok
-        ? '✅ Thank you — your responses have been recorded.'
-        : '📥 You appear to be offline. Your responses are saved and will be sent automatically when you reconnect.');
+        ? t('pwa_complete_recorded')
+        : t(unsentAnswersNotSaved() ? 'pwa_complete_not_saved' : 'pwa_complete_offline'));
     }
     messages?.forEach((message) => pushBot(message));
     engineRef.current = null;
@@ -2011,7 +2021,7 @@ export default function App() {
     const availability = studyAvailability(study, userId, anchor, Date.now(), loadCompletions(study.id, userId));
     const anotherAvailable = study.questionnaires.some((q) => q.title !== TRIALS_QN_TITLE && availability(q).state === 'available');
     if (anotherAvailable) {
-      pushBot('Would you like to complete another questionnaire?');
+      pushBot(t('pwa_complete_another'));
     }
     awaitingOpenRef.current = !anotherAvailable;
     setPhase('list');
@@ -2026,10 +2036,10 @@ export default function App() {
     const q = engine.session.questions.find((x) => x.id === qid);
     const session = newCognitiveSession();
     if (q) {
-      pushBot(q.title || 'Cognitive task', false, qid);
+      pushBot(q.title || t('pwa_survey_cognitive_task'), false, qid);
       // Participant sees only a neutral confirmation — no performance feedback.
       // The full summary (trials, duration, correctness) is still stored below.
-      pushUser('✓ Completed', qid);
+      pushUser(t('pwa_survey_completed'), qid);
     }
     // Store a compact summary (incl. the session id, to join the trial rows) in
     // the cognitive item's own column.
@@ -2069,14 +2079,14 @@ export default function App() {
     switch (phase) {
       case 'enterKey':
       case 'phone-only':
-      case 'pid-conflict': return 'Sign up';
-      case 'consent': return 'Consent';
-      case 'notifications': return 'Notifications';
-      case 'microphone': return 'Microphone';
+      case 'pid-conflict': return t('pwa_app_status_sign_up');
+      case 'consent': return t('pwa_app_status_consent');
+      case 'notifications': return t('pwa_notifications');
+      case 'microphone': return t('pwa_app_status_microphone');
       case 'tutorialOffer':
-      case 'tutorial': return 'Tutorial';
-      case 'survey': return activeQTitle || 'Survey';
-      case 'done': return 'Done';
+      case 'tutorial': return t('pwa_app_status_tutorial');
+      case 'survey': return activeQTitle || t('pwa_app_status_survey');
+      case 'done': return t('pwa_app_done');
       case 'list': {
         const DAY_MS = 24 * 60 * 60 * 1000;
         const avValues = [...questionnaireAvailability.values()];
@@ -2086,25 +2096,25 @@ export default function App() {
         if (avValues.length > 0 && avValues.every(av => av.state === 'ended')) {
           if (enrolledAt && period && period.last >= 0) {
             const d = new Date(enrolledAt + period.last * DAY_MS); // the last study day
-            return `Ended ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+            return t('pwa_app_status_ended', d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
           }
-          return 'Study ended';
+          return t('pwa_app_status_study_ended');
         }
         if (study && enrolledAt) {
           // None available yet → the study starts when the first one opens
           const startsAt = avValues.length > 0 && avValues.every(av => av.state === 'upcoming')
-            ? avValues.map(av => av.opensAt).filter((t): t is number => t != null).sort((a, b) => a - b)[0] ?? null
+            ? avValues.map(av => av.opensAt).filter((at): at is number => at != null).sort((a, b) => a - b)[0] ?? null
             : null;
           const label = studyDayLabel(study, enrolledAt, Date.now(), startsAt);
           if (label) return label;
         }
-        return 'Questionnaires';
+        return t('pwa_app_status_questionnaires');
       }
-      case 'loading': return 'Loading…';
-      case 'error': return 'Error';
-      default: return 'Survey';
+      case 'loading': return t('pwa_app_status_loading');
+      case 'error': return t('pwa_app_status_error');
+      default: return t('pwa_app_status_survey');
     }
-  }, [phase, activeQTitle, questionnaireAvailability, enrolledAt, study]);
+  }, [phase, activeQTitle, questionnaireAvailability, enrolledAt, study, lang]);
 
   // The most recently answered question shows a "Change response" pill (t-1).
   const lastAnswerId = useMemo(() => {
@@ -2142,7 +2152,7 @@ export default function App() {
         onClick={() => setGridMenuOpen((o) => !o)}
         disabled={!quickActionsEnabled}
         className="p-3 text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-        aria-label="Quick actions"
+        aria-label={t('pwa_app_quick_actions')}
       >
         <Grid size={20} aria-hidden="true" />
       </button>
@@ -2156,7 +2166,7 @@ export default function App() {
               onTouchEnd={(e) => { e.preventDefault(); setGridMenuOpen(false); }}
             />
             <motion.div
-              ref={gridMenuRef} tabIndex={-1} role="group" aria-label="Quick actions menu"
+              ref={gridMenuRef} tabIndex={-1} role="group" aria-label={t('pwa_app_quick_actions_menu')}
               initial={reduceMotion ? { opacity: 1 } : { opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 10 }}
@@ -2165,19 +2175,19 @@ export default function App() {
             >
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { key: 'settings', display: 'Settings', icon: Settings, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', onSelect: openSettings },
-                  { key: 'about', display: 'Details', icon: Info, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10', onSelect: () => { setAboutView('main'); setAboutOpen(true); } },
+                  { key: 'settings', display: t('pwa_settings'), icon: Settings, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10', onSelect: openSettings },
+                  { key: 'about', display: t('pwa_app_details'), icon: Info, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-500/10', onSelect: () => { setAboutView('main'); setAboutOpen(true); } },
                   ...(offeredWearables.length > 0
-                    ? [{ key: 'wearables', display: 'Wearables', icon: Watch, color: 'text-teal-500', bg: 'bg-teal-50 dark:bg-teal-500/10', onSelect: openWearables }]
+                    ? [{ key: 'wearables', display: t('pwa_app_wearables'), icon: Watch, color: 'text-teal-500', bg: 'bg-teal-50 dark:bg-teal-500/10', onSelect: openWearables }]
                     : []),
                   ...(sensing
-                    ? [{ key: 'sensing', display: 'Phone sensing', icon: Activity, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', onSelect: () => openSensing() }]
+                    ? [{ key: 'sensing', display: t('pwa_phone_sensing'), icon: Activity, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', onSelect: () => openSensing() }]
                     : []),
-                  { key: 'contact', display: 'Contact', icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10', onSelect: openContact },
+                  { key: 'contact', display: t('pwa_contact_tile'), icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-500/10', onSelect: openContact },
                   ...(phase === 'survey' && currentQuestion
-                    ? [{ key: 'skip', display: 'Skip', icon: SkipForward, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10', onSelect: handleSkip }]
+                    ? [{ key: 'skip', display: t('pwa_survey_skip'), icon: SkipForward, color: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-500/10', onSelect: handleSkip }]
                     : []),
-                  { key: 'signout', display: 'Sign out', icon: LogOut, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-500/10', onSelect: signOut },
+                  { key: 'signout', display: t('pwa_signout_tile'), icon: LogOut, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-500/10', onSelect: signOut },
                 ].map((a) => (
                   <button
                     key={a.key}
@@ -2214,17 +2224,17 @@ export default function App() {
           <div className={cn('flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg text-sm font-semibold text-white',
             wearableFlash.ok ? 'bg-green-600' : 'bg-red-600')}>
             {wearableFlash.ok ? <CheckCircle size={16} aria-hidden="true" /> : <X size={16} aria-hidden="true" />}
-            {(WEARABLE_LABEL[wearableFlash.provider] ?? wearableFlash.provider) + (wearableFlash.ok ? ' connected' : ' connection failed')}
+            {t(wearableFlash.ok ? 'pwa_app_wearable_connected' : 'pwa_app_wearable_failed', WEARABLE_LABEL[wearableFlash.provider] ?? wearableFlash.provider)}
           </div>
         </div>
       )}
 
       {/* Header */}
-      <header aria-label={study?.title ?? 'iEMAbot Study'} className="app-header shrink-0 relative z-50 bg-[#075E54] dark:bg-surface-container-lowest text-white dark:text-on-surface shadow-md flex items-center justify-between px-4 py-3">
+      <header aria-label={study?.title ?? t('pwa_app_default_title')} className="app-header shrink-0 relative z-50 bg-[#075E54] dark:bg-surface-container-lowest text-white dark:text-on-surface shadow-md flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" aria-hidden="true" className="w-10 h-10 rounded-full shrink-0 object-cover" />
           <div className="flex flex-col min-w-0">
-            <h1 className="text-base font-bold leading-none truncate">{study?.title ?? 'iEMAbot Study'}</h1>
+            <h1 className="text-base font-bold leading-none truncate">{study?.title ?? t('pwa_app_default_title')}</h1>
             <span className="text-[12px] opacity-80 uppercase tracking-widest font-semibold truncate">
               {headerStatus}
             </span>
@@ -2236,18 +2246,18 @@ export default function App() {
       {/* Native app: a newer build is on the server (lib/appUpdate.ts). */}
       {appUpdate && (
         <div role="status" className="app-update shrink-0 relative z-40 bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200 border-b border-amber-200 dark:border-amber-500/30 px-4 py-2 flex items-center justify-between gap-3 text-sm">
-          <span>A new version of the app is available{appUpdate.versionName ? ` (${appUpdate.versionName})` : ''}.</span>
+          <span>{appUpdate.versionName ? t('pwa_app_update_available_version', appUpdate.versionName) : t('pwa_app_update_available')}</span>
           <button type="button" onClick={() => void openAppUpdate(appUpdate)}
             className="shrink-0 rounded-full bg-[#075E54] text-white px-4 py-1.5 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#075E54]">
-            Update
+            {t('pwa_app_update_button')}
           </button>
         </div>
       )}
 
       {/* Chat area */}
-      <main ref={scrollRef} role="log" aria-label="Survey conversation" aria-live="polite" tabIndex={0} className="relative flex-1 min-h-0 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+      <main ref={scrollRef} role="log" aria-label={t('pwa_survey_conversation')} aria-live="polite" tabIndex={0} className="relative flex-1 min-h-0 chat-wallpaper overflow-y-auto px-4 py-6 flex flex-col gap-4 no-scrollbar focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
         <div className="flex justify-center my-2">
-          <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[0.75rem] font-bold uppercase tracking-wider shadow-sm">Today</span>
+          <span className="bg-slate-700 dark:bg-surface-container-highest text-white dark:text-on-surface px-4 py-1.5 rounded-full text-[0.75rem] font-bold uppercase tracking-wider shadow-sm">{t('pwa_app_today')}</span>
         </div>
 
         <AnimatePresence initial={false}>
@@ -2266,7 +2276,7 @@ export default function App() {
                 msg.sender === 'user' ? 'bg-primary text-on-primary dark:bg-primary-container dark:text-on-surface rounded-tr-none'
                   : 'bg-white dark:bg-surface-container-lowest text-on-surface rounded-tl-none border border-slate-200 dark:border-outline-variant/30')}>
                 {msg.html
-                  ? <div className={cn('leading-relaxed font-medium esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: msg.content }} />
+                  ? <div className={cn('leading-relaxed font-medium esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.content) }} />
                   : <p className={cn('leading-relaxed font-medium whitespace-pre-wrap', textSizeClass)}>{msg.content}</p>}
                 <div className="flex justify-end items-center gap-1 mt-1">
                   <span className={cn('text-[0.75rem] font-bold', msg.sender === 'user' ? 'text-on-primary dark:text-on-surface' : 'text-on-surface-variant')}>{nowTime()}</span>
@@ -2281,7 +2291,7 @@ export default function App() {
                   onClick={() => onChangeResponse(msg.qid!)}
                   className="mt-1 px-3 py-1.5 bg-surface-container-high dark:bg-surface-container-highest text-on-surface-variant rounded-full text-xs font-semibold flex items-center gap-1.5 hover:bg-surface-container-highest transition-colors active:scale-95"
                 >
-                  <RotateCcw size={12} aria-hidden="true" /> Change response
+                  <RotateCcw size={12} aria-hidden="true" /> {t('pwa_survey_change_response')}
                 </button>
               )}
             </motion.div>
@@ -2311,7 +2321,7 @@ export default function App() {
               onClick={() => { localStorage.removeItem(LAST_KEY_STORE); setLoadError(null); setKeyInput(''); setPhase('enterKey'); }}
               className="px-4 py-2 bg-surface-container-high dark:bg-surface-container-highest text-on-surface font-semibold rounded-full text-sm active:scale-95 transition-all"
             >
-              Enter a different code
+              {t('pwa_error_enter_different_code')}
             </button>
           </div>
         )}
@@ -2326,9 +2336,9 @@ export default function App() {
                 <div className="flex items-start gap-3">
                   <span className="p-2 rounded-full bg-secondary-container text-on-secondary-container shrink-0"><Download size={20} aria-hidden="true" /></span>
                   <div>
-                    <h2 className="text-lg font-bold text-on-surface leading-snug">Install the app to begin</h2>
+                    <h2 className="text-lg font-bold text-on-surface leading-snug">{t('pwa_onboard_install_title')}</h2>
                     <p className="text-sm text-on-surface-variant leading-relaxed mt-0.5">
-                      For reliable reminders, set up the app before entering your invite code.
+                      {t('pwa_onboard_install_body')}
                     </p>
                   </div>
                 </div>
@@ -2337,7 +2347,7 @@ export default function App() {
                     <li key={step.n} className={cn('flex items-center gap-2.5', step.state === 'active' ? 'font-semibold text-on-surface' : 'text-on-surface-variant')}>
                       <span className={cn('flex items-center justify-center w-5 h-5 rounded-full text-[0.75rem] font-bold shrink-0',
                         step.state === 'active' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant')}>
-                        {step.state === 'done' ? <Check size={12} aria-label="Done" /> : step.n}
+                        {step.state === 'done' ? <Check size={12} aria-label={t('pwa_app_done')} /> : step.n}
                       </span>
                       {step.label}
                     </li>
@@ -2352,9 +2362,9 @@ export default function App() {
                 install funnel above so participants set up the app first. */}
             {standalone && (
               <div className="bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-5 flex flex-col gap-3">
-                <h2 className="text-lg font-bold text-on-surface">Enter your study invite code</h2>
+                <h2 className="text-lg font-bold text-on-surface">{t('pwa_onboard_enter_code_title')}</h2>
                 <p className="text-sm text-on-surface-variant leading-relaxed">
-                  Enter the invite code from your invitation, and your participant ID if you were given one, to begin.
+                  {t('pwa_onboard_enter_code_body')}
                 </p>
                 {isNativeApp() && (
                   <>
@@ -2367,15 +2377,15 @@ export default function App() {
                       value={serverInput}
                       onChange={(e) => { setServerInput(e.target.value); setServerError(false); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
-                      placeholder="Study server address"
-                      aria-label="Study server address"
+                      placeholder={t('pwa_onboard_server_address')}
+                      aria-label={t('pwa_onboard_server_address')}
                       aria-invalid={serverError}
                       aria-describedby={serverError ? 'server-error' : undefined}
                       className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                     {serverError && (
                       <p id="server-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
-                        That doesn't look like a server address. Check your invitation and try again.
+                        {t('pwa_onboard_server_error')}
                       </p>
                     )}
                   </>
@@ -2390,8 +2400,8 @@ export default function App() {
                   value={keyInput}
                   onChange={(e) => setKeyInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
-                  placeholder="Invite code"
-                  aria-label="Study invite code"
+                  placeholder={t('pwa_onboard_invite_code')}
+                  aria-label={t('pwa_onboard_invite_code_label')}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <input
@@ -2404,8 +2414,8 @@ export default function App() {
                   value={pidInput}
                   onChange={(e) => setPidInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') submitAccessKey(); }}
-                  placeholder="Participant ID (if you were given one)"
-                  aria-label="Participant ID, if you were given one"
+                  placeholder={t('pwa_onboard_pid_placeholder')}
+                  aria-label={t('pwa_onboard_pid_label')}
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
@@ -2413,7 +2423,7 @@ export default function App() {
                   disabled={!keyInput.trim() || (isNativeApp() && !serverInput.trim())}
                   className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-50 disabled:active:scale-100"
                 >
-                  Continue
+                  {t('pwa_onboard_continue')}
                 </button>
               </div>
             )}
@@ -2422,7 +2432,7 @@ export default function App() {
 
         {/* Loading */}
         {phase === 'loading' && messages.length === 0 && (
-          <div className="self-center text-on-surface-variant text-sm">Loading study…</div>
+          <div className="self-center text-on-surface-variant text-sm">{t('pwa_app_loading_study')}</div>
         )}
 
         {/* Smartphone-only study opened on a computer/tablet: hand off to the phone via QR code */}
@@ -2441,13 +2451,13 @@ export default function App() {
 
         {/* PID conflict — invite link already claimed on another device */}
         {phase === 'pid-conflict' && study && !pacing && (
-          <div role="group" aria-label="Participant ID already in use" className="self-start w-[85%] flex flex-col gap-3">
+          <div role="group" aria-label={t('pwa_pid_in_use')} className="self-start w-[85%] flex flex-col gap-3">
             <button
               onClick={async () => {
                 const deviceToken = getOrCreateDeviceToken();
                 const status = await claimPidLock(String(study.id), pidConflict!, deviceToken, true);
                 if (status === 'claimed') {
-                  pushUser('Transfer to this device');
+                  pushUser(t('pwa_pid_transfer'));
                   setPidConflict(null);
                   if (study.studyDescription) pushBot(study.studyDescription, true);
                   const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
@@ -2461,7 +2471,7 @@ export default function App() {
               }}
               className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all"
             >
-              Transfer to this device
+              {t('pwa_pid_transfer')}
             </button>
             <button
               onClick={() => {
@@ -2472,7 +2482,7 @@ export default function App() {
               }}
               className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full active:scale-95 transition-all"
             >
-              Use a different code
+              {t('pwa_pid_use_different')}
             </button>
           </div>
         )}
@@ -2480,8 +2490,8 @@ export default function App() {
         {/* Consent actions */}
         {phase === 'consent' && !pacing && (
           <div className="self-start w-[85%] flex gap-3">
-            <button onClick={() => onConsent(true)} className="flex-1 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">I consent</button>
-            <button onClick={() => onConsent(false)} className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">I do not consent</button>
+            <button onClick={() => onConsent(true)} className="flex-1 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">{t('pwa_consent_i_consent')}</button>
+            <button onClick={() => onConsent(false)} className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">{t('pwa_consent_i_do_not_consent')}</button>
           </div>
         )}
 
@@ -2489,31 +2499,31 @@ export default function App() {
         {phase === 'tutorialOffer' && !pacing && (
           <div className="self-start w-[85%] flex gap-3">
             <button onClick={acceptTutorial} className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
-              <PlayCircle size={18} aria-hidden="true" /> Yes, show me
+              <PlayCircle size={18} aria-hidden="true" /> {t('pwa_app_tutorial_yes')}
             </button>
-            <button onClick={declineTutorial} className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">No thanks</button>
+            <button onClick={declineTutorial} className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">{t('pwa_app_tutorial_no')}</button>
           </div>
         )}
 
         {/* Notifications step in the native app: explain first, then Android's own dialog */}
         {phase === 'notifications' && study && isNativeApp() && !pacing && (
-          <div role="group" aria-label="Turn on notifications" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+          <div role="group" aria-label={t('pwa_onboard_turn_on_notifications')} aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
             <div className="flex items-start gap-2">
               <BellRing size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="font-bold text-on-surface">Turn on notifications</p>
+                <p className="font-bold text-on-surface">{t('pwa_onboard_turn_on_notifications')}</p>
                 <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
-                  This study sends a notification when each questionnaire is ready. Tap Allow notifications, then choose Allow when your phone asks.
+                  {t('pwa_onboard_native_notif_body')}
                 </p>
               </div>
             </div>
             <button onClick={() => void allowNativeNotifications()} disabled={notifBusy}
               className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
-              <BellRing size={16} aria-hidden="true" /> {notifBusy ? 'Waiting for your answer…' : 'Allow notifications'}
+              <BellRing size={16} aria-hidden="true" /> {notifBusy ? t('pwa_onboard_waiting_answer') : t('pwa_onboard_allow_notifications')}
             </button>
             <button onClick={skipNotifications} disabled={notifBusy}
               className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60">
-              Not now
+              {t('pwa_onboard_not_now')}
             </button>
           </div>
         )}
@@ -2523,7 +2533,7 @@ export default function App() {
           const supported = isPushSupported() && typeof Notification !== 'undefined';
           const denied = supported && notifPerm === 'denied';
           return (
-          <div role="group" aria-label="Turn on notifications" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+          <div role="group" aria-label={t('pwa_onboard_turn_on_notifications')} aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
             {awaitingWelcomeConfirm ? (
               // A welcome was dispatched — ask the participant to confirm it actually showed
               // up (server push delivery can't be verified). "No" flags the research team.
@@ -2531,20 +2541,20 @@ export default function App() {
                 <div className="flex items-start gap-2">
                   <BellRing size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <p className="font-bold text-on-surface">Did the notification arrive?</p>
+                    <p className="font-bold text-on-surface">{t('pwa_onboard_arrive_title')}</p>
                     <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
-                      I just sent a welcome notification to this device. Tap “Yes, got it” if you saw it — or “No, nothing yet” if nothing showed up, and I'll let the study team know.
+                      {t('pwa_onboard_arrive_body', t('pwa_onboard_yes_got_it'), t('pwa_onboard_no_nothing'))}
                     </p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={confirmWelcomeReceived}
                     className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
-                    <Check size={16} aria-hidden="true" /> Yes, got it
+                    <Check size={16} aria-hidden="true" /> {t('pwa_onboard_yes_got_it')}
                   </button>
                   <button onClick={() => void reportWelcomeMissed()}
                     className="flex-1 bg-surface-container-high text-on-surface font-bold py-3 rounded-full active:scale-95 transition-all">
-                    No, nothing yet
+                    {t('pwa_onboard_no_nothing')}
                   </button>
                 </div>
               </>
@@ -2553,9 +2563,9 @@ export default function App() {
             <div className="flex items-start gap-2">
               <BellRing size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="font-bold text-on-surface">Turn on notifications</p>
+                <p className="font-bold text-on-surface">{t('pwa_onboard_turn_on_notifications')}</p>
                 <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
-                  This study sends each questionnaire as a notification when it's due. Turn them on so you don't miss one — we'll send a quick welcome to confirm they work.{supported && !denied && ' When your browser asks, choose Allow.'}
+                  {supported && !denied ? t('pwa_onboard_web_notif_body_allow') : t('pwa_onboard_web_notif_body')}
                 </p>
               </div>
             </div>
@@ -2565,7 +2575,7 @@ export default function App() {
               // is installed) — guide them to add it to the Home Screen, then reopen.
               <>
                 <p className={cn('text-on-surface-variant', textSizeClass)}>
-                  To get reminders on this device, add this app to your Home Screen first, then reopen it from there and turn on notifications.
+                  {t('pwa_onboard_add_home_screen')}
                 </p>
                 <InstallPrompt variant="card" />
                 {/* iOS gives the installed app its own empty storage, so the invite code from
@@ -2575,7 +2585,7 @@ export default function App() {
                 )}
                 <button onClick={skipNotifications}
                   className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors">
-                  Continue without notifications
+                  {t('pwa_onboard_continue_no_notifications')}
                 </button>
               </>
             ) : denied ? (
@@ -2583,7 +2593,7 @@ export default function App() {
               // to unblock, offer a re-check, and keep the escape hatch.
               <>
                 <p className={cn('text-on-surface-variant', textSizeClass)}>
-                  Notifications are currently blocked for this site. Open your browser's settings for this page, allow notifications, then tap Try again.
+                  {t('pwa_onboard_blocked_site')}
                 </p>
                 <button
                   onClick={() => {
@@ -2592,22 +2602,22 @@ export default function App() {
                     if (perm !== 'denied') void enableNotifications();
                   }}
                   className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
-                  <RefreshCw size={16} aria-hidden="true" /> Try again
+                  <RefreshCw size={16} aria-hidden="true" /> {t('pwa_onboard_try_again')}
                 </button>
                 <button onClick={skipNotifications}
                   className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors">
-                  Continue without notifications
+                  {t('pwa_onboard_continue_no_notifications')}
                 </button>
               </>
             ) : (
               <>
                 <button onClick={() => void enableNotifications()} disabled={notifBusy}
                   className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
-                  <BellRing size={16} aria-hidden="true" /> {notifBusy ? 'Enabling…' : 'Enable notifications'}
+                  <BellRing size={16} aria-hidden="true" /> {notifBusy ? t('pwa_onboard_enabling') : t('pwa_onboard_enable_notifications')}
                 </button>
                 <button onClick={skipNotifications} disabled={notifBusy}
                   className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60">
-                  Continue without notifications
+                  {t('pwa_onboard_continue_no_notifications')}
                 </button>
               </>
             )}
@@ -2619,19 +2629,19 @@ export default function App() {
 
         {/* Microphone step (studies with voice-recording items, after notifications) */}
         {phase === 'microphone' && study && !pacing && (
-          <div role="group" aria-label="Allow microphone access" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+          <div role="group" aria-label={t('pwa_onboard_mic_title')} aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
             <div className="flex items-start gap-2">
               <Mic size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="font-bold text-on-surface">Allow microphone access</p>
+                <p className="font-bold text-on-surface">{t('pwa_onboard_mic_title')}</p>
                 <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
                   {micStatus === 'denied'
-                    ? `Microphone access is blocked. Open ${isNativeApp() ? "your phone's settings for this app" : "your browser's settings for this page"}, allow the microphone, then tap Try again.`
+                    ? t(isNativeApp() ? 'pwa_onboard_mic_blocked_app' : 'pwa_onboard_mic_blocked_web')
                     : micStatus === 'unsupported'
-                      ? "This browser can't use the microphone here. You can carry on — try a different browser if a voice question doesn't work."
+                      ? t('pwa_onboard_mic_unsupported')
                       : micStatus === 'error'
-                        ? "I couldn't open a microphone on this device. Check that one is connected and not in use by another app, then tap Try again."
-                        : `Tap Allow microphone, then choose Allow when your ${isNativeApp() ? 'phone' : 'browser'} asks. Nothing is recorded now.`}
+                        ? t('pwa_onboard_mic_error')
+                        : t(isNativeApp() ? 'pwa_onboard_mic_prompt_app' : 'pwa_onboard_mic_prompt_web')}
                 </p>
               </div>
             </div>
@@ -2639,37 +2649,37 @@ export default function App() {
               <button onClick={() => void allowMicrophone()} disabled={micBusy}
                 className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
                 {micStatus === 'ask'
-                  ? <><Mic size={16} aria-hidden="true" /> {micBusy ? 'Waiting for your answer…' : 'Allow microphone'}</>
-                  : <><RefreshCw size={16} aria-hidden="true" /> Try again</>}
+                  ? <><Mic size={16} aria-hidden="true" /> {micBusy ? t('pwa_onboard_waiting_answer') : t('pwa_onboard_allow_microphone')}</>
+                  : <><RefreshCw size={16} aria-hidden="true" /> {t('pwa_onboard_try_again')}</>}
               </button>
             )}
             <button onClick={skipMicrophone} disabled={micBusy}
               className={micStatus === 'unsupported'
                 ? 'w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all'
                 : 'w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60'}>
-              {micStatus === 'ask' ? 'Not now' : micStatus === 'unsupported' ? 'Continue' : 'Continue without microphone'}
+              {micStatus === 'ask' ? t('pwa_onboard_not_now') : micStatus === 'unsupported' ? t('pwa_onboard_continue') : t('pwa_onboard_continue_no_mic')}
             </button>
           </div>
         )}
 
         {/* Daily reminder to turn notifications on while they are off (lib/notificationNudge.ts) */}
         {phase === 'list' && study && !pacing && autoStartId == null && notifNudge && !notifOff && (
-          <div role="group" aria-label="Notifications are off" aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
+          <div role="group" aria-label={t('pwa_notif_off_title')} aria-live="polite" className="self-start w-[85%] flex flex-col gap-3 bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-4">
             <div className="flex items-start gap-2">
               <BellOff size={20} className="text-primary shrink-0 mt-0.5" aria-hidden="true" />
               <div>
-                <p className="font-bold text-on-surface">Notifications are off</p>
+                <p className="font-bold text-on-surface">{t('pwa_notif_off_title')}</p>
                 <p className={cn('text-on-surface-variant mt-0.5', textSizeClass)}>
-                  {'Without notifications you may miss a questionnaire. '}
-                  {notifNudge === 'ask'
-                    ? `Turn them on and choose Allow when your ${isNativeApp() ? 'phone' : 'browser'} asks.`
-                    : notifNudge === 'install'
-                      ? 'On iPhone they only work once this app is on your Home Screen: add it, open it from there and turn notifications on.'
-                      : isNativeApp()
-                        ? 'Your phone no longer asks, so please allow them in its settings: tap Open settings (or go to Android Settings → Apps → iEMAbot → Notifications), switch notifications on and come back.'
-                        : onIOS
-                          ? 'They are blocked for this app. Open the iPhone Settings → Notifications, choose this app, allow notifications, then tap Try again.'
-                          : "They are blocked for this site. Open your browser's settings for this page, allow notifications, then tap Try again."}
+                  {t('pwa_app_join_sentences', t('pwa_notif_off_lead'),
+                    notifNudge === 'ask'
+                      ? t(isNativeApp() ? 'pwa_notif_off_ask_app' : 'pwa_notif_off_ask_web')
+                      : notifNudge === 'install'
+                        ? t('pwa_notif_off_install')
+                        : isNativeApp()
+                          ? t('pwa_notif_off_blocked_app')
+                          : onIOS
+                            ? t('pwa_notif_off_blocked_ios')
+                            : t('pwa_notif_off_blocked_web'))}
                 </p>
               </div>
             </div>
@@ -2682,19 +2692,19 @@ export default function App() {
             ) : notifNudge === 'ask' ? (
               <button onClick={() => void nudgeAllow()} disabled={nudgeBusy}
                 className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 disabled:active:scale-100">
-                <BellRing size={16} aria-hidden="true" /> {nudgeBusy ? 'Waiting for your answer…' : 'Turn on notifications'}
+                <BellRing size={16} aria-hidden="true" /> {nudgeBusy ? t('pwa_onboard_waiting_answer') : t('pwa_onboard_turn_on_notifications')}
               </button>
             ) : (
               <button onClick={() => void nudgeRecheck()}
                 className="w-full inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
                 {isNativeApp()
-                  ? <><Settings size={16} aria-hidden="true" /> Open settings</>
-                  : <><RefreshCw size={16} aria-hidden="true" /> Try again</>}
+                  ? <><Settings size={16} aria-hidden="true" /> {t('pwa_notif_open_settings')}</>
+                  : <><RefreshCw size={16} aria-hidden="true" /> {t('pwa_onboard_try_again')}</>}
               </button>
             )}
             <button onClick={() => setNotifNudge(null)} disabled={nudgeBusy}
               className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors disabled:opacity-60">
-              Not now
+              {t('pwa_onboard_not_now')}
             </button>
           </div>
         )}
@@ -2723,7 +2733,7 @@ export default function App() {
                   <span className="min-w-0">
                     <span className={cn('block font-semibold', textSizeClass)}>{q.title}</span>
                     {userId && (() => { const saved = loadPaused(study.id, userId, q.internalId); return saved && canResume(saved, av); })() && (
-                      <span className="block text-xs text-on-surface-variant mt-0.5">Paused — tap to carry on</span>
+                      <span className="block text-xs text-on-surface-variant mt-0.5">{t('pwa_list_paused')}</span>
                     )}
                   </span>
                   <ChevronRight size={18} className="text-outline-variant" aria-hidden="true" />
@@ -2760,23 +2770,23 @@ export default function App() {
                       it (larger text sizes), instead of squeezing the title underneath it. */}
                   <div className="flex-1 basis-32 max-w-full break-words">
                     <p className={cn('font-semibold', textSizeClass)}>{q.title}</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">{n} {n === 1 ? 'question' : 'questions'}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">{n === 1 ? t('pwa_app_tutorial_question_one', n) : t('pwa_app_tutorial_question_other', n)}</p>
                   </div>
                   <button onClick={() => startQuestionnaire(q.internalId, true)}
-                    aria-label={`Try a practice run of ${q.title}`}
+                    aria-label={t('pwa_app_tutorial_practice_label', q.title)}
                     className="shrink-0 inline-flex items-center gap-1.5 bg-secondary-container text-on-secondary-container font-semibold text-sm px-3 py-2 rounded-full active:scale-95 hover:brightness-95 transition-all">
-                    <PlayCircle size={16} aria-hidden="true" /> Practice
+                    <PlayCircle size={16} aria-hidden="true" /> {t('pwa_app_tutorial_practice')}
                   </button>
                 </div>
               );
             })}
             <button onClick={finishTutorial}
               className="mt-2 w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all">
-              I'm ready — continue
+              {t('pwa_app_tutorial_ready')}
             </button>
             <button onClick={finishTutorial}
               className="w-full text-on-surface-variant font-semibold py-2 rounded-full text-sm active:scale-95 transition-colors">
-              Skip tutorial
+              {t('pwa_app_tutorial_skip')}
             </button>
           </div>
         )}
@@ -2805,13 +2815,13 @@ export default function App() {
           />
         )}
 
-        {submitting && <div role="status" aria-live="polite" className="self-center text-on-surface-variant text-sm">Saving…</div>}
+        {submitting && <div role="status" aria-live="polite" className="self-center text-on-surface-variant text-sm">{t('pwa_survey_saving')}</div>}
       </main>
 
       {/* Footer. Not on the smartphone-only invite page: its menu actions (contact, error report,
           notifications, wearables) all need a participant id, which that page never creates. */}
       {phase !== 'phone-only' && (
-      <footer aria-label="Message input" className="app-footer shrink-0 relative z-50 bg-white/85 dark:bg-surface-container-lowest/85 rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
+      <footer aria-label={t('pwa_app_message_input')} className="app-footer shrink-0 relative z-50 bg-white/85 dark:bg-surface-container-lowest/85 rounded-t-2xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] px-4 py-3">
         {/* The blur sits on its own layer: a backdrop-filter on the footer itself would make it the
             containing block for `fixed` children, shrinking the quick-actions menu's tap-outside
             backdrop to the footer strip so taps on the conversation or header left the menu open. */}
@@ -2827,8 +2837,8 @@ export default function App() {
               value={footerValue}
               onChange={(e) => setFooterValue(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && onFooterSend()}
-              aria-label="Type a response"
-              placeholder="Type your response…"
+              aria-label={t('pwa_survey_type_response')}
+              placeholder={t('pwa_survey_type_response_placeholder')}
               className="flex-1 min-w-0 bg-surface-container-high rounded-full px-4 py-3 text-[15px] text-ellipsis text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           ) : (
@@ -2837,14 +2847,14 @@ export default function App() {
             <button type="button" onClick={() => setFooterHintOpen((o) => !o)} aria-expanded={footerHintOpen}
               className={cn('flex-1 min-w-0 bg-surface-container-high px-4 py-3 text-[15px] text-left text-on-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
                 footerHintOpen ? 'rounded-2xl whitespace-normal' : 'rounded-full truncate')}>
-              Tap an option above to continue
+              {t('pwa_survey_tap_option')}
             </button>
           )}
           <button
             onClick={onFooterSend}
             disabled={!footerActive || !footerValue.trim()}
             className="bg-primary text-on-primary p-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-40 disabled:active:scale-100 shrink-0"
-            aria-label="Send"
+            aria-label={t('pwa_app_send')}
           >
             <Send size={18} aria-hidden="true" />
           </button>
@@ -2856,12 +2866,12 @@ export default function App() {
       {/* Settings modal — appearance + app-level features (error report, notifications, update, about) */}
       <AnimatePresence>
         {a11yOpen && (() => {
-          const settingsTitle = settingsView === 'about' ? 'About iEMAbot'
-            : settingsView === 'notifications' ? 'Notifications'
-            : settingsView === 'errorReport' ? 'Send error report'
-            : settingsView === 'wearables' ? 'Connect wearables'
-            : settingsView === 'sensing' ? 'Phone sensing'
-            : 'Settings';
+          const settingsTitle = settingsView === 'about' ? t('pwa_about_iemabot')
+            : settingsView === 'notifications' ? t('pwa_notifications')
+            : settingsView === 'errorReport' ? t('pwa_send_error_report')
+            : settingsView === 'wearables' ? t('pwa_connect_wearables')
+            : settingsView === 'sensing' ? t('pwa_phone_sensing')
+            : t('pwa_settings');
           return (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -2871,68 +2881,68 @@ export default function App() {
                 <div className="flex items-center gap-2 min-w-0">
                   {/* Wearables, and Phone sensing opened from its grid tile, have no Settings page to go back to. */}
                   {settingsView !== 'main' && settingsView !== 'wearables' && (settingsView !== 'sensing' || sensingViaSettings) && (
-                    <button onClick={() => setSettingsView('main')} aria-label="Back" className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
+                    <button onClick={() => setSettingsView('main')} aria-label={t('pwa_back')} className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
                   )}
                   <h2 id="settings-dialog-title" className="font-bold text-lg flex items-center gap-2 truncate">
                     {settingsView === 'main' && <Settings size={20} aria-hidden="true" />}{settingsTitle}
                   </h2>
                 </div>
-                <button onClick={closeSettings} aria-label="Close Settings" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><X size={20} aria-hidden="true" /></button>
+                <button onClick={closeSettings} aria-label={t('pwa_settings_close')} className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><X size={20} aria-hidden="true" /></button>
               </div>
 
               {settingsView === 'main' ? (
                 <div className="p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
                   {/* Live preview — reflects theme, contrast and text size */}
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">Preview</div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">{t('pwa_settings_preview')}</div>
                     <div className="rounded-xl p-4 flex flex-col gap-3 chat-wallpaper border border-outline-variant/30 overflow-hidden bg-surface-container-low">
                       <div className="self-start max-w-[85%]">
                         <div className="px-3 py-2 rounded-2xl message-shadow bg-white dark:bg-surface-container-lowest text-on-surface rounded-tl-none border border-slate-200 dark:border-outline-variant/30">
-                          <p className={cn('leading-relaxed font-medium', textSizeClass)}>How does this look?</p>
+                          <p className={cn('leading-relaxed font-medium', textSizeClass)}>{t('pwa_settings_preview_question')}</p>
                         </div>
                       </div>
                       <div className="self-end max-w-[85%]">
                         <div className="px-3 py-2 rounded-2xl message-shadow bg-primary text-on-primary dark:bg-primary-container dark:text-on-surface rounded-tr-none">
-                          <p className={cn('leading-relaxed font-medium', textSizeClass)}>Looks great!</p>
+                          <p className={cn('leading-relaxed font-medium', textSizeClass)}>{t('pwa_settings_preview_answer')}</p>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <Toggle icon={<Moon size={18} aria-hidden="true" />} label="Dark mode" on={dark} onClick={() => setDark((v) => !v)} />
-                  <Toggle icon={<Contrast size={18} aria-hidden="true" />} label="High contrast" on={highContrast} onClick={() => setHighContrast((v) => !v)} />
-                  <Toggle icon={<Sun size={18} aria-hidden="true" />} label="Reduce motion" on={reduceMotion} onClick={() => setReduceMotion((v) => !v)} />
+                  <Toggle icon={<Moon size={18} aria-hidden="true" />} label={t('pwa_dark_mode')} on={dark} onClick={() => setDark((v) => !v)} />
+                  <Toggle icon={<Contrast size={18} aria-hidden="true" />} label={t('pwa_high_contrast')} on={highContrast} onClick={() => setHighContrast((v) => !v)} />
+                  <Toggle icon={<Sun size={18} aria-hidden="true" />} label={t('pwa_reduce_motion')} on={reduceMotion} onClick={() => setReduceMotion((v) => !v)} />
                   <div>
-                    <div className="flex items-center gap-2 mb-2"><Type size={18} aria-hidden="true" /><span className="font-semibold text-sm">Text size</span></div>
-                    <div role="group" aria-label="Text size" className="grid grid-cols-4 gap-2">
+                    <div className="flex items-center gap-2 mb-2"><Type size={18} aria-hidden="true" /><span className="font-semibold text-sm">{t('pwa_text_size')}</span></div>
+                    <div role="group" aria-label={t('pwa_text_size')} className="grid grid-cols-4 gap-2">
                       {(['normal', 'large', 'xlarge', 'xxlarge'] as TextSize[]).map((s) => (
                         <button key={s} onClick={() => setTextSize(s)} aria-pressed={textSize === s}
                           className={cn('py-2 rounded-full text-xs font-bold transition-colors',
-                            textSize === s ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface')}>{TEXT_SIZE_LABEL[s]}</button>
+                            textSize === s ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface')}>{t(TEXT_SIZE_KEY[s])}</button>
                       ))}
                     </div>
                   </div>
                   {/* App-level actions (mirrors the native ESMira app menu) */}
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">App</div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1">{t('pwa_settings_app')}</div>
                     <div className="flex flex-col">
-                      <AboutLinkButton icon={Bug} label="Send error report" onClick={() => { setErrorStatus('idle'); setErrorText(''); setSettingsView('errorReport'); }} />
-                      <AboutLinkButton icon={BellRing} label="Notifications" onClick={() => { refreshNotifPerm(); setSettingsView('notifications'); }} />
-                      {sensing && <AboutLinkButton icon={Activity} label="Phone sensing" onClick={() => openSensing(true)} />}
+                      <AboutLinkButton icon={Bug} label={t('pwa_send_error_report')} onClick={() => { setErrorStatus('idle'); setErrorText(''); setSettingsView('errorReport'); }} />
+                      <AboutLinkButton icon={BellRing} label={t('pwa_notifications')} onClick={() => { refreshNotifPerm(); setSettingsView('notifications'); }} />
+                      {sensing && <AboutLinkButton icon={Activity} label={t('pwa_phone_sensing')} onClick={() => openSensing(true)} />}
                       <button onClick={updateStudies} disabled={updateStatus === 'updating'}
                         className="w-full flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container-highest transition-colors text-left disabled:opacity-70">
                         <span className="p-2 rounded-full bg-surface-container-high dark:bg-surface-container-highest text-on-surface-variant shrink-0"><Download size={18} aria-hidden="true" /></span>
-                        <span className="flex-1 font-semibold text-sm text-on-surface">Update studies</span>
+                        <span className="flex-1 font-semibold text-sm text-on-surface">{t('pwa_update_studies')}</span>
                         {updateStatus === 'updating' && <RefreshCw size={16} className="animate-spin text-on-surface-variant shrink-0" aria-hidden="true" />}
-                        {updateStatus === 'done' && updatePending === 0 && <span className="text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">Updated</span>}
+                        {updateStatus === 'done' && updatePending === 0 && <span className="text-xs font-semibold text-green-600 dark:text-green-400 shrink-0">{t('pwa_updated')}</span>}
                         {(updateStatus === 'offline' || (updateStatus === 'done' && updatePending > 0)) && (
                           <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 shrink-0 text-right">
-                            {updateStatus === 'offline' ? 'Offline' : 'Updated'}{updatePending > 0 && ` · ${updatePending} waiting to send`}
+                            {updateStatus === 'offline' ? t('pwa_offline') : t('pwa_updated')}{updatePending > 0 && ` · ${t('pwa_waiting_to_send', updatePending)}`}
                           </span>
                         )}
-                        {updateStatus === 'error' && <span className="text-xs font-semibold text-red-600 dark:text-red-400 shrink-0">Failed</span>}
+                        {updateStatus === 'error' && <span className="text-xs font-semibold text-red-600 dark:text-red-400 shrink-0">{t('pwa_failed')}</span>}
                         {updateStatus === 'idle' && <ChevronRight size={18} className="text-outline-variant shrink-0" aria-hidden="true" />}
                       </button>
-                      <AboutLinkButton icon={Info} label="About iEMAbot" onClick={() => setSettingsView('about')} />
+                      <AboutLinkButton icon={Info} label={t('pwa_about_iemabot')} onClick={() => setSettingsView('about')} />
                     </div>
                   </div>
                 </div>
@@ -2943,7 +2953,8 @@ export default function App() {
                   channelOn={!!study && channelEnabled(study, isNativeApp())} off={notifOff}
                   onSwitch={(off) => void changeNotificationsOff(off)}
                   onTest={() => { if (study) void sendTestPush(study); }}
-                  testStatus={testPushStatus} canTest={!!study && !!vapidKey && !isNativeApp()} />
+                  testStatus={testPushStatus} canTest={!!study && !!vapidKey && !isNativeApp()}
+                  onReportError={() => { setErrorStatus('idle'); setErrorText(''); setSettingsView('errorReport'); }} />
               ) : settingsView === 'sensing' && sensing ? (
                 <PhoneSensingPanel
                   settings={sensing}
@@ -2962,6 +2973,7 @@ export default function App() {
                 />
               ) : (
                 <ErrorReportPanel
+                  sharedWithDevelopers={errorReportsToGithub}
                   canSend={!!study}
                   text={errorText}
                   status={errorStatus}
@@ -2986,14 +2998,14 @@ export default function App() {
           const joinedRaw = study ? localStorage.getItem(`esmira_joined_${study.id}_${userId}`) : null;
           let joinedAt: Date | null = null;
           if (joinedRaw && joinedRaw !== '1') {
-            const t = Number(joinedRaw);
-            const d = Number.isFinite(t) && t > 0 ? new Date(t) : new Date(joinedRaw);
+            const ts = Number(joinedRaw);
+            const d = Number.isFinite(ts) && ts > 0 ? new Date(ts) : new Date(joinedRaw);
             if (!Number.isNaN(d.getTime())) joinedAt = d;
           }
           const completedCount = study ? Number(localStorage.getItem(`esmira_completed_${study.id}_${userId}`) || '0') : 0;
-          const detailTitle = aboutView === 'description' ? 'Study description'
-            : aboutView === 'consent' ? 'Informed consent'
-            : 'Upload protocol';
+          const detailTitle = aboutView === 'description' ? t('pwa_about_study_description')
+            : aboutView === 'consent' ? t('pwa_about_informed_consent')
+            : t('pwa_about_upload_protocol');
           // studyDescription is rich text (HTML); informedConsentForm is a plain-text
           // field whose line breaks must be preserved (rendered below accordingly).
           const detailContent = aboutView === 'description' ? study?.studyDescription : study?.informedConsentForm;
@@ -3006,21 +3018,21 @@ export default function App() {
                 <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-outline-variant/30 shrink-0">
                   <div className="flex items-center gap-2 min-w-0">
                     {aboutView !== 'main' && (
-                      <button onClick={() => setAboutView('main')} aria-label="Back" className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
+                      <button onClick={() => setAboutView('main')} aria-label={t('pwa_back')} className="min-w-11 min-h-11 -ml-2 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full shrink-0"><ChevronLeft size={20} aria-hidden="true" /></button>
                     )}
-                    <h2 id="about-dialog-title" className="font-bold text-lg truncate">{aboutView === 'main' ? 'Details' : detailTitle}</h2>
+                    <h2 id="about-dialog-title" className="font-bold text-lg truncate">{aboutView === 'main' ? t('pwa_app_details') : detailTitle}</h2>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {aboutView === 'protocol' && (
                       <button
                         onClick={() => { void flushSubmitQueue().then(() => setProtocolTick((t) => t + 1)); }}
-                        aria-label="Refresh upload protocol"
+                        aria-label={t('pwa_about_refresh_protocol')}
                         className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"
                       >
                         <RefreshCw size={18} aria-hidden="true" />
                       </button>
                     )}
-                    <button onClick={() => setAboutOpen(false)} aria-label="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
+                    <button onClick={() => setAboutOpen(false)} aria-label={t('pwa_app_close')} className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
                   </div>
                 </div>
 
@@ -3032,48 +3044,48 @@ export default function App() {
                     </div>
                     {/* Study information rows */}
                     <div className="px-5 pb-2">
-                      <InfoRow label="User id" value={userId || '—'} mono />
-                      <InfoRow label="Server url" value={serverRootUrl()} mono />
-                      <InfoRow label="Joined at" value={joinedAt ? joinedAt.toLocaleString() : 'Not yet joined'} />
-                      <InfoRow label="Completed questionnaires" value={completedCount} />
-                      <InfoRow label="Next notification" value={
+                      <InfoRow label={t('pwa_about_user_id')} value={userId || '—'} mono />
+                      <InfoRow label={t('pwa_about_server_url')} value={serverRootUrl()} mono />
+                      <InfoRow label={t('pwa_about_joined_at')} value={joinedAt ? joinedAt.toLocaleString() : t('pwa_about_not_joined')} />
+                      <InfoRow label={t('pwa_about_completed')} value={completedCount} />
+                      <InfoRow label={t('pwa_about_next_notification')} value={
                         <InfoRowIconValue icon={Bell} text={
                           !study || !channelEnabled(study, isNativeApp())
-                            ? 'Off for this study'
+                            ? t('pwa_about_notif_off_study')
                             : notifOff
-                              ? 'Off (you turned notifications off in Settings)'
+                              ? t('pwa_about_notif_off_you')
                               : isNativeApp() && notifPerm === 'denied'
-                                ? 'Off (notifications are blocked in Android settings)'
+                                ? t('pwa_about_notif_blocked')
                                 : nextNotification
                                   ? new Date(nextNotification).toLocaleString()
-                                  : 'Not scheduled'
+                                  : t('pwa_about_not_scheduled')
                         } />
                       } />
                       {study?.wearablesEnabled && (
-                        <InfoRow label="Wearables" value={
+                        <InfoRow label={t('pwa_app_wearables')} value={
                           <InfoRowIconValue icon={Watch} text={
                             wearableStatus.length > 0
                               ? wearableStatus.map((w) => WEARABLE_LABEL[w.provider] ?? w.provider).join(', ')
-                              : 'None connected'
+                              : t('pwa_about_none_connected')
                           } />
                         } />
                       )}
                     </div>
                     {/* Detail navigation */}
                     <div className="px-3 pb-4 pt-1 flex flex-col">
-                      <AboutLinkButton icon={FileText} label="Study description" onClick={() => setAboutView('description')} />
-                      <AboutLinkButton icon={ShieldCheck} label="Informed consent" onClick={() => setAboutView('consent')} />
-                      <AboutLinkButton icon={UploadCloud} label="Upload protocol" onClick={() => setAboutView('protocol')} />
+                      <AboutLinkButton icon={FileText} label={t('pwa_about_study_description')} onClick={() => setAboutView('description')} />
+                      <AboutLinkButton icon={ShieldCheck} label={t('pwa_about_informed_consent')} onClick={() => setAboutView('consent')} />
+                      <AboutLinkButton icon={UploadCloud} label={t('pwa_about_upload_protocol')} onClick={() => setAboutView('protocol')} />
                     </div>
                     <div className="px-5 pb-4 pt-1 text-center text-xs text-on-surface-variant border-t border-outline-variant/20">
-                      Powered by ESMira · web participant interface
+                      {t('pwa_about_powered_by')}
                     </div>
                   </div>
                 ) : aboutView === 'protocol' ? (
                   <div className="overflow-y-auto custom-scrollbar px-3 py-2">
                     {protocolEntries.length === 0 ? (
                       <p className="px-2 py-4 text-sm text-on-surface-variant">
-                        No uploads yet. Each time you submit a questionnaire, the upload to the research server will be listed here.
+                        {t('pwa_about_no_uploads')}
                       </p>
                     ) : (
                       <ul key={protocolTick} className="flex flex-col">
@@ -3081,7 +3093,7 @@ export default function App() {
                       </ul>
                     )}
                     <p className="px-2 pt-3 pb-1 text-xs text-on-surface-variant">
-                      A record of the data this device has uploaded to the research server.
+                      {t('pwa_about_protocol_note')}
                     </p>
                   </div>
                 ) : (
@@ -3090,10 +3102,10 @@ export default function App() {
                     {detailContent
                       ? (aboutView === 'description'
                           // Rich text (HTML) — render formatted.
-                          ? <div className={cn('leading-relaxed esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: detailContent }} />
+                          ? <div className={cn('leading-relaxed esmira-rich', textSizeClass)} dangerouslySetInnerHTML={{ __html: sanitizeHtml(detailContent) }} />
                           // Plain text — preserve line breaks exactly like the chat stream.
                           : <p className={cn('leading-relaxed whitespace-pre-wrap', textSizeClass)}>{detailContent}</p>)
-                      : <p className="text-sm text-on-surface-variant">Not provided for this study.</p>}
+                      : <p className="text-sm text-on-surface-variant">{t('pwa_about_not_provided')}</p>}
                   </div>
                 )}
               </motion.div>
@@ -3110,44 +3122,47 @@ export default function App() {
             <motion.div ref={contactDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="contact-dialog-title" initial={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={reduceMotion ? { scale: 1 } : { scale: 0.95, y: 20 }}
               className="w-full max-w-md max-h-[85dvh] bg-white dark:bg-surface-container-lowest rounded-2xl shadow-2xl overflow-hidden flex flex-col text-on-surface">
               <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/30 shrink-0">
-                <h2 id="contact-dialog-title" className="font-bold text-lg flex items-center gap-2"><MessageSquare size={20} aria-hidden="true" /> Contact researchers</h2>
-                <button onClick={() => setContactOpen(false)} aria-label="Close" className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
+                <h2 id="contact-dialog-title" className="font-bold text-lg flex items-center gap-2"><MessageSquare size={20} aria-hidden="true" /> {t('pwa_contact_title')}</h2>
+                <button onClick={() => setContactOpen(false)} aria-label={t('pwa_app_close')} className="min-w-11 min-h-11 inline-flex items-center justify-center hover:bg-surface-container-high rounded-full"><X size={20} aria-hidden="true" /></button>
               </div>
               <div className="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
                 {contactStatus === 'sent' ? (
                   <div className="flex flex-col items-center text-center gap-3 py-4">
                     <span className="p-3 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400"><CheckCircle size={28} aria-hidden="true" /></span>
-                    <p className="font-semibold">Message sent</p>
-                    <p className="text-sm text-on-surface-variant">Thank you — your message has reached the research team.</p>
+                    <p className="font-semibold">{t('pwa_contact_sent_title')}</p>
+                    <p className="text-sm text-on-surface-variant">{t('pwa_contact_sent_body')}</p>
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => setContactStatus('idle')} className="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-semibold text-sm active:scale-95 transition-all">Send another</button>
-                      <button onClick={() => setContactOpen(false)} className="px-4 py-2 rounded-full bg-primary text-on-primary font-semibold text-sm active:scale-95 hover:brightness-110 transition-all">Close</button>
+                      <button onClick={() => setContactStatus('idle')} className="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-semibold text-sm active:scale-95 transition-all">{t('pwa_app_send_another')}</button>
+                      <button onClick={() => setContactOpen(false)} className="px-4 py-2 rounded-full bg-primary text-on-primary font-semibold text-sm active:scale-95 hover:brightness-110 transition-all">{t('pwa_app_close')}</button>
                     </div>
                   </div>
                 ) : (
                   <>
                     <p className="text-sm text-on-surface-variant">
-                      Send a message to the research team. It's linked to your study id
-                      {' '}(<span className="font-mono text-on-surface break-all">{userId || '—'}</span>), so they can see which participant it's from and connect it to your responses. Your name and contact details aren't shared unless you write them here.
+                      {/* The id sits in the sentence as a styled value: split the text where its %s is. */}
+                      {(() => {
+                        const [before, after = ''] = t('pwa_contact_intro', '%s').split('%s');
+                        return <>{before}<span className="font-mono text-on-surface break-all">{userId || '—'}</span>{after}</>;
+                      })()}
                     </p>
                     <textarea
                       value={contactText}
                       onChange={(e) => setContactText(e.target.value)}
                       rows={5}
                       disabled={contactStatus === 'sending'}
-                      placeholder="Type your message to the researchers…"
-                      aria-label="Message to researchers"
+                      placeholder={t('pwa_contact_placeholder')}
+                      aria-label={t('pwa_contact_label')}
                       className={cn('w-full resize-none rounded-xl bg-surface-container-high px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60', textSizeClass)}
                     />
                     {contactStatus === 'error' && (
-                      <p className="text-sm text-red-600 dark:text-red-400">Couldn't send your message. Please check your connection and try again.</p>
+                      <p className="text-sm text-red-600 dark:text-red-400">{t('pwa_contact_error')}</p>
                     )}
                     <button
                       onClick={sendContact}
                       disabled={contactText.trim().length < 2 || contactStatus === 'sending'}
                       className="w-full flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-40 disabled:active:scale-100"
                     >
-                      {contactStatus === 'sending' ? 'Sending…' : <><Send size={18} aria-hidden="true" /> Send message</>}
+                      {contactStatus === 'sending' ? t('pwa_app_sending') : <><Send size={18} aria-hidden="true" /> {t('pwa_contact_send')}</>}
                     </button>
                   </>
                 )}
@@ -3215,15 +3230,16 @@ export default function App() {
               <button
                 onClick={() => setWebview(null)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-surface-container-highest rounded-full text-sm font-semibold hover:brightness-95 active:scale-95 transition-all shrink-0"
-                aria-label="Close"
+                aria-label={t('pwa_app_close')}
               >
-                <X size={18} aria-hidden="true" /> Close
+                <X size={18} aria-hidden="true" /> {t('pwa_app_close')}
               </button>
             </header>
             <iframe
               src={webview.url}
               title={webview.title}
               className="flex-1 w-full border-0"
+              sandbox={TASK_IFRAME_SANDBOX}
               allow="autoplay; fullscreen; accelerometer; gyroscope"
             />
           </motion.div>
@@ -3274,7 +3290,7 @@ function SpecifyModal({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
             aria-label={pending.prompt}
-            placeholder="Type your answer…"
+            placeholder={t('pwa_survey_type_answer')}
             className={cn('w-full rounded-xl bg-surface-container-high px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50', textSizeClass)}
           />
           <div className="flex gap-2">
@@ -3282,14 +3298,14 @@ function SpecifyModal({
               onClick={onBack}
               className="flex-1 py-3 rounded-full bg-surface-container-high text-on-surface font-semibold text-sm active:scale-95 transition-all hover:bg-surface-container-highest"
             >
-              Back
+              {t('pwa_back')}
             </button>
             <button
               onClick={submit}
               disabled={!trimmed}
               className="flex-1 py-3 rounded-full bg-primary text-on-primary font-bold text-sm active:scale-95 hover:brightness-110 transition-all disabled:opacity-40 disabled:active:scale-100"
             >
-              Done
+              {t('pwa_app_done')}
             </button>
           </div>
         </div>
@@ -3347,8 +3363,8 @@ function ProtocolRow({ entry }: { entry: UploadProtocolEntry }) {
           <p className="font-semibold text-sm text-on-surface break-words">{entry.label}</p>
           {sentLater ? (
             <>
-              <p className="text-xs text-on-surface-variant">Completed {formatProtocolTime(entry.time)}</p>
-              <p className="text-xs text-on-surface-variant">Sent {formatProtocolTime(entry.sentAt!)}</p>
+              <p className="text-xs text-on-surface-variant">{t('pwa_about_protocol_completed', formatProtocolTime(entry.time))}</p>
+              <p className="text-xs text-on-surface-variant">{t('pwa_about_protocol_sent_at', formatProtocolTime(entry.sentAt!))}</p>
             </>
           ) : (
             <p className="text-xs text-on-surface-variant">{formatProtocolTime(entry.time)}</p>
@@ -3359,7 +3375,7 @@ function ProtocolRow({ entry }: { entry: UploadProtocolEntry }) {
         sent ? 'text-green-700 dark:text-green-400'
           : failed ? 'text-red-700 dark:text-red-400'
             : 'text-amber-700 dark:text-amber-400')}>
-        {sent ? 'Sent' : failed ? 'Not accepted' : 'Pending'}
+        {sent ? t('pwa_about_protocol_sent') : failed ? t('pwa_about_protocol_not_accepted') : t('pwa_about_protocol_pending')}
       </span>
     </li>
   );
@@ -3386,32 +3402,25 @@ function AboutEsmiraPanel({ serverVersion }: { serverVersion: number }) {
         <img src={`${import.meta.env.BASE_URL}esmira-logo.svg`} alt="" className="w-12 h-12 shrink-0" />
         <div className="min-w-0">
           <p className="font-bold text-lg leading-none">iEMAbot</p>
-          <p className="text-xs text-on-surface-variant mt-1">{isNativeApp() ? 'Android app' : 'Web app'} for research studies</p>
+          <p className="text-xs text-on-surface-variant mt-1">{t(isNativeApp() ? 'pwa_about_tagline_app' : 'pwa_about_tagline_web')}</p>
         </div>
       </div>
       <div className="flex flex-col gap-2 text-sm text-on-surface-variant leading-relaxed">
-        <p>
-          iEMAbot helps researchers learn how people's feelings, sleep and daily lives change over time.
-          Instead of one long questionnaire, it sends you short check-ins during your day, as a simple
-          chat, so you can answer in a minute or two wherever you are.
-        </p>
-        <p>
-          iEMAbot is made by the Surrey Sleep Research Centre and the UK Dementia Research Institute, and
-          builds on ESMira, a free research platform from Karl Landsteiner University in Austria. Both
-          are open source: anyone can read the code to see exactly how the app works.
-        </p>
+        <p>{t('pwa_about_intro')}</p>
+        <p>{t('pwa_about_credits')}</p>
+        {isMachineTranslated(getCurrentLang()) && <p className="italic">{t('pwa_machine_translated_note')}</p>}
       </div>
       <div>
-        <InfoRow label="App version" value={APP_VERSION} />
-        <InfoRow label="Server version" value={serverVersion} />
-        <InfoRow label="Server" value={serverRootUrl()} mono />
+        <InfoRow label={t('pwa_about_app_version')} value={APP_VERSION} />
+        <InfoRow label={t('pwa_about_server_version')} value={serverVersion} />
+        <InfoRow label={t('pwa_about_server')} value={serverRootUrl()} mono />
       </div>
       <div className="flex flex-col gap-2">
         <a href="https://github.com/andreifoldes/iEMAbot" target="_blank" rel="noreferrer noopener" className={linkCls}>
-          <ExternalLink size={16} aria-hidden="true" /> iEMAbot source code
+          <ExternalLink size={16} aria-hidden="true" /> {t('pwa_about_source_code')}
         </a>
         <a href="https://github.com/KL-Psychological-Methodology/ESMira-web" target="_blank" rel="noreferrer noopener" className={linkCls}>
-          <ExternalLink size={16} aria-hidden="true" /> ESMira project &amp; source code
+          <ExternalLink size={16} aria-hidden="true" /> {t('pwa_about_esmira_source')}
         </a>
       </div>
     </div>
@@ -3419,7 +3428,7 @@ function AboutEsmiraPanel({ serverVersion }: { serverVersion: number }) {
 }
 
 /** Notifications troubleshooting sub-panel: current permission + guidance. */
-function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, channelOn, off, onSwitch }: {
+function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, channelOn, off, onSwitch, onReportError }: {
   perm: NotificationPermission | 'unsupported';
   onEnable: () => void;
   onTest: () => void;
@@ -3430,28 +3439,38 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, chann
   /** The participant switched them off here. */
   off: boolean;
   onSwitch: (off: boolean) => void;
+  /** Opens the "Send error report" panel. */
+  onReportError: () => void;
 }) {
   const native = isNativeApp();
+  const reportItem = (
+    <li>
+      {t('pwa_notif_help_report_lead')}{' '}
+      <button type="button" onClick={onReportError}
+        className="font-semibold text-primary underline underline-offset-2 hover:brightness-110">{t('pwa_send_error_report')}</button>
+      {' '}{t('pwa_notif_help_report_tail')}
+    </li>
+  );
   const status = perm === 'granted'
-    ? { icon: <CheckCircle size={18} aria-hidden="true" />, text: 'Notifications are enabled.', cls: 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400' }
+    ? { icon: <CheckCircle size={18} aria-hidden="true" />, text: t('pwa_notif_status_enabled'), cls: 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400' }
     : perm === 'denied'
-      ? { icon: <BellOff size={18} aria-hidden="true" />, text: native ? 'Notifications are blocked for this app.' : 'Notifications are blocked for this site.', cls: 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' }
+      ? { icon: <BellOff size={18} aria-hidden="true" />, text: native ? t('pwa_notif_status_blocked_app') : t('pwa_notif_status_blocked_site'), cls: 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' }
       : perm === 'unsupported'
-        ? { icon: <Bell size={18} aria-hidden="true" />, text: native ? "Couldn't check notifications on this phone." : 'This browser does not support notifications.', cls: 'bg-surface-container-high text-on-surface-variant' }
-        : { icon: <Bell size={18} aria-hidden="true" />, text: 'Notifications are not enabled yet.', cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' };
+        ? { icon: <Bell size={18} aria-hidden="true" />, text: native ? t('pwa_notif_status_unsupported_app') : t('pwa_notif_status_unsupported_web'), cls: 'bg-surface-container-high text-on-surface-variant' }
+        : { icon: <Bell size={18} aria-hidden="true" />, text: t('pwa_notif_status_not_enabled'), cls: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400' };
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
       {channelOn ? (
         <div className="flex flex-col gap-1">
-          <Toggle icon={<Bell size={18} aria-hidden="true" />} label="Questionnaire notifications" on={!off} onClick={() => onSwitch(!off)} />
+          <Toggle icon={<Bell size={18} aria-hidden="true" />} label={t('pwa_notif_switch_label')} on={!off} onClick={() => onSwitch(!off)} />
           <p className="text-xs text-on-surface-variant" aria-live="polite">
             {off
-              ? "Off: you won't get reminders for this study. You can still open questionnaires from the list."
-              : "On: we'll remind you when a questionnaire is ready."}
+              ? t('pwa_notif_switch_off')
+              : t('pwa_notif_switch_on')}
           </p>
         </div>
       ) : (
-        <p className="text-sm text-on-surface-variant">The research team has not turned on notifications for this study.</p>
+        <p className="text-sm text-on-surface-variant">{t('pwa_notif_channel_off')}</p>
       )}
       {channelOn && !off && (
       <div className="flex items-center gap-3">
@@ -3462,49 +3481,51 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, chann
       {channelOn && !off && perm === 'default' && (
         <button onClick={onEnable}
           className="self-start inline-flex items-center gap-2 bg-primary text-on-primary font-bold px-4 py-2.5 rounded-full active:scale-95 hover:brightness-110 transition-all">
-          <BellRing size={16} aria-hidden="true" /> Enable notifications
+          <BellRing size={16} aria-hidden="true" /> {t('pwa_onboard_enable_notifications')}
         </button>
       )}
       {channelOn && !off && perm === 'denied' && (
         <p className="text-sm text-on-surface-variant">
           {native
-            ? "You've blocked notifications. To turn them back on, open Android Settings → Apps → iEMAbot → Notifications and allow them."
-            : "You've blocked notifications. To turn them back on, open your browser's site settings for this page, allow notifications, then reload."}
+            ? t('pwa_notif_blocked_help_app')
+            : t('pwa_notif_blocked_help_web')}
         </p>
       )}
       {channelOn && !off && perm === 'granted' && canTest && (
         <div className="flex flex-col gap-1.5" aria-live="polite">
           <button onClick={onTest} disabled={testStatus === 'sending'}
             className="self-start inline-flex items-center gap-2 bg-primary text-on-primary font-bold px-4 py-2.5 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-60">
-            <BellRing size={16} aria-hidden="true" /> {testStatus === 'sending' ? 'Sending…' : 'Send a test notification'}
+            <BellRing size={16} aria-hidden="true" /> {testStatus === 'sending' ? t('pwa_app_sending') : t('pwa_notif_send_test')}
           </button>
-          {testStatus === 'sent' && <p className="text-sm text-green-600 dark:text-green-400">✓ Sent — you should see it shortly.</p>}
-          {testStatus === 'local' && <p className="text-sm text-on-surface-variant">Shown on this device (couldn't confirm a server push).</p>}
-          {testStatus === 'error' && <p className="text-sm text-red-600 dark:text-red-400">Couldn't send a test — please try again.</p>}
+          {testStatus === 'sent' && <p className="text-sm text-green-600 dark:text-green-400">{t('pwa_notif_test_sent')}</p>}
+          {testStatus === 'local' && <p className="text-sm text-on-surface-variant">{t('pwa_notif_test_local')}</p>}
+          {testStatus === 'error' && <p className="text-sm text-red-600 dark:text-red-400">{t('pwa_notif_test_error')}</p>}
         </div>
       )}
       <div>
-        <p className="font-semibold text-sm mb-2">If reminders aren't arriving:</p>
+        <p className="font-semibold text-sm mb-2">{t('pwa_notif_troubleshoot_title')}</p>
         {isNativeApp() ? (
           <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
-            <li>Open Android Settings → Apps → iEMAbot → Notifications and make sure they are allowed.</li>
-            <li>Exclude iEMAbot from battery optimisation (Settings → Apps → iEMAbot → Battery → Unrestricted) so reminders aren't delayed.</li>
-            <li>Check that Do Not Disturb is not silencing the app.</li>
-            <li>Allow “Alarms &amp; reminders” for iEMAbot if your phone asks, so reminders arrive on time.</li>
+            <li>{t('pwa_notif_help_app_1')}</li>
+            <li>{t('pwa_notif_help_app_2')}</li>
+            <li>{t('pwa_notif_help_app_3')}</li>
+            <li>{t('pwa_notif_help_app_4')}</li>
+            {reportItem}
           </ul>
         ) : (
           <ul className="list-disc pl-5 text-sm text-on-surface-variant space-y-1.5">
-            <li>Install this app (add it to your home screen or Dock) so it can run in the background.</li>
-            <li>Allow notifications for this site in your browser settings.</li>
-            <li>Check your device's system notification settings for your browser or this app.</li>
-            <li>On Android, exclude your browser from battery optimisation so reminders aren't delayed.</li>
-            <li>Open the app regularly — browsers limit background activity, so some reminders can be delayed.</li>
+            <li>{t('pwa_notif_help_web_1')}</li>
+            <li>{t('pwa_notif_help_web_2')}</li>
+            <li>{t('pwa_notif_help_web_3')}</li>
+            <li>{t('pwa_notif_help_web_4')}</li>
+            <li>{t('pwa_notif_help_web_5')}</li>
+            {reportItem}
           </ul>
         )}
       </div>
       {!isNativeApp() && (
         <p className="text-xs text-on-surface-variant">
-          For the most reliable reminders on Android, use the iEMAbot Android app.
+          {t('pwa_notif_android_hint')}
         </p>
       )}
     </div>
@@ -3512,7 +3533,9 @@ function NotificationsPanel({ perm, onEnable, onTest, testStatus, canTest, chann
 }
 
 /** Send error report sub-panel: optional note + a transparent diagnostics preview. */
-function ErrorReportPanel({ canSend, text, status, preview, textSizeClass, onChange, onSend, onReset, onClose }: {
+function ErrorReportPanel({ sharedWithDevelopers, canSend, text, status, preview, textSizeClass, onChange, onSend, onReset, onClose }: {
+  /** The server also passes the report on to the developers on GitHub: say so before it is sent. */
+  sharedWithDevelopers: boolean;
   canSend: boolean;
   text: string;
   status: 'idle' | 'sending' | 'sent' | 'error';
@@ -3527,11 +3550,11 @@ function ErrorReportPanel({ canSend, text, status, preview, textSizeClass, onCha
     return (
       <div className="p-5 flex flex-col items-center text-center gap-3 py-8 overflow-y-auto custom-scrollbar">
         <span className="p-3 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400"><CheckCircle size={28} aria-hidden="true" /></span>
-        <p className="font-semibold">Report sent</p>
-        <p className="text-sm text-on-surface-variant">Thank you — your error report has reached the research team.</p>
+        <p className="font-semibold">{t('pwa_error_report_sent')}</p>
+        <p className="text-sm text-on-surface-variant">{t('pwa_error_report_sent_body')}</p>
         <div className="flex gap-2 mt-2">
-          <button onClick={onReset} className="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-semibold text-sm active:scale-95 transition-all">Send another</button>
-          <button onClick={onClose} className="px-4 py-2 rounded-full bg-primary text-on-primary font-semibold text-sm active:scale-95 hover:brightness-110 transition-all">Close</button>
+          <button onClick={onReset} className="px-4 py-2 rounded-full bg-surface-container-high text-on-surface font-semibold text-sm active:scale-95 transition-all">{t('pwa_app_send_another')}</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-full bg-primary text-on-primary font-semibold text-sm active:scale-95 hover:brightness-110 transition-all">{t('pwa_app_close')}</button>
         </div>
       </div>
     );
@@ -3539,31 +3562,30 @@ function ErrorReportPanel({ canSend, text, status, preview, textSizeClass, onCha
   return (
     <div className="p-5 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
       <p className="text-sm text-on-surface-variant">
-        Something not working? Send a report to the research team. We include basic technical details
-        about your device and any recent app errors to help diagnose the problem — your survey answers
-        are never included.
+        {t('pwa_error_report_intro')}
       </p>
+      {sharedWithDevelopers && <p className="text-sm text-on-surface-variant">{t('pwa_error_report_github')}</p>}
       <textarea
         value={text}
         onChange={(e) => onChange(e.target.value)}
         rows={4}
         disabled={status === 'sending'}
-        placeholder="Describe what went wrong (optional)…"
-        aria-label="Describe the problem"
+        placeholder={t('pwa_error_report_placeholder')}
+        aria-label={t('pwa_error_report_label')}
         className={cn('w-full resize-none rounded-xl bg-surface-container-high px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60', textSizeClass)}
       />
       <details className="text-sm">
-        <summary className="cursor-pointer font-semibold text-on-surface-variant select-none">What's included in the report</summary>
+        <summary className="cursor-pointer font-semibold text-on-surface-variant select-none">{t('pwa_error_report_included')}</summary>
         <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-surface-container-high p-3 text-xs text-on-surface-variant font-mono">{preview}</pre>
       </details>
-      {!canSend && <p className="text-sm text-amber-600 dark:text-amber-400">No study is loaded, so the report can't be sent right now.</p>}
-      {status === 'error' && <p className="text-sm text-red-600 dark:text-red-400">Couldn't send your report. Please check your connection and try again.</p>}
+      {!canSend && <p className="text-sm text-amber-600 dark:text-amber-400">{t('pwa_error_report_no_study')}</p>}
+      {status === 'error' && <p className="text-sm text-red-600 dark:text-red-400">{t('pwa_error_report_failed')}</p>}
       <button
         onClick={onSend}
         disabled={!canSend || status === 'sending'}
         className="w-full flex items-center justify-center gap-2 bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-40 disabled:active:scale-100"
       >
-        {status === 'sending' ? 'Sending…' : <><Bug size={18} aria-hidden="true" /> Send report</>}
+        {status === 'sending' ? t('pwa_app_sending') : <><Bug size={18} aria-hidden="true" /> {t('pwa_error_report_send')}</>}
       </button>
     </div>
   );

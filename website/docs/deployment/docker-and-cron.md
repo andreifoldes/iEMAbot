@@ -17,11 +17,11 @@ database, queue or worker service: ESMira stores files plus one embedded SQLite 
 
 | Layer | Detail |
 | --- | --- |
-| Base | `php:8.3.36-apache` |
+| Base | `php:8.5.11-apache`, pinned by digest (see [pinned build inputs](./android-signing.md#pinned-build-inputs)) |
 | PHP extensions | `zip`, `gmp`, `mbstring`, `curl`, `sodium`; `pdo_sqlite` (built in, asserted at build time) |
 | Why | `gmp`, `mbstring`, `curl` for `minishlink/web-push` (VAPID signing, payload encryption, HTTP client); `sodium` encrypts stored wearable tokens; `pdo_sqlite` backs the collected-data database |
 | App files | `COPY ./dist /var/www/html`, so the ESMira webpack build **and** the PWA (`dist/pwa/`) must exist before `docker build` |
-| Composer | `composer update --no-dev` in `backend/` installs web-push into `backend/vendor` |
+| Composer | `composer install --no-dev` in `backend/` installs the versions in `backend/composer.lock` (web-push) into `backend/vendor` |
 | Apache | `rewrite`, `md`, `ssl` modules enabled; production `php.ini` |
 
 ## Cron jobs
@@ -33,7 +33,7 @@ fails with "php: not found", silently, so the sender would never run.
 | --- | --- | --- |
 | Every minute | `/usr/local/bin/php /var/www/html/cli/push_send_due.php` | `/var/log/esmira_push.log` |
 | Hourly (`0 * * * *`) | `/usr/local/bin/php /var/www/html/cli/wearables_sync.php` | `/var/log/esmira_wearables.log` |
-| Every minute | `/usr/local/bin/php /var/www/html/cli/channels_dispatch.php` (due questionnaires for [chat channels](../backend/chat-channels.md)) | `/var/log/esmira_channels.log` |
+| Every minute | `/usr/local/bin/php /var/www/html/cli/channels_dispatch.php` (due questionnaires for [chat channels](../backend/channels/chat-channels.md)) | `/var/log/esmira_channels.log` |
 | Every minute | `/usr/local/bin/php /var/www/html/cli/telegram_poll.php` (long-polls Telegram for ~55 s; exits at once without a bot or with the webhook transport) | `/var/log/esmira_channels.log` |
 | Every minute | `/usr/local/bin/php /var/www/html/cli/github_issues_send.php` ([error reports as GitHub issues](#error-reports-as-github-issues); does nothing until set up) | `/var/log/esmira_github_issues.log` |
 
@@ -54,10 +54,12 @@ unreadable; rotating the VAPID keys invalidates every push subscription.
 
 ## First-time setup
 
+[The self-host kit](./self-hosting.md) does this for you, except for the wearable providers.
+
 ```bash
 # inside the container (as www-data)
 php cli/generate_vapid.php                     # Web Push keys
-php cli/wearables_setup.php genkey             # wearable token key
+php cli/wearables_setup.php genkey             # wearable token key (--rotate to replace one; see Wearables)
 php cli/wearables_setup.php withings <id> <secret>   # repeat per provider
 ```
 
@@ -109,9 +111,9 @@ php cli/sqlite_backfill.php
 - Serve `/pwa/` (static) next to the ESMira API root.
 
 :::note[The repo's `docker-compose.yml` is upstream's]
-It references the upstream image and has no mount for `/pwa/`. The fork's production compose file is not in
-the repository. To run **this** repository's image with a demo study, use `scripts/demo/docker-compose.demo.yml` via
-[Demo and verification](./demo-and-verification.md).
+It references the upstream image and has no mount for `/pwa/`. To run your own server, use
+[the self-host kit](./self-hosting.md), which does all of the above for you. To try **this** repository's image with
+a demo study, use `scripts/demo/docker-compose.demo.yml` via [Demo and verification](./demo-and-verification.md).
 :::
 
 ## Local development

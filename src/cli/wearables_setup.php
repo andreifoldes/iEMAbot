@@ -5,7 +5,7 @@
 //
 // Usage:
 //   php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> [redirect_uri]
-//   php cli/wearables_setup.php genkey            # only (re)generate the token key
+//   php cli/wearables_setup.php genkey [--rotate] # create the token key; --rotate replaces an existing one (every connected device must reconnect)
 //   php cli/wearables_setup.php googlehealth-webhook   # secret + request body to register the Google Health subscriber
 //
 // Sensor-triggered prompts need webhooks. Withings URLs are registered per participant
@@ -38,15 +38,20 @@ function makeTokenKey(): string {
 }
 
 $config = [];
-if(empty(Configs::get('wearables_token_key')))
+$hadKey = !empty(Configs::get('wearables_token_key'));
+if(!$hadKey)
 	$config['wearables_token_key'] = makeTokenKey();
 
 if(($args[0] ?? '') === 'genkey') {
-	$config['wearables_token_key'] = makeTokenKey(); // force rotate
+	if($hadKey && !in_array('--rotate', $args, true)) {
+		fwrite(STDERR, "A token key already exists. Replacing it makes every stored wearable token unreadable: all participants would have to connect their devices again.\nRun 'php cli/wearables_setup.php genkey --rotate' if that is what you want.\n");
+		exit(1);
+	}
+	$config['wearables_token_key'] = makeTokenKey(); // new key, or rotate on request
 	FileSystemBasics::writeServerConfigs($config);
 	fwrite(STDOUT, "Generated wearables token key.\n");
 	if(!function_exists('sodium_crypto_secretbox'))
-		fwrite(STDOUT, "WARNING: libsodium not available — tokens will be stored in plaintext.\n");
+		fwrite(STDOUT, "WARNING: libsodium is not available, so wearable tokens cannot be stored at all.\n");
 	exit(0);
 }
 

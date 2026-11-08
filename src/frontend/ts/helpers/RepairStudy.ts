@@ -143,12 +143,16 @@ export class RepairStudy {
 		
 		if(study.packageVersion == undefined) {
 			wasRepaired = true
-			if(!study.langCodes)
-				study.langCodes = [];
-			study.langCodes.push("en")
-			study.defaultLang = "en"
+			// Only studies from before languages existed have none. A study that a script made without a packageVersion keeps its own
+			// languages (the block below picks a default language if one is missing).
+			if(!study.langCodes || study.langCodes.length === 0) {
+				study.langCodes = ["en"]
+				study.defaultLang = "en"
+			}
 		}
-		if(compareSemVersion(study.packageVersion, "2.5.0-alpha.1")) {
+		// A missing packageVersion counts as the oldest version. Without the fallback, compareSemVersion() throws on undefined and the
+		// study cannot be opened in the editor at all.
+		if(compareSemVersion(study.packageVersion ?? "0.0.0", "2.5.0-alpha.1")) {
 			if(!study.hasOwnProperty("defaultLang") && study.hasOwnProperty("langCodes")) {
 				wasRepaired = true
 				const langCodes: string[] = study.langCodes ?? []

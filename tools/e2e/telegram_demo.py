@@ -11,7 +11,7 @@ Needs a Telethon session for a user account (api_id/api_hash from my.telegram.or
 
 Usage:
   uv run --with telethon --with python-dotenv tools/e2e/telegram_demo.py <bot_username> <start_payload> <esmira_base_url> [--env path/.env]
-  e.g. ... my_test_bot s12345678_demo-study https://ema.example.org/esmira/
+  e.g. ... my_test_bot s12345678_<study-key> https://ema.example.org/esmira/
 """
 import asyncio, os, sys
 from pathlib import Path

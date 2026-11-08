@@ -13,6 +13,7 @@ import { DashElement } from "../components/DashElement";
 import { StudyMetadata } from "../loader/StudyLoader";
 import { SectionData } from "../site/SectionData";
 import { ServerInfo } from "../constants/ServerInfo";
+import { WEB_LANGUAGES, webLanguageLabel } from "../data/webLanguages";
 
 export class Content extends SectionContent {
 	private isFrozen: boolean = false
@@ -171,10 +172,12 @@ export class Content extends SectionContent {
 								<input type="checkbox" {...BindObservable(study.publishedWeb)} />
 							</label>
 							&nbsp;
-							<label class="middle noDesc" title={Lang.get('telegram_availability_info')}>
-								<small>{Lang.get('telegram')}</small>
-								<input type="checkbox" {...BindObservable(study.channels.telegram.enabled)} />
-							</label>
+							{/* Optional: not offered without a bot, except to switch off a study that still has it on. */}
+							{(ServerInfo.telegramConfigured || study.channels.telegram.enabled.get()) &&
+								<label class="middle noDesc" title={Lang.get('telegram_availability_info')}>
+									<small>{Lang.get('telegram')}</small>
+									<input type="checkbox" {...BindObservable(study.channels.telegram.enabled)} />
+								</label>}
 							{ServerInfo.webOnlyMode && <div><small><i>{Lang.get('web_only_disabled_note')}</i></small></div>}
 							{!ServerInfo.telegramConfigured && study.channels.telegram.enabled.get() &&
 								<div><small class="highlight">{Lang.get('telegram_not_set_up_on_server')}</small></div>}
@@ -187,6 +190,19 @@ export class Content extends SectionContent {
 								<input type="checkbox" {...BindObservable(study.webPhoneOnly)} disabled={!study.publishedWeb.get()} />
 								<span>{Lang.get('web_phone_only')}</span>
 								<small>{Lang.get('web_phone_only_info')}</small>
+							</label>
+						</div>
+				}),
+				DashElement("vertical", {
+					content:
+						<div class="vAlignCenter">
+							<label class="noTitle noDesc">
+								<span>{Lang.get('web_language')}</span>
+								<select {...BindObservable(study.webLanguage)}>
+									<option value="">{Lang.get('web_language_auto')}</option>
+									{WEB_LANGUAGES.map((code) => <option value={code}>{webLanguageLabel(code)}</option>)}
+								</select>
+								<small>{Lang.get('web_language_info')}</small>
 							</label>
 						</div>
 				}),

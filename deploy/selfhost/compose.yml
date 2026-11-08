@@ -1,0 +1,53 @@
+# iEMAbot self-host kit. Settings live in .env (written by install.sh); keep your own changes in a compose.override.yml
+# next to this file, because update.sh replaces this one.
+name: iemabot
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  app:
+    image: ${IEMABOT_IMAGE:-ghcr.io/andreifoldes/iemabot}:${IEMABOT_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      IEMABOT_PUBLIC_URL: ${PUBLIC_URL:?run install.sh first}
+      IEMABOT_CONTACT_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./data/esmira_data:/var/www/html/esmira_data
+      - ./data/config:/var/www/html/backend/config
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/api/app_version.php"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Every start fixes file ownership and runs migrations before Apache answers, which takes a while on a lot of data.
+      start_period: 10m
+    logging: *logging
+
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    command: ["caddy", "run", "--config", "/etc/caddy/${CADDYFILE:-Caddyfile}", "--adapter", "caddyfile"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?run install.sh first}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "${HTTP_BIND:-80}:80"
+      - "${HTTPS_BIND:-443}:443"
+      - "${HTTPS_BIND:-443}:443/udp"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - ./webapp:/srv/webapp:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:

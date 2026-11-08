@@ -18,7 +18,7 @@ basics**; fork-specific additions are flagged and have their own pages.
 | Backend library | `src/backend/` | Study store, response index, permissions, CSV creation. |
 | Researcher designer | `src/frontend/ts/` | Mithril + TypeScript, built with webpack. |
 | CLI scripts | `src/cli/` | Fork-added: VAPID key generation, push sender, wearable setup and sync, SQLite backfill. |
-| Locales | `src/locales/` | 27 language files; Weblate-managed upstream. |
+| Locales | `src/locales/` | 27 language files; translated upstream. |
 | Participant PWA | `web-pwa/` | **Fork-only.** See [PWA overview](../pwa/overview.md). |
 
 ## Storage: files plus one SQLite database
@@ -31,7 +31,7 @@ fork everything collected from participants is **also** written to a single embe
 esmira_data/
 ├── studies/<studyId>/
 │   ├── .config.json            # the study definition
-│   ├── responses/              # one CSV per questionnaire, plus events.csv, web_access.csv
+│   ├── responses/              # dated CSV copies from "Create backup" (answers are in iemabot.sqlite; older servers also left <id>.csv, events.csv, web_access.csv here)
 │   ├── .responses_index/       # PHP-serialised column index
 │   ├── media/                  # uploaded images, audio, (fork) keystrokes/
 │   ├── .messages/  .userdata/  .statistics/  .reward_codes/  .langs/  .merlin_logs/
@@ -49,8 +49,8 @@ The CSV delimiter defaults to `;` (`backend/defaults/configs.default.php`).
 
 :::caution[Never hand-edit `.config.json`]
 Studies must be saved through the backend's study store (`saveStudy`), because saving also migrates the
-response index and CSV headers. Editing the JSON on disk can desynchronise them. The repository's
-`tools/live-study/*.php` scripts follow this rule: they are dry-run by default and write via `saveStudy()`
+response index and CSV headers. Editing the JSON on disk can desynchronise them. The maintainers'
+live-study scripts (kept in the private deployment repository) follow this rule: they are dry-run by default and write via `saveStudy()`
 when passed `apply`.
 :::
 

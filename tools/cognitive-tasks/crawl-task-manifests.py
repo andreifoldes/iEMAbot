@@ -8,7 +8,7 @@ The apps use these as a fallback when a task folder publishes no task-manifest.j
 (see build-task-manifest.mjs), which makes offline task copies work without any server-side step.
 Re-run after a task is updated (a changed file size just makes the offline copy fall back to the network).
 
-  python3 tools/cognitive-tasks/crawl-task-manifests.py https://iemabot.surrey.ac.uk ssrc [more-keys ...]
+  python3 tools/cognitive-tasks/crawl-task-manifests.py https://example.org <study-key> [more-keys ...]
 """
 from __future__ import annotations
 import hashlib, json, os, sys

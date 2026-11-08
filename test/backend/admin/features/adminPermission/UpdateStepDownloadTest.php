@@ -4,8 +4,10 @@ namespace backend\admin\features\adminPermission;
 
 use backend\admin\features\adminPermission\UpdateStepDownload;
 use backend\Configs;
+use backend\exceptions\CriticalException;
 use backend\FileSystemBasics;
 use backend\Paths;
+use backend\SelfHost;
 use testConfigs\BaseAdminPermissionTestSetup;
 
 require_once __DIR__ . '/../../../../autoload.php';
@@ -41,6 +43,19 @@ class UpdateStepDownloadTest extends BaseAdminPermissionTestSetup {
 		$obj = new UpdateStepDownload();
 		$obj->exec();
 		$this->assertEquals($this->zipFileContent, file_get_contents(Paths::FILE_SERVER_UPDATE));
+	}
+	
+	function test_a_server_running_from_an_image_does_not_update_itself() {
+		putenv(SelfHost::ENV_CONTAINER_IMAGE . '=1');
+		try {
+			$this->setPost(['url' => UpdateStepDownload::ALLOWED_URL_PREFIX . 'x/release.zip']);
+			$this->expectException(CriticalException::class);
+			$this->expectExceptionMessage('container image');
+			(new UpdateStepDownload())->exec();
+		}
+		finally {
+			putenv(SelfHost::ENV_CONTAINER_IMAGE);
+		}
 	}
 	
 	/** @dataProvider foreignUrls */

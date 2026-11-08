@@ -36,7 +36,7 @@ class StudyMetadataStoreFS implements StudyMetadataStore {
         if (!file_exists($metadataPath))
             throw new CriticalException('Study does not exist');
 
-        $this->metadata = unserialize(file_get_contents($metadataPath));
+        $this->metadata = FileSystemBasics::readSerialized(file_get_contents($metadataPath), false);
     }
     /**
      * @throws CriticalException
@@ -48,7 +48,7 @@ class StudyMetadataStoreFS implements StudyMetadataStore {
         if (!file_exists($path))
             throw new CriticalException('Study does not exist');
 
-        $this->createMetadata = unserialize(file_get_contents($path));
+        $this->createMetadata = FileSystemBasics::readSerialized(file_get_contents($path), false);
     }
 
     public function __construct(int $studyId) {

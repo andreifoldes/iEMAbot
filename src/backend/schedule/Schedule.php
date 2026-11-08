@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace backend\schedule;
 
 use backend\notifications\NotificationSpec;
+use backend\notifications\NotificationText;
 use backend\notifications\ParticipantVariableStore;
 use backend\wearables\WearablesEventStore;
 
@@ -927,11 +928,11 @@ class Schedule {
 			$title = NotificationSpec::title($q ?? [], $study);
 		$body = trim((string) $c['text']);
 		if($body === '')
-			$body = NotificationSpec::DEFAULT_BODY;
+			$body = NotificationSpec::defaultBody(NotificationText::langFor($study));
 		if(!empty($c['includeDeadline'])) {
 			// The close relative to the window's day: midnight shows as 23:59, a close after midnight as that time.
 			$closeTod = $w['close'] - $w['base'];
-			$body = NotificationSpec::withDeadline($body, $closeTod > self::ONE_DAY ? $closeTod - self::ONE_DAY : $closeTod);
+			$body = NotificationSpec::withDeadline($body, $closeTod > self::ONE_DAY ? $closeTod - self::ONE_DAY : $closeTod, NotificationText::langFor($study));
 		}
 		$delay = max(0, (int) $c['reminderDelayMin']) * self::MINUTE;
 		return [$title, $body, $delay > 0 ? max(0, (int) $c['reminderCount']) : 0, $delay];

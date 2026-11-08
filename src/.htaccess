@@ -47,3 +47,33 @@ RewriteRule ^api/([^.]+)$ api/$1.php [NC,L,QSA]
 # internal redirect, which the script also accepts).
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Security headers for every response from this folder: PHP pages, the API, static files and the PWA (/pwa/).
+# Needs mod_headers (the Dockerfile enables it). HSTS is NOT set here: TLS ends at a reverse proxy, which must send
+# it (website/docs/deployment/security-headers.md).
+# test/backend/SecurityHeadersTest.php checks this block, so change both together.
+# TODO(security): (1) turn the report-only policy below into an enforcing one once its violations have been watched;
+#   nothing collects reports yet (no report-uri / report-to endpoint). (2) HSTS at the reverse proxy. (3) The /webapp/
+#   task pages are served by the proxy, outside this folder, and need their own headers.
+# ---------------------------------------------------------------------------------------------------------------
+<IfModule mod_headers.c>
+	Header always set X-Content-Type-Options "nosniff"
+	Header always set Referrer-Policy "strict-origin-when-cross-origin"
+	
+	# Clickjacking: nobody embeds the admin pages or the PWA, the cognitive tasks are embedded BY the PWA, not the other way
+	# around. This is the only enforcing CSP directive (frame-ancestors is ignored in a report-only policy). X-Frame-Options
+	# is the same rule for browsers without CSP2.
+	Header always set Content-Security-Policy "frame-ancestors 'self'"
+	Header always set X-Frame-Options "SAMEORIGIN"
+	
+	# REPORT-ONLY: the browser logs violations (dev tools console) but blocks nothing. Do not turn it into
+	# Content-Security-Policy before the violations have been watched (tracker item 9).
+	# Why each source: blob: = plugin code is imported from an object URL (Requests.ts) and recordings are played from blobs;
+	# data: = inlined icons; raw.githubusercontent.com / api.github.com / kl-psychological-methodology.github.io = the admin's
+	# "about", update check and blog feed; https: images = pictures in the blog feed and in study texts; frame-src https: =
+	# the PWA shows a study's cognitive task (any https page a researcher names) in an iframe; style-src 'unsafe-inline' =
+	# React/Mithril style attributes and index_nojs.php.
+	Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://raw.githubusercontent.com https://api.github.com https://kl-psychological-methodology.github.io; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+</IfModule>

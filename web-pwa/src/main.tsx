@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { initInstallCapture } from './lib/pwaInstall';
 import { initJoinLinks } from './lib/joinLink';
+import { initLang } from './lib/i18nStore';
 import { updateReload } from './lib/reloadGate';
 import './fonts';
 import './index.css';
@@ -71,6 +72,9 @@ if ('serviceWorker' in navigator) {
     } catch { /* ignore */ }
   })();
 }
+
+// Interface language: the browser's until a study (and its researcher-set language) is known.
+void initLang();
 
 const root = createRoot(document.getElementById('root')!);
 

@@ -1,0 +1,88 @@
+name: Publish image
+
+# Publishes the image the self-host kit (deploy/selfhost/) runs, for amd64 and arm64, as ghcr.io/<owner>/iemabot:<version>.
+# Runs when a release is published on the public repository; run it by hand only from a release's tag.
+# The release's tag must be v<package.json version>, or labs could not tell what they run, and the dashboard could not
+# tell them about the release. :latest moves only for the repository's latest release, so a pre-release or a release from
+# an older tag never moves labs. The first time, make the package public (see website/docs/deployment/ci-and-release.md).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
+
+jobs:
+  # Nothing reaches :latest without having gone through the kit end to end.
+  test:
+    if: ${{ !github.event.repository.private }}
+    uses: ./.github/workflows/selfhost-smoke.yml
+
+  publish:
+    needs: test
+    # A private repository (staging) never publishes: an image must correspond to released, public source (AGPL).
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check this is a release's tag, and decide the image's tags
+        id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Publish from a release tagged v$version (package.json's version), not from $GITHUB_REF_NAME."
+            exit 1
+          fi
+          image="ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')/iemabot"
+          tags="$image:$version"
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          [ "$latest" != "$GITHUB_REF_NAME" ] || tags="$tags,$image:latest"
+          {
+            echo "tags=$tags"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+      - run: npm ci --ignore-scripts
+      - run: npm run build:all
+      - name: Prepare the build context
+        run: |
+          set -euo pipefail
+          mkdir -p image-context/deploy
+          cp -R dist Dockerfile docker-entrypoint.sh image-context/
+          cp -R deploy/selfhost image-context/deploy/selfhost
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: image-context
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=iEMAbot
+            org.opencontainers.image.description=Self-hosted ecological momentary assessment server
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=AGPL-3.0

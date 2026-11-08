@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The module's PHP tests: phpunit -c study-cli/phpunit.xml (PHPUnit 9.6, the version CI uses) -->
+<phpunit bootstrap="tests/php/bootstrap.php" colors="true" cacheResult="false">
+	<testsuites>
+		<testsuite name="study-cli">
+			<directory suffix="Test.php">tests/php</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

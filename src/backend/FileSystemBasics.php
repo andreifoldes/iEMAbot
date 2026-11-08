@@ -21,6 +21,78 @@ class FileSystemBasics {
 	}
 	
 	/**
+	 * unserialize() for data this server wrote itself. Only the named classes are
+	 * instantiated; any other class in the payload becomes an inert __PHP_Incomplete_Class,
+	 * so a tampered file cannot create arbitrary objects.
+	 *
+	 * @param string $data The serialized data (a failed file read, false, gives false back as before)
+	 * @param string[]|false $allowedClasses Exact class names the data may contain, false for plain arrays and scalars
+	 * @return mixed What unserialize() returns; false when the data is invalid
+	 */
+	public static function readSerialized($data, $allowedClasses) {
+		if(!is_string($data) || $data === '')
+			return false;
+		return unserialize($data, ['allowed_classes' => $allowedClasses]);
+	}
+	
+	/**
+	 * Permissions for files and folders that hold credentials (the server config with its
+	 * API keys, password hashes, login tokens, wearable and chat-channel tokens).
+	 * Only the web server's user needs them; other accounts on the machine do not.
+	 */
+	const SECRET_FILE_MODE = 0600;
+	const SECRET_FOLDER_MODE = 0700;
+	
+	/**
+	 * Like writeFile(), for a file that holds a secret: it is created owner-only, so it is
+	 * never readable by others, not even for a moment, and a file that exists from
+	 * before (written with the default umask) is tightened now.
+	 *
+	 * @throws CriticalException
+	 */
+	public static function writeSecretFile(string $file, string $s) {
+		if(!file_exists($file) && @touch($file))
+			self::restrictToOwner($file, self::SECRET_FILE_MODE);
+		self::writeFile($file, $s);
+		self::restrictToOwner($file, self::SECRET_FILE_MODE);
+	}
+	
+	/**
+	 * Like createFolder(), for a folder that holds secret files. Does nothing if the folder
+	 * exists (an existing folder keeps its mode).
+	 *
+	 * @throws CriticalException
+	 */
+	public static function createSecretFolder(string $folder, bool $recursive = false) {
+		if(file_exists($folder))
+			return;
+		if(!mkdir($folder, self::SECRET_FOLDER_MODE, $recursive))
+			throw new CriticalException("Creating the folder '$folder' failed");
+		self::restrictToOwner($folder, self::SECRET_FOLDER_MODE);
+	}
+	
+	/**
+	 * Best effort: sets the mode of a file or folder that holds a secret. Never throws, because
+	 * a file that cannot be tightened (for example one owned by another user) still has to work.
+	 *
+	 * When this runs as root (docker exec without -u, the entrypoint's migrations), the file
+	 * would stay unreadable for the web server's user, so it is first handed to the owner of
+	 * the folder it lives in. If that folder is root's as well, the mode is left alone.
+	 */
+	public static function restrictToOwner(string $path, int $mode) {
+		if(!file_exists($path) || DIRECTORY_SEPARATOR === '\\')
+			return;
+		if(function_exists('posix_geteuid') && posix_geteuid() === 0) {
+			$parent = @stat(dirname($path));
+			if(!$parent || $parent['uid'] === 0)
+				return;
+			@chown($path, $parent['uid']);
+			@chgrp($path, $parent['gid']);
+		}
+		@chmod($path, $mode);
+	}
+	
+	/**
 	 * @throws CriticalException
 	 */
 	public static function createFolder(string $folder, bool $recursive = false) {
@@ -146,8 +218,8 @@ class FileSystemBasics {
 	 */
 	public static function writeServerConfigs(array $newValues) { //$pathConfig is used for testing
 		$saveValues = array_merge(Configs::getDefaultAll(), Configs::getAll(), $newValues);
-		FileSystemBasics::createFolder(dirname(Paths::FILE_CONFIG));
-		self::writeFile(Paths::FILE_CONFIG, '<?php return ' . var_export($saveValues, true) . ';');
+		FileSystemBasics::createSecretFolder(dirname(Paths::FILE_CONFIG));
+		self::writeSecretFile(Paths::FILE_CONFIG, '<?php return ' . var_export($saveValues, true) . ';');
 		Configs::resetConfig($saveValues);
 	}
 	

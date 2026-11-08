@@ -17,6 +17,17 @@ class WearablesHttp {
 	const TIMEOUT = 30;
 
 	/**
+	 * Test seam: when set, requests are answered by this callable instead of curl. It receives
+	 * (method, url, body, headers) and returns ['status' => int, 'body' => string, 'json' => mixed|null].
+	 * @var callable|null
+	 */
+	private static $transport = null;
+
+	public static function setTransport(?callable $transport): void {
+		self::$transport = $transport;
+	}
+
+	/**
 	 * @param array<string,string> $query
 	 * @param array<string,string> $headers
 	 * @throws WearablesException
@@ -47,6 +58,9 @@ class WearablesHttp {
 	 * @throws WearablesException
 	 */
 	private static function request(string $method, string $url, ?string $body, array $headers): array {
+		if(self::$transport !== null)
+			return (self::$transport)($method, $url, $body, $headers);
+
 		$ch = curl_init($url);
 		if($ch === false)
 			throw new WearablesException("Could not init request to $url");

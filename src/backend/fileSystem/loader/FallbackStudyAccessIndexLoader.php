@@ -10,7 +10,7 @@ class FallbackStudyAccessIndexLoader
 	public static function importFile(string $encodedUrl): array
 	{
 		$path = PathsFS::fileFallbackStudyIndex($encodedUrl);
-		return file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), false) : [];
 	}
 
 	public static function exportFile(string $encodedUrl, array $studyIndex)

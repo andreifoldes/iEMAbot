@@ -10,10 +10,12 @@
 import { motion } from 'motion/react';
 import { X, Check } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useDialogA11y } from '../lib/useDialogA11y';
 import { type CaptureMode } from '../lib/keystrokeCapture';
 import { newKeystrokeIdentifier } from '../lib/keystrokeUploads';
 import { nudgeHint, useKeystrokeCapture } from '../lib/useKeystrokeCapture';
+import { t } from '../lib/i18n';
 import type { PreloadedQuestion } from '../types';
 
 /** First line of the (rich-text/HTML) prompt — used as the compact modal title. */
@@ -25,7 +27,7 @@ function firstLine(html: string): string {
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&');
   const line = text.split('\n').map((s) => s.trim()).find(Boolean);
-  return line || 'Your answer';
+  return line || t('pwa_keys_your_answer');
 }
 
 interface Props {
@@ -83,7 +85,7 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
           <h2 className="text-lg font-bold text-on-surface text-center leading-snug px-9">{title}</h2>
           <button
             onClick={onCancel}
-            aria-label="Close"
+            aria-label={t('pwa_keys_close')}
             className="absolute right-0 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-on-surface-variant hover:bg-surface-container-high active:scale-95 transition"
           >
             <X size={22} aria-hidden="true" />
@@ -107,15 +109,15 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
           // or shrink the writing area.
           <div
             className="mt-3 max-h-14 overflow-y-auto shrink-0 text-sm text-on-surface-variant leading-relaxed esmira-rich"
-            dangerouslySetInnerHTML={{ __html: detail }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail) }}
           />
         )}
 
         <textarea
           ref={textareaRef}
           rows={7}
-          aria-label={title || 'Your answer'}
-          placeholder="Start typing your answer here…"
+          aria-label={title || t('pwa_keys_your_answer')}
+          placeholder={t('pwa_keys_placeholder')}
           className="mt-4 w-full flex-1 min-h-36 h-44 sm:h-52 resize-none rounded-2xl border border-outline-variant/60 bg-surface-container-lowest px-4 py-3 text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:ring-2 focus:ring-primary"
         />
 
@@ -137,7 +139,7 @@ export function KeystrokeRecorder({ question, reduceMotion, onCancel, onSave }: 
             className="flex items-center gap-2 bg-primary text-on-primary font-bold px-6 py-3 rounded-full active:scale-95 transition disabled:opacity-40"
           >
             <Check size={20} aria-hidden="true" />
-            Save
+            {t('pwa_keys_save')}
           </button>
         </div>
       </motion.div>

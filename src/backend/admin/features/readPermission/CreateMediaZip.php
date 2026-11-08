@@ -37,6 +37,11 @@ class CreateMediaZip extends HasReadPermission {
 					$this->sse->flushProgress(1, 1, $step, $total);
 				}
 			);
+			// A zip without entries is never written to disk: nothing has been uploaded for this study yet.
+			if(!file_exists($pathZip)) {
+				$this->sse->flushFailed('No recordings, photos or files have been uploaded for this study yet.');
+				return;
+			}
 		}
 		
 		$this->sse->flushFinished();

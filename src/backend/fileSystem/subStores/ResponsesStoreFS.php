@@ -13,10 +13,15 @@ use backend\fileSystem\PathsFS;
 use backend\fileSystem\loader\StatisticsNewDataSetEntryLoader;
 use backend\FileUploader;
 use backend\sqlite\CollectedDataDb;
+use backend\sqlite\Spool;
+use backend\exceptions\StorageUnavailableException;
+use backend\sqlite\ResponsesExport;
 use backend\subStores\ResponsesStore;
 use ZipArchive;
 
 class ResponsesStoreFS implements ResponsesStore {
+	private static bool $reportedRefusal = false;
+
 	private function fillDatasetErrors(DataSetCacheContainer $entry, $msg, callable $errorCallback) {
 		foreach ($entry->ids as $datasetId) {
 			$errorCallback($datasetId, $msg);
@@ -33,86 +38,68 @@ class ResponsesStoreFS implements ResponsesStore {
 		$this->fillDatasetErrors($entry, 'Internal Server Error: Saving failed', $errorCallback);
 		return false;
 	}
-	private function writeCsv(
-		string $path,
-		string $noPathMessage,
+	/**
+	 * The database is the only copy: store the rows there in one transaction. A row it refuses goes to the spool, which keeps the
+	 * answer and raises an alert; only when that fails too is the upload refused (HTTP 503, see StorageUnavailableException).
+	 * A questionnaire (or event log) the study does not know, by its response index, is refused.
+	 * @throws StorageUnavailableException
+	 */
+	private function storeInDatabase(
 		DataSetCacheContainer $entry,
-		string $csvSeparator,
+		string $unknownMessage,
 		callable $successCallback,
 		callable $errorCallback,
 		int $studyId,
 		string $kind,
 		?int $questionnaireId
 	) {
-		if (!file_exists($path)) {
-			$this->fillDatasetErrors($entry, $noPathMessage, $errorCallback);
+		$indexId = $kind === CollectedDataDb::KIND_EVENT ? PathsFS::FILENAME_EVENTS : (string) $questionnaireId;
+		if(!file_exists(PathsFS::fileResponsesIndex($studyId, $indexId))) {
+			$this->fillDatasetErrors($entry, $unknownMessage, $errorCallback);
 			return;
 		}
-
-		$writeString = '';
-		foreach ($entry->data as $data) {
-			$writeString .= "\n" . Main::arrayToCSV($data, $csvSeparator);
+		try {
+			CollectedDataDb::insertResponses(CollectedDataDb::connection(), $studyId, $kind, $questionnaireId, $entry->data);
 		}
-
-		if ($this->writeDataSetFile($path, $writeString, $entry, $successCallback, $errorCallback)) {
-			// Mirror into the SQLite store (best-effort, never affects the acknowledgement above).
-			CollectedDataDb::addResponses($studyId, $kind, $questionnaireId, $entry->data);
+		catch(\Throwable $e) {
+			try {
+				Spool::append($studyId, $kind, $questionnaireId, $entry->data);
+			}
+			catch(\Throwable $spoolFailure) {
+				throw new StorageUnavailableException('Neither the database nor the spool took the rows: ' . $e->getMessage() . ' / ' . $spoolFailure->getMessage());
+			}
+			if(!self::$reportedRefusal) { // once per request; the spool raises its own alert as the backlog grows
+				self::$reportedRefusal = true;
+				Main::report("The database refused " . count($entry->data) . " row(s) of study $studyId ($kind); they are kept in the spool:\n" . $e->getMessage());
+			}
 		}
+		foreach($entry->ids as $datasetId)
+			$successCallback($datasetId);
 	}
 
 	public function saveWebAccessDataSet(int $studyId, int $timestamp, string $pageName, string $referer, string $userAgent): bool {
-		$written = file_put_contents(
-			PathsFS::fileResponses($studyId, PathsFS::FILENAME_WEB_ACCESS),
-			"\n\"" . $timestamp . "\";\"$pageName\";\"$referer\";\"$userAgent\"",
-			FILE_APPEND | LOCK_EX
-		) !== false;
-		if ($written)
-			CollectedDataDb::addWebAccess($studyId, $timestamp, $pageName, $referer, $userAgent);
-		return $written;
+		return CollectedDataDb::addWebAccess($studyId, $timestamp, $pageName, $referer, $userAgent);
 	}
+	/**
+	 * The database is the only copy. The answers come first, so that when the upload has to be refused nothing else was queued for
+	 * it (a resend would count the statistics twice), then the statistics queue and the waiting file uploads.
+	 * @throws StorageUnavailableException
+	 */
 	public function saveDataSetCache(string $userId, DataSetCache $cache, callable $successProgressCallback, callable $errorProgressCallback) {
-		foreach ($cache->getStatisticsCache() as $studyId => $entry) {
-			$pathStatisticsNewData = PathsFS::fileStatisticsNewData($studyId);
-
-			$writeString = '';
-			foreach ($entry->data as $data) {
-				$writeString .= "\n" . StatisticsNewDataSetEntryLoader::export($data);
-			}
-
-			$this->writeDataSetFile($pathStatisticsNewData, $writeString, $entry, $successProgressCallback, $errorProgressCallback);
-		}
-
-		$csvSeparator = Configs::get('csv_delimiter');
 		foreach ($cache->getQuestionnaireCache() as $studyId => $questionnaireEntries) {
 			foreach ($questionnaireEntries as $questionnaireId => $entry) {
-				$this->writeCsv(
-					PathsFS::fileResponses($studyId, $questionnaireId),
-					"Questionnaire (id=$questionnaireId) does not exist",
-					$entry,
-					$csvSeparator,
-					$successProgressCallback,
-					$errorProgressCallback,
-					(int) $studyId,
-					CollectedDataDb::KIND_QUESTIONNAIRE,
-					(int) $questionnaireId
-				);
+				$this->storeInDatabase($entry, "Questionnaire (id=$questionnaireId) does not exist", $successProgressCallback, $errorProgressCallback, (int) $studyId, CollectedDataDb::KIND_QUESTIONNAIRE, (int) $questionnaireId);
 			}
 		}
-
 		foreach ($cache->getEventCache() as $studyId => $entry) {
-			$this->writeCsv(
-				PathsFS::fileResponses($studyId, PathsFS::FILENAME_EVENTS),
-				"Study $studyId seems to be broken",
-				$entry,
-				$csvSeparator,
-				$successProgressCallback,
-				$errorProgressCallback,
-				(int) $studyId,
-				CollectedDataDb::KIND_EVENT,
-				null
-			);
+			$this->storeInDatabase($entry, "Study $studyId seems to be broken", $successProgressCallback, $errorProgressCallback, (int) $studyId, CollectedDataDb::KIND_EVENT, null);
 		}
-
+		foreach ($cache->getStatisticsCache() as $studyId => $entry) {
+			$writeString = '';
+			foreach ($entry->data as $data)
+				$writeString .= "\n" . StatisticsNewDataSetEntryLoader::export($data);
+			$this->writeDataSetFile(PathsFS::fileStatisticsNewData($studyId), $writeString, $entry, $successProgressCallback, $errorProgressCallback);
+		}
 		foreach ($cache->getFileCache() as $datasetId => $entriesArray) {
 			foreach ($entriesArray as $entry) {
 				$path = PathsFS::filePendingUploads($entry->studyId, $userId, $entry->identifier);
@@ -121,6 +108,7 @@ class ResponsesStoreFS implements ResponsesStore {
 			}
 		}
 	}
+
 	public function uploadFile(int $studyId, string $userId, int $identifier, FileUploader $fileUploader) {
 		$waitingPath = PathsFS::filePendingUploads($studyId, $userId, $identifier);
 		if (!file_exists($waitingPath))
@@ -149,14 +137,19 @@ class ResponsesStoreFS implements ResponsesStore {
 	}
 
 	public function getLastResponseTimestampOfStudies(): array {
+		// The newest upload of each study (seconds). A study without any falls back to when it was last saved.
+		$newest = [];
+		if(is_file(CollectedDataDb::path())) {
+			foreach(CollectedDataDb::connection()->query('SELECT study_id, MAX(received_at) AS newest FROM responses GROUP BY study_id') as $row)
+				$newest[(int) $row['study_id']] = intdiv((int) $row['newest'], 1000);
+		}
 		$lastActivities = [];
 		$handle = opendir(PathsFS::folderStudies());
 		while ($studyId = readdir($handle)) {
 			if ($studyId[0] === '.' || $studyId === PathsFS::FILENAME_STUDY_INDEX)
 				continue;
 
-			$path = PathsFS::fileResponses($studyId, PathsFS::FILENAME_EVENTS);
-			$lastActivities[$studyId] = filemtime($path);
+			$lastActivities[$studyId] = $newest[(int) $studyId] ?? (int) @filemtime(PathsFS::fileStudyMetadata((int) $studyId));
 		}
 		closedir($handle);
 		ksort($lastActivities); // readdir() order depends on the filesystem
@@ -164,6 +157,8 @@ class ResponsesStoreFS implements ResponsesStore {
 	}
 
 	private function fillMediaFolder(ZipArchive $zip, $path, callable $getMediaFilename) {
+		if(!is_dir($path))
+			return;
 		$handle = opendir($path);
 		while ($file = readdir($handle)) {
 			if ($file[0] != '.') {
@@ -179,8 +174,9 @@ class ResponsesStoreFS implements ResponsesStore {
 		$folderImages = Paths::folderImages($studyId);
 		$folderAudio = Paths::folderAudio($studyId);
 		$folderKeystrokes = Paths::folderKeystrokes($studyId);
-		$countImages = count(scandir($folderImages)) - 2;
-		$countAudio = count(scandir($folderAudio)) - 2;
+		// A study that never received a photo or recording may not have these folders yet.
+		$countImages = is_dir($folderImages) ? count(scandir($folderImages)) - 2 : 0;
+		$countAudio = is_dir($folderAudio) ? count(scandir($folderAudio)) - 2 : 0;
 		// Added after some studies were created; the folder may not exist yet.
 		$countKeystrokes = is_dir($folderKeystrokes) ? count(scandir($folderKeystrokes)) - 2 : 0;
 		$countTotal = $countImages + $countAudio + $countKeystrokes;
@@ -221,6 +217,12 @@ class ResponsesStoreFS implements ResponsesStore {
 		$zip->close();
 	}
 	public function outputResponsesFile(int $studyId, string $identifier) {
+		if(ResponsesExport::supports($identifier)) { // the live data of a questionnaire, the events or the web access: from the database
+			ResponsesExport::outputWithoutFile($studyId, $identifier, Configs::get('csv_delimiter'));
+			return;
+		}
+
+		// A dated copy ("Create backup") or an archived file from before the server stopped writing CSV.
 		$path = PathsFS::fileResponses($studyId, $identifier);
 		if (!file_exists($path))
 			throw new CriticalException("$path does not exist");
@@ -237,38 +239,62 @@ class ResponsesStoreFS implements ResponsesStore {
 			throw new CriticalException("$path does not exist");
 
 		Main::setHeader("Content-Type: $contentType");
+		// TODO: LIVE CHECK V4 (needs a browser): in the data view of a study with a voice and a photo answer, the audio link plays (also the
+		// player's download button) and the image opens. Tracker Part 1.
+		//Participants upload these files, and an admin opens them on the admin's origin: never let a browser treat one as a page.
+		Main::setHeader('X-Content-Type-Options: nosniff');
+		Main::setHeader("Content-Security-Policy: script-src 'none'; object-src 'none'; base-uri 'none'");
 		Main::setHeader('Content-Length: ' . filesize($path));
 		readfile($path);
 	}
 	public function outputImageFromResponses(int $studyId, string $userId, int $entryId, string $key) {
 		$path = Paths::fileImageFromData($studyId, $userId, $entryId, $key);
-		$this->outputMediaFromResponses($path, self::detectMime($path, 'image/', 'image/png'));
+		$this->outputMediaFromResponses($path, self::detectMime($path, ['image/'], 'image/png'));
 	}
 	public function outputAudioFromResponses(int $studyId, string $userId, int $entryId, string $key) {
 		$path = Paths::fileAudioFromData($studyId, $userId, $entryId, $key);
-		$this->outputMediaFromResponses($path, self::detectMime($path, '', 'video/3gpp'));
+		$this->outputMediaFromResponses($path, self::detectMime($path, ['audio/', 'video/', 'application/ogg'], 'video/3gpp'));
 	}
 	/**
 	 * The stored file's real type, so recordings from other sources (web: webm, Telegram
 	 * voice notes: ogg/opus, JPEG photos) play back. Falls back to the historical type of the
-	 * native apps when detection fails or yields an unexpected family.
+	 * native apps when detection fails or yields an unexpected family. Only media types are ever returned (never
+	 * text/html, SVG, ...): the files are uploaded by participants.
+	 *
+	 * @param string[] $families allowed type prefixes
 	 */
-	private static function detectMime(string $path, string $family, string $fallback): string {
+	private static function detectMime(string $path, array $families, string $fallback): string {
 		$mime = file_exists($path) && function_exists('mime_content_type') ? (string) @mime_content_type($path) : '';
-		if($mime === '' || $mime === 'application/octet-stream' || ($family !== '' && strpos($mime, $family) !== 0))
+		if($mime === '' || $mime === 'application/octet-stream' || $mime === 'image/svg+xml')
 			return $fallback;
-		return $mime;
+		foreach($families as $family) {
+			if(strpos($mime, $family) === 0)
+				return $mime;
+		}
+		return $fallback;
 	}
+	/**
+	 * What the researcher can download: every questionnaire of the study (its response index exists from the day it was saved, with
+	 * or without answers), questionnaires that have stored responses, and the dated backup copies that still exist as files.
+	 */
 	public function getResponseFilesList(int $studyId): array {
 		$list = [];
-		$events_file = PathsFS::FILENAME_EVENTS . '.csv';
-		$webAccess_file = PathsFS::FILENAME_WEB_ACCESS . '.csv';
-		$path = opendir(PathsFS::folderResponses($studyId));
-		while ($file = readdir($path)) {
-			if ($file[0] != '.' && $file != $events_file && $file != $webAccess_file) {
-				$list[] = substr($file, 0, -4);
-			}
+		$indexFolder = PathsFS::folderResponsesIndex($studyId);
+		foreach(is_dir($indexFolder) ? scandir($indexFolder) : [] as $file) {
+			if ($file[0] != '.' && $file != PathsFS::FILENAME_EVENTS && $file != PathsFS::FILENAME_WEB_ACCESS)
+				$list[$file] = true;
 		}
-		return $list;
+		if(is_file(CollectedDataDb::path())) {
+			$stmt = CollectedDataDb::connection()->prepare('SELECT DISTINCT questionnaire_id FROM responses WHERE study_id = ? AND kind = ? AND questionnaire_id IS NOT NULL');
+			$stmt->execute([$studyId, CollectedDataDb::KIND_QUESTIONNAIRE]);
+			foreach($stmt->fetchAll(\PDO::FETCH_COLUMN) as $id)
+				$list[(string) $id] = true;
+		}
+		$responses = PathsFS::folderResponses($studyId);
+		foreach(is_dir($responses) ? scandir($responses) : [] as $file) {
+			if (preg_match('/^\d{4}-\d{2}-\d{2}_.+\.csv$/', $file))
+				$list[substr($file, 0, -4)] = true;
+		}
+		return array_map(fn($id) => (string) $id, array_keys($list));
 	}
 }

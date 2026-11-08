@@ -36,13 +36,15 @@ class LoginTokenStoreFS implements LoginTokenStore {
 	public function saveLoginToken(string $accountName, string $tokenHash, string $tokenId) {
 		$path = PathsFS::folderToken($accountName);
 		if(!file_exists($path))
-			FileSystemBasics::createFolder($path);
+			FileSystemBasics::createSecretFolder($path);
 		
-		file_put_contents(PathsFS::fileToken($accountName, $tokenId), $tokenHash, LOCK_EX);
+		$file = PathsFS::fileToken($accountName, $tokenId);
+		file_put_contents($file, $tokenHash, LOCK_EX);
+		FileSystemBasics::restrictToOwner($file, FileSystemBasics::SECRET_FILE_MODE);
 	}
 	public function removeLoginToken(string $accountName, string $tokenId) {
 		$path = PathsFS::fileToken($accountName, $tokenId);
-		if(file_exists($path))
+		if(is_file($path))
 			unlink($path);
 	}
 	public function clearAllLoginToken(string $accountName) {

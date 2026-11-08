@@ -355,4 +355,55 @@ class QuestionnaireSaverTest extends BaseMockedTestSetup {
 		$output = $this->getQuestionnaireSaver()->video($input, false, 'name123', 'value123');
 		$this->assertStringContainsString('name="name123"', $output);
 	}
+
+	
+	/**
+	 * Values the participant typed (or an attacker posted cross-site) are shown again when a page is redrawn: they may
+	 * never be able to leave the attribute or the textarea they are shown in.
+	 */
+	function test_participant_values_are_escaped() {
+		$evil = '"><script>alert(1)</script>';
+		$input = $this->createObj(['name' => 'inputName']);
+		foreach(['date', 'time', 'number', 'text_input', 'va_scale'] as $method) {
+			$output = $this->getQuestionnaireSaver()->$method($input, false, 'name123', $evil);
+			$this->assertStringNotContainsString('<script>', $output, $method);
+			$this->assertStringContainsString('&lt;script&gt;', $output, $method);
+		}
+	}
+	
+	function test_study_content_is_sanitised() {
+		$evil = '<p>ok</p><script>alert(1)</script><img src=x onerror=alert(1)><a href="javascript:alert(1)">l</a>';
+		$input = $this->createObj([
+			'name' => 'inputName',
+			'text' => $evil,
+			'description' => $evil,
+			'url' => 'javascript:alert(1)',
+			'listChoices' => ['"><script>alert(1)</script>', 'plain'],
+		]);
+		foreach(['text', 'binary', 'likert', 'va_scale', 'image', 'video', 'list_single', 'list_multiple'] as $method) {
+			$output = $this->getQuestionnaireSaver()->$method($input, false, 'name123', '');
+			$this->assertStringNotContainsString('<script', $output, $method);
+			$this->assertStringNotContainsString('onerror', $output, $method);
+			$this->assertStringNotContainsString('javascript:', $output, $method);
+		}
+		$this->assertStringContainsString('<p>ok</p>', $this->getQuestionnaireSaver()->text($input, false, 'name123', ''));
+	}
+	
+	/**
+	 * The side labels are plain-text fields in the editor: "<" in them is a less-than sign, not markup.
+	 */
+	function test_side_labels_are_plain_text() {
+		$input = $this->createObj(['leftSideLabel' => 'Never (<1h)', 'rightSideLabel' => '<script>alert(1)</script>']);
+		foreach(['binary', 'likert', 'va_scale'] as $method) {
+			$output = $this->getQuestionnaireSaver()->$method($input, false, 'name123', '');
+			$this->assertStringContainsString('Never (&lt;1h)', $output, $method);
+			$this->assertStringNotContainsString('<script>', $output, $method);
+		}
+	}
+	
+	function test_input_name_cannot_break_out_of_its_attributes() {
+		$input = $this->createObj(['name' => 'x"><script>alert(1)</script>', 'responseType' => 'text_input']);
+		$output = $this->getQuestionnaireSaver()->drawInput($input);
+		$this->assertStringNotContainsString('<script>', $output);
+	}
 }

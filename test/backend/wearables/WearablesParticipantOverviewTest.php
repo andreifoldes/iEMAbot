@@ -13,6 +13,8 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 
 	protected function setUp(): void {
 		self::setUpBeforeClass();
+		\backend\sqlite\CollectedDataDb::reset(); // the data folder is recreated per test
+		Configs::$configs['wearables_token_key'] = \backend\channels\SecretBox::generateKey(); // tokens are only stored encrypted
 		$this->createEmptyStudy(self::STUDY);
 	}
 
@@ -20,11 +22,12 @@ class WearablesParticipantOverviewTest extends BaseDataFolderTestSetup {
 		WearablesTokenStore::save(self::STUDY, $userId, $provider, ['access_token' => 'a', 'refresh_token' => 'r']);
 		if($lastDayMs === null && !$withData)
 			return;
-		mkdir(PathsFS::folderWearablesData(self::STUDY), 0777, true);
+		if(!is_dir(PathsFS::folderWearablesData(self::STUDY)))
+			mkdir(PathsFS::folderWearablesData(self::STUDY), 0777, true);
 		if($lastDayMs !== null)
 			file_put_contents(PathsFS::fileWearablesSyncState(self::STUDY, $userId, $provider), json_encode(['lastDayMs' => $lastDayMs]));
-		if($withData)
-			file_put_contents(PathsFS::fileWearablesData(self::STUDY, $userId, $provider), "header\n");
+		if($withData) // fetched data is stored in the files and the database
+			WearablesDataStore::append(self::STUDY, $userId, $provider, [['measurement_time' => '2026-10-20', 'data_type' => 'weight', 'value' => ['kg' => 70]]]);
 	}
 
 	function test_lists_connected_and_unconnected_participants_unconnected_first() {

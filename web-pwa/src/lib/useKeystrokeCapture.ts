@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { KeystrokeRecorderCore, type CaptureMode } from './keystrokeCapture';
 import { startNativeKeystrokes, type NativeKeystrokeSession } from './nativeKeystrokes';
+import { t } from './i18n.ts';
 
 /** Soft nudge target: ~2 min of *active* writing (parity with the ~5-min voice memo). */
 const TARGET_MS = 120_000;
@@ -36,12 +37,12 @@ export interface KeystrokeCapture {
 /** The nudge line under the progress bar. */
 export function nudgeHint(n: { idle: boolean; reached: boolean; lengthShort: boolean }): string {
   return n.idle
-    ? 'Still with you? Keep writing whatever comes to mind — no need for polish.'
+    ? t('pwa_keys_nudge_idle')
     : n.reached
-      ? "That's plenty — finish whenever you're ready, or keep going."
+      ? t('pwa_keys_nudge_reached')
       : n.lengthShort
-        ? 'Almost there — a few more sentences will do.'
-        : 'Try to keep writing continuously for about two minutes.';
+        ? t('pwa_keys_nudge_length')
+        : t('pwa_keys_nudge_start');
 }
 
 export function useKeystrokeCapture(minChars: number) {

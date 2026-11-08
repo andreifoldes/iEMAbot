@@ -23,6 +23,8 @@ class HandoffToken {
 
 	/** @return array{s:int, u:string, ss:string, i:int, e:int}|null */
 	public static function verify(string $token, int $nowSec): ?array {
+		if(!SecretBox::hasKey(ChannelBindingStore::SECRET_KEY))
+			return null; // without a key the MAC would be a plain hash that anyone can compute
 		$parts = explode('.', $token);
 		if(count($parts) !== 2)
 			return null;

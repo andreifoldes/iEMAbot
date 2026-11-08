@@ -9,7 +9,7 @@ use backend\FileSystemBasics;
 class StudyAccessKeyIndexLoader {
 	public static function importFile(): array {
 		$path = PathsFS::fileStudyIndex();
-		return file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), false) : [];
 	}
 	
 	/**

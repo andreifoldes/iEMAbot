@@ -9,6 +9,7 @@ export type RssItem = {
 }
 
 export const RssFetcher = {
+	// TODO(security): tracked in the maintainers' internal notes.
 	loadFeed(max_num_items: number): Promise<RssItem[]> {
 		return Requests.loadRaw(URL_BLOG_RSS).then(
 			(feed: string) => {

@@ -11,5 +11,6 @@ if(php_sapi_name() !== 'cli') {
 require_once dirname(__FILE__, 2) . '/backend/autoload.php';
 
 $result = backend\channels\telegram\TelegramPoller::run(55);
-if(empty($result['skipped']) || $result['skipped'] !== 'another poller is running')
+// Without a bot, or while another poller runs, there is nothing worth a log line every minute.
+if(!in_array($result['skipped'] ?? '', ['another poller is running', 'no bot token'], true))
 	fwrite(STDOUT, date('c') . ' telegram_poll ' . json_encode($result) . "\n");

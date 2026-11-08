@@ -293,7 +293,17 @@ class PathsFS {
 		return self::folderData() . 'fallbackStudies/';
 	}
 	
+	/**
+	 * $encodedUrl is base64_encode()d (standard alphabet) and comes from the request (?fromUrl=). It names a folder,
+	 * so anything that could leave folderFallbackStudies() (".", "\\", ...) is refused.
+	 */
+	static function isEncodedUrl($encodedUrl): bool {
+		return is_string($encodedUrl) && preg_match('/^[A-Za-z0-9+\/=_-]+$/', $encodedUrl) === 1;
+	}
+	
 	static function folderFallbackStudiesUrl(string $encodedUrl): string {
+		if(!self::isEncodedUrl($encodedUrl))
+			throw new CriticalException('Invalid fallback url');
 		return self::folderFallbackStudies() . "$encodedUrl/";
 	}
 	
@@ -341,7 +351,8 @@ class PathsFS {
 	}
 	
 	static function fileLangConfig(int $studyId, string $code): string {
-		return self::folderLangs($studyId) . "/$code.json";
+		//$code reaches us from request data (?lang=, the update.php body): keep it a plain file name
+		return self::folderLangs($studyId) . '/' . Main::sanitizeLangCode($code) . '.json';
 	}
 	
 	static function fileLangImpressum(string $code): string {
@@ -451,7 +462,8 @@ class PathsFS {
 	}
 	
 	static function fileToken(string $accountName, string $hash): string {
-		return self::folderToken($accountName) . $hash;
+		//$hash is the tokenId from the login cookie (request data): keep it a plain file name
+		return self::folderToken($accountName) . Paths::makeSafe($hash);
 	}
 	
 	static function fileTokenHistory(string $accountName, int $num): string {
@@ -491,7 +503,7 @@ class PathsFS {
 	}
 	
 	static function fileFallbackLangConfig(string $encodedUrl, int $studyId, string $code): string {
-		return self::folderFallbackStudyLangs($encodedUrl, $studyId) . "$code.json";
+		return self::folderFallbackStudyLangs($encodedUrl, $studyId) . Main::sanitizeLangCode($code) . '.json';
 	}
 	
 	static function filePluginMetadata(string $pluginId, string $pluginPath = null): string {

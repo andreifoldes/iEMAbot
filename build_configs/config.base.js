@@ -120,6 +120,26 @@ module.exports = {
 					from: path.resolve(SRC, 'cli'),
 					to: path.resolve(DIST, 'cli')
 				},
+				// The study-cli module (create_study.php, check_study.php): its commands and classes, without its tests and fixtures.
+				// It ends up next to backend/, which is where its commands look for the backend.
+				{
+					from: path.resolve(__dirname, '..', 'study-cli', 'bin'),
+					to: path.resolve(DIST, 'study-cli', 'bin')
+				},
+				{
+					from: path.resolve(__dirname, '..', 'study-cli', 'src'),
+					to: path.resolve(DIST, 'study-cli', 'src')
+				},
+				{
+					from: path.resolve(__dirname, '..', 'study-cli', '.htaccess'),
+					to: path.resolve(DIST, 'study-cli', '.htaccess'),
+					toType: 'file'
+				},
+				{
+					from: path.resolve(__dirname, '..', 'study-cli', 'README.md'),
+					to: path.resolve(DIST, 'study-cli', 'README.md'),
+					toType: 'file'
+				},
 				{
 					from: path.resolve(SRC, '.htaccess'),
 					to: path.resolve(DIST)

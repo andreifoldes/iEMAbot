@@ -1,0 +1,158 @@
+{
+    "config": {
+        "wearablesProviders": [],
+        "wearablesDataTypes": [],
+        "accessKeys": [],
+        "langCodes": [
+            "en",
+            "de"
+        ],
+        "title": "Mood study",
+        "studyDescription": "About the study.",
+        "eventUploadSettings": {},
+        "publicStatistics": {
+            "charts": [],
+            "observedVariables": {}
+        },
+        "personalStatistics": {
+            "charts": [],
+            "observedVariables": {}
+        },
+        "pluginData": {},
+        "channels": {
+            "telegram": {}
+        },
+        "schedule": {
+            "checkins": [
+                {
+                    "questionnaireId": 20001
+                }
+            ]
+        },
+        "questionnaires": [
+            {
+                "internalId": 20001,
+                "virtualInputs": [],
+                "title": "Daily",
+                "actionTriggers": [],
+                "pages": [
+                    {
+                        "header": "Today",
+                        "inputs": [
+                            {
+                                "responseType": "list_single",
+                                "name": "mood_now",
+                                "text": "How do you feel?",
+                                "listChoices": [
+                                    "Good",
+                                    "Bad"
+                                ],
+                                "subInputs": []
+                            },
+                            {
+                                "name": "only_english",
+                                "text": "No translation for this one.",
+                                "listChoices": [],
+                                "subInputs": []
+                            },
+                            {
+                                "responseType": "image",
+                                "name": "shared_url",
+                                "text": "Look",
+                                "url": "https://example.org/a.png",
+                                "listChoices": [],
+                                "subInputs": []
+                            }
+                        ]
+                    }
+                ],
+                "sumScores": []
+            }
+        ],
+        "id": 1111,
+        "serverVersion": 12,
+        "packageVersion": "9.9.9",
+        "lang": "en",
+        "version": 1,
+        "subVersion": 0
+    },
+    "languages": {
+        "de": {
+            "wearablesProviders": [],
+            "wearablesDataTypes": [],
+            "accessKeys": [],
+            "langCodes": [
+                "en",
+                "de"
+            ],
+            "title": "Stimmungsstudie",
+            "studyDescription": "Über die Studie.",
+            "eventUploadSettings": {},
+            "publicStatistics": {
+                "charts": [],
+                "observedVariables": {}
+            },
+            "personalStatistics": {
+                "charts": [],
+                "observedVariables": {}
+            },
+            "pluginData": {},
+            "channels": {
+                "telegram": {}
+            },
+            "schedule": {
+                "checkins": [
+                    {
+                        "questionnaireId": 20001
+                    }
+                ]
+            },
+            "questionnaires": [
+                {
+                    "internalId": 20001,
+                    "virtualInputs": [],
+                    "title": "Täglich",
+                    "actionTriggers": [],
+                    "pages": [
+                        {
+                            "header": "Heute",
+                            "inputs": [
+                                {
+                                    "responseType": "list_single",
+                                    "name": "mood_now",
+                                    "text": "Wie fühlst du dich?",
+                                    "listChoices": [
+                                        "Gut",
+                                        "Schlecht"
+                                    ],
+                                    "subInputs": []
+                                },
+                                {
+                                    "name": "only_english",
+                                    "text": "No translation for this one.",
+                                    "listChoices": [],
+                                    "subInputs": []
+                                },
+                                {
+                                    "responseType": "image",
+                                    "name": "shared_url",
+                                    "text": "Look",
+                                    "url": "https://example.org/a.png",
+                                    "listChoices": [],
+                                    "subInputs": []
+                                }
+                            ]
+                        }
+                    ],
+                    "sumScores": []
+                }
+            ],
+            "id": 1111,
+            "serverVersion": 12,
+            "packageVersion": "9.9.9",
+            "lang": "de",
+            "version": 1,
+            "subVersion": 0
+        }
+    }
+}

@@ -4,6 +4,7 @@ namespace backend\schedule;
 
 use backend\fileSystem\PathsFS;
 use backend\FileSystemBasics;
+use backend\sqlite\CollectedDataDb;
 use testConfigs\BaseDataFolderTestSetup;
 
 require_once __DIR__ . '/../../autoload.php';
@@ -19,6 +20,9 @@ class ScheduleCalendarTest extends BaseDataFolderTestSetup {
 	protected function setUp(): void {
 		parent::setUp();
 		// the data folder lives for the whole class: every test starts without responses or subscriptions
+		CollectedDataDb::reset();
+		CollectedDataDb::connection()->exec('DELETE FROM responses');
+		CollectedDataDb::connection()->exec('DELETE FROM push_events');
 		$folder = PathsFS::folderStudies() . self::STUDY_ID;
 		if(is_dir($folder)) {
 			FileSystemBasics::emptyFolder($folder);
@@ -39,15 +43,14 @@ class ScheduleCalendarTest extends BaseDataFolderTestSetup {
 		]], $extra)];
 	}
 
-	/** A response file with the columns the calendar reads, among others. */
+	/** Stored responses with the columns the calendar reads, among others. */
 	private function writeResponses(int $qid, array $rows): void {
-		$folder = PathsFS::folderResponses(self::STUDY_ID);
-		if(!is_dir($folder))
-			mkdir($folder, 0777, true);
-		$lines = ['"entryId";"userId";"timezone";"timezoneOffset";"responseTime";"answer"'];
+		// replaces what the questionnaire had, like writing the response file did
+		CollectedDataDb::connection()->prepare('DELETE FROM responses WHERE study_id = ? AND questionnaire_id = ?')->execute([self::STUDY_ID, $qid]);
+		$stored = [];
 		foreach($rows as $i => [$userId, $t, $zone, $offset])
-			$lines[] = "\"$i\";\"$userId\";\"$zone\";\"$offset\";\"$t\";\"x\"";
-		file_put_contents(PathsFS::fileResponses(self::STUDY_ID, (string) $qid), implode("\n", $lines));
+			$stored[] = ['entryId' => (string) $i, 'userId' => $userId, 'timezone' => $zone, 'timezoneOffset' => $offset, 'responseTime' => (string) $t, 'answer' => 'x'];
+		$this->assertTrue(CollectedDataDb::addResponses(self::STUDY_ID, CollectedDataDb::KIND_QUESTIONNAIRE, $qid, $stored));
 	}
 
 	private function writePushSubscription(string $userId, int $created, int $tzOffset): void {
@@ -147,6 +150,56 @@ class ScheduleCalendarTest extends BaseDataFolderTestSetup {
 		$this->assertSame(0, $result['summary']['expected']);
 	}
 
+	function test_participant_windows_show_when_each_notification_was_sent_received_and_tapped() {
+		$this->writePushSubscription('p1', self::D0 + 8 * self::H, 0);
+		$this->writeResponses(1, [['p1', self::D0 + 9 * self::H + 10 * self::M, '', '0']]);
+		$prompt = self::D0 + 9 * self::H;
+		$reminder = $prompt + 30 * self::M;
+		foreach([
+			['p1', 'sent', $prompt + 30000], ['p1', 'received', $prompt + 31000], ['p1', 'clicked', $prompt + 2 * self::M],
+			['p1', 'sent', $reminder + 25000],                                   // the reminder reached the push service only
+			['p2', 'sent', $prompt + 20000], ['p2', 'clicked', $prompt + self::M],      // somebody else's
+			['p1', 'sent', self::D0 + 14 * self::H],                                   // a push that is no planned notification
+		] as [$user, $event, $t])
+			$this->assertTrue(CollectedDataDb::addPushEvent(self::STUDY_ID, $user, $event, $t));
+
+		$result = ScheduleCalendar::participant($this->study(), self::STUDY_ID, 'p1', self::D0 + 2 * self::DAY + 10 * self::H);
+		[$morning, $evening] = $result['days'][0]['windows'];
+		$this->assertSame([
+			['at' => $prompt, 'sent' => $prompt + 30000, 'failed' => null, 'received' => $prompt + 31000, 'clicked' => $prompt + 2 * self::M],
+			['at' => $reminder, 'sent' => $reminder + 25000, 'failed' => null, 'received' => null, 'clicked' => null],
+		], $morning['pushes']);
+		$this->assertSame([], $evening['pushes'], 'a check-in without a prompt plans no notification');
+		// a day nothing was logged for: its notifications are listed, with nothing sent
+		$this->assertSame(
+			[['at' => $prompt + self::DAY, 'sent' => null, 'failed' => null, 'received' => null, 'clicked' => null],
+				['at' => $reminder + self::DAY, 'sent' => null, 'failed' => null, 'received' => null, 'clicked' => null]],
+			$result['days'][1]['windows'][0]['pushes']);
+	}
+
+	function test_push_times_follow_the_participants_local_clock_like_the_windows() {
+		$this->writePushSubscription('p3', self::D0, 0);
+		$this->writeResponses(1, [['p3', self::D0 + 8 * self::H + 30 * self::M, '', '-60']]); // an hour ahead of UTC
+		$prompt = self::D0 + 8 * self::H; // 09:00 local is 08:00 UTC
+		CollectedDataDb::addPushEvent(self::STUDY_ID, 'p3', 'sent', $prompt + 40000);
+		CollectedDataDb::addPushEvent(self::STUDY_ID, 'p3', 'clicked', $prompt + 3 * self::M);
+		$w = ScheduleCalendar::participant($this->study(), self::STUDY_ID, 'p3', self::D0 + self::DAY)['days'][0]['windows'][0];
+		$this->assertSame(self::D0 + 9 * self::H, $w['prompt']);
+		$this->assertSame(self::D0 + 9 * self::H, $w['pushes'][0]['at']);
+		$this->assertSame(self::D0 + 9 * self::H + 40000, $w['pushes'][0]['sent']);
+		$this->assertSame(self::D0 + 9 * self::H + 3 * self::M, $w['pushes'][0]['clicked']);
+	}
+
+	function test_the_overview_and_the_plan_do_not_carry_push_data() {
+		$this->writePushSubscription('p1', self::D0 + 8 * self::H, 0);
+		$this->writeResponses(1, [['p1', self::D0 + 9 * self::H + 10 * self::M, '', '0']]);
+		CollectedDataDb::addPushEvent(self::STUDY_ID, 'p1', 'sent', self::D0 + 9 * self::H + 30000);
+		$overview = ScheduleCalendar::overview($this->study(), self::STUDY_ID, self::D0 + self::DAY);
+		$this->assertArrayNotHasKey('days', $overview['participants'][0]);
+		$plan = ScheduleCalendar::plan($this->study(), self::D0, [], 1);
+		$this->assertArrayNotHasKey('pushes', $plan['days'][0]['windows'][0]);
+	}
+
 	function test_overview_lists_everyone_with_responses_without_their_windows() {
 		$this->writePushSubscription('p1', self::D0 + 8 * self::H, 0);
 		$this->writeResponses(1, [['p1', self::D0 + 9 * self::H + 30 * self::M, '', '0'], ['p2', self::D0 + self::DAY + 9 * self::H + 5 * self::M, '', '0']]);
@@ -162,10 +215,10 @@ class ScheduleCalendarTest extends BaseDataFolderTestSetup {
 	}
 
 	function test_responses_reads_one_participant_or_everyone() {
-		$this->writeResponses(1, [['p1', 1000, '', '0'], ['p10', 2000, '', '0'], ['p1', 500, '', '0']]);
+		$this->writeResponses(1, [['p1', 1000, '', '0'], ['p10', 2000, '', '0'], ['p1', 500, '', '0'], ['p1', 750, '', '0']]); // not stored in time order
 		$one = ScheduleCalendar::responses($this->study(), self::STUDY_ID, 'p1');
 		$this->assertSame(['p1'], array_keys($one));
-		$this->assertSame([500, 1000], array_column($one['p1']['completions'], 't'));
+		$this->assertSame([500, 750, 1000], array_column($one['p1']['completions'], 't'));
 		$this->assertCount(2, ScheduleCalendar::responses($this->study(), self::STUDY_ID));
 	}
 }

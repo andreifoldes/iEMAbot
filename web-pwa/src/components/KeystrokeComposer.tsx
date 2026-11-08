@@ -17,6 +17,7 @@ import { cn } from '../lib/utils';
 import { type CaptureMode } from '../lib/keystrokeCapture';
 import { newKeystrokeIdentifier } from '../lib/keystrokeUploads';
 import { nudgeHint, useKeystrokeCapture } from '../lib/useKeystrokeCapture';
+import { t } from '../lib/i18n';
 import type { PreloadedQuestion } from '../types';
 
 interface Props {
@@ -70,15 +71,15 @@ export function KeystrokeComposer({ question, menu, onSend }: Props) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); }
           }}
-          aria-label="Write your answer"
-          placeholder="Write your answer…"
+          aria-label={t('pwa_input_write_answer')}
+          placeholder={t('pwa_keys_composer_placeholder')}
           className="flex-1 min-w-0 block resize-none overflow-y-auto max-h-[156px] bg-surface-container-high rounded-[23px] px-4 py-3 text-[15px] leading-[22px] text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
         <button
           onClick={() => void send()}
           disabled={!hasText || sending}
           className="mb-0.5 bg-primary text-on-primary p-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-40 disabled:active:scale-100 shrink-0"
-          aria-label="Send"
+          aria-label={t('pwa_keys_send')}
         >
           <Send size={18} aria-hidden="true" />
         </button>

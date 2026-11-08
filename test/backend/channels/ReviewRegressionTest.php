@@ -17,7 +17,7 @@ require_once __DIR__ . '/../../autoload.php';
 /** Regressions for issues found in the code review of the Telegram channel. */
 class ReviewRegressionTest extends ChannelFlowTestCase {
 	private function csvRows(): int {
-		return count(file(PathsFS::fileResponses(self::STUDY, (string) self::QID))) - 1;
+		return count($this->exportedRows(self::STUDY, (string) self::QID));
 	}
 
 	private function startMorning(array $binding, int $now, array $occurrence = []): void {

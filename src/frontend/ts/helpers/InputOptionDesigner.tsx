@@ -15,6 +15,7 @@ import { BtnAdd, BtnTrash } from "../components/Buttons";
 import { CodeEditor } from "../components/CodeEditor";
 import { RegexTextInput } from "../components/RegexTextInput";
 import { telegramSupportForType } from "./TelegramCompatibility";
+import { ServerInfo } from "../constants/ServerInfo";
 
 
 const InputCategories = {
@@ -668,7 +669,7 @@ export class InputOptionDesigner {
 		const categoryViews: Record<string, Vnode<any, any>[]> = {}
 
 		const selectedType = this.input.responseType.get()
-		const telegramEnabled = this.study.channels.telegram.enabled.get()
+		const telegramEnabled = ServerInfo.telegramConfigured && this.study.channels.telegram.enabled.get()
 		for (const key of this.sortedInputTypeKeys) {
 			const entry = this.inputTypes[key];
 			if (!categoryViews.hasOwnProperty(entry.category))

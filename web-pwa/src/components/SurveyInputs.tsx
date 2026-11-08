@@ -10,7 +10,9 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ChevronRight, Check, Play, Mic, PenLine, Volume2, Square } from 'lucide-react';
 import { cn, splitQuestionHtml } from '../lib/utils';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { speak, speechAvailable, stopSpeaking } from '../lib/speech';
+import { getContentLang, t } from '../lib/i18n';
 import { PromptImage } from './PromptImage';
 import type { PreloadedQuestion } from '../types';
 
@@ -47,13 +49,14 @@ function ListenButton({ text }: { text: string }) {
       onClick={() => {
         if (speaking) { stopSpeaking(); setSpeaking(false); return; }
         setSpeaking(true);
-        speak(text, document.documentElement.lang, () => setSpeaking(false));
+        // The question is spoken in the study's language, which can differ from the interface language.
+        speak(text, getContentLang() ?? document.documentElement.lang, () => setSpeaking(false));
       }}
       aria-pressed={speaking}
       className="mb-3 inline-flex items-center gap-2 min-h-11 px-4 rounded-full bg-secondary-container text-on-secondary-container font-semibold text-sm active:scale-95 transition-all"
     >
       {speaking ? <Square size={16} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
-      {speaking ? 'Stop' : 'Listen'}
+      {speaking ? t('pwa_input_stop') : t('pwa_input_listen')}
     </button>
   );
 }
@@ -136,7 +139,7 @@ export function SurveyInputs({
           {question.type === 'info' ? (
             <div
               className={cn('text-on-surface leading-relaxed esmira-rich', textSizeClass)}
-              dangerouslySetInnerHTML={{ __html: question.text }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.text) }}
             />
           ) : question.is_html ? (
             // Every question's text is authored in ESMira's rich-text editor, so it
@@ -150,10 +153,11 @@ export function SurveyInputs({
             <div
               className={cn('font-semibold text-on-surface leading-snug mb-2 esmira-rich', textSizeClass)}
               dangerouslySetInnerHTML={{
-                __html:
+                __html: sanitizeHtml(
                   question.type === 'audio' || question.type === 'keystroke_text'
                     ? splitQuestionHtml(question.text).intro
                     : question.text,
+                ),
               }}
             />
           ) : (
@@ -167,7 +171,7 @@ export function SurveyInputs({
             // like the question text, authored in ESMira's editor.
             <div
               className={cn('text-on-surface-variant leading-relaxed esmira-rich mb-2', subtextClass(textSizeClass))}
-              dangerouslySetInnerHTML={{ __html: question.subtext }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.subtext) }}
             />
           )}
           {question.type !== 'info' && question.instruction && (
@@ -175,12 +179,12 @@ export function SurveyInputs({
             // regular text colour so it stands apart from the muted explanation above.
             <div
               className={cn('text-on-surface font-medium leading-relaxed esmira-rich mb-2', subtextClass(textSizeClass))}
-              dangerouslySetInnerHTML={{ __html: question.instruction }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(question.instruction) }}
             />
           )}
           {question.spoken_text && <ListenButton key={question.id} text={question.spoken_text} />}
           {question.type !== 'info' && !question.required && (
-            <p className="text-xs text-on-surface-variant italic mb-2">(Optional)</p>
+            <p className="text-xs text-on-surface-variant italic mb-2">{t('pwa_input_optional')}</p>
           )}
 
           {question.type === 'likert' && <LikertInput question={question} onRespond={onRespond} labelSizeClass={anchorLabelClass(textSizeClass)} />}
@@ -195,14 +199,14 @@ export function SurveyInputs({
           {question.type === 'audio' && <AudioCard question={question} onOpenRecorder={onOpenRecorder} onSkip={onSkipAudio} />}
           {question.type === 'keystroke_text' && <KeystrokeCard question={question} writing={writing} onWrite={onOpenKeystroke} onSkip={onContinueInfo} />}
           {question.type === 'text' && (
-            <p className="text-sm text-on-surface-variant mt-2">Type your response below.</p>
+            <p className="text-sm text-on-surface-variant mt-2">{t('pwa_input_type_below')}</p>
           )}
           {question.type === 'info' && (
             <button
               onClick={onContinueInfo}
               className="w-full mt-4 bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
             >
-              Continue
+              {t('pwa_input_continue')}
             </button>
           )}
         </div>
@@ -227,8 +231,8 @@ function CognitiveCard({
   onContinue: () => void;
   taskActions?: TaskActions;
 }) {
-  const title = question.title || 'Assessment';
-  const label = question.launch_label || `Start the ${title}`;
+  const title = question.title || t('pwa_input_assessment');
+  const label = question.launch_label || t('pwa_input_start_the', title);
   return (
     <div className="bg-white dark:bg-surface-container-lowest border border-outline-variant/30 rounded-2xl rounded-tl-none overflow-hidden shadow-xl w-full">
       {/* Hero header */}
@@ -243,7 +247,7 @@ function CognitiveCard({
           <p className="text-sm text-on-surface-variant leading-relaxed whitespace-pre-wrap">{question.description}</p>
         )}
         {!question.required && (
-          <p className="text-xs text-on-surface-variant italic">(Optional)</p>
+          <p className="text-xs text-on-surface-variant italic">{t('pwa_input_optional')}</p>
         )}
         {taskActions ? (
           // Four actions in two rows, as under a task in the Telegram bot.
@@ -253,25 +257,25 @@ function CognitiveCard({
               className="bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
             >
               <Play size={18} aria-hidden="true" />
-              Start task
+              {t('pwa_input_start_task')}
             </button>
             <button
               onClick={onContinue}
               className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
             >
-              Skip task
+              {t('pwa_input_skip_task')}
             </button>
             <button
               onClick={taskActions.onRemindLater}
               className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
             >
-              Remind me later
+              {t('pwa_input_remind_later')}
             </button>
             <button
               onClick={taskActions.onSkipCheckin}
               className="bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
             >
-              Skip check-in
+              {t('pwa_input_skip_checkin')}
             </button>
           </div>
         ) : (
@@ -287,7 +291,7 @@ function CognitiveCard({
               onClick={onContinue}
               className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
             >
-              Skip
+              {t('pwa_input_skip')}
             </button>
           </>
         )}
@@ -315,14 +319,14 @@ function AudioCard({
         className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
       >
         <Mic size={18} aria-hidden="true" />
-        Record voice memo
+        {t('pwa_input_record_voice_memo')}
       </button>
       {!question.required && (
         <button
           onClick={onSkip}
           className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
         >
-          Skip
+          {t('pwa_input_skip')}
         </button>
       )}
     </div>
@@ -362,12 +366,12 @@ function KeystrokeCard({
           {detail && (
             <div
               className="text-center text-on-surface-variant leading-relaxed esmira-rich"
-              dangerouslySetInnerHTML={{ __html: detail }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail) }}
             />
           )}
           <p className="flex items-center gap-2 text-sm text-on-surface-variant">
             <PenLine size={16} aria-hidden="true" className="shrink-0" />
-            Write your answer in the box below, then tap Send.
+            {t('pwa_input_write_hint')}
           </p>
         </>
       ) : (
@@ -376,7 +380,7 @@ function KeystrokeCard({
           className="w-full bg-primary text-on-primary font-bold py-3 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all active:scale-95"
         >
           <PenLine size={18} aria-hidden="true" />
-          Write your answer
+          {t('pwa_input_write_answer')}
         </button>
       )}
       {!question.required && (
@@ -384,7 +388,7 @@ function KeystrokeCard({
           onClick={onSkip}
           className="w-full bg-surface-container-high text-on-surface font-semibold py-3 rounded-full transition-all active:scale-95 hover:bg-surface-container-highest"
         >
-          Skip
+          {t('pwa_input_skip')}
         </button>
       )}
     </div>
@@ -395,8 +399,11 @@ function LikertInput({ question, onRespond, labelSizeClass }: { question: Preloa
   const min = question.scale_min ?? 1;
   const max = question.scale_max ?? 5;
   const values = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-  const groupLabel = `Rate from ${min}${question.scale_min_label ? ` (${question.scale_min_label})` : ''} `
-    + `to ${max}${question.scale_max_label ? ` (${question.scale_max_label})` : ''}`;
+  const groupLabel = t(
+    'pwa_input_rate_from',
+    question.scale_min_label ? t('pwa_input_value_with_label', min, question.scale_min_label) : String(min),
+    question.scale_max_label ? t('pwa_input_value_with_label', max, question.scale_max_label) : String(max),
+  );
   const btnClass = 'min-w-11 w-full h-11 rounded-full bg-surface-container-high hover:bg-primary hover:text-on-primary transition-all font-bold flex items-center justify-center active:scale-90';
   // Scales of 5+ points move the end labels to a legend (WCAG 1.4.10 reflow). A
   // 5-point scale always stays on one row (buttons shrink below 44px on very narrow
@@ -407,9 +414,9 @@ function LikertInput({ question, onRespond, labelSizeClass }: { question: Preloa
       <div role="group" aria-label={groupLabel} className="mt-3 px-1">
         {(question.scale_min_label || question.scale_max_label) && (
           <p className={cn('mb-2 font-medium text-on-surface-variant', labelSizeClass)}>
-            {question.scale_min_label ? `${min} = ${question.scale_min_label}` : ''}
+            {question.scale_min_label ? t('pwa_input_scale_anchor', min, question.scale_min_label) : ''}
             {question.scale_min_label && question.scale_max_label ? ' · ' : ''}
-            {question.scale_max_label ? `${max} = ${question.scale_max_label}` : ''}
+            {question.scale_max_label ? t('pwa_input_scale_anchor', max, question.scale_max_label) : ''}
           </p>
         )}
         <div className={cn('grid', oneRow ? 'grid-cols-5 gap-1.5' : 'grid-cols-[repeat(auto-fit,minmax(2.75rem,1fr))] gap-2')}>
@@ -444,11 +451,11 @@ function LikertInput({ question, onRespond, labelSizeClass }: { question: Preloa
 
 function YesNoInput({ question, onRespond }: { question: PreloadedQuestion; onRespond: (id: string, v: string) => void }) {
   const opts = [
-    { label: question.yes_label || 'Yes', value: question.yes_value ?? 'Yes', primary: true },
-    { label: question.no_label || 'No', value: question.no_value ?? 'No', primary: false },
+    { label: question.yes_label || t('pwa_input_yes'), value: question.yes_value ?? 'Yes', primary: true },
+    { label: question.no_label || t('pwa_input_no'), value: question.no_value ?? 'No', primary: false },
   ];
   return (
-    <div role="group" aria-label="Yes or no" className="flex gap-3 mt-4">
+    <div role="group" aria-label={t('pwa_input_yes_or_no')} className="flex gap-3 mt-4">
       {opts.map((o) => (
         <button
           key={o.value}
@@ -470,7 +477,7 @@ function ChoiceList({ question, onRespond }: { question: PreloadedQuestion; onRe
   // the KSS are visible in their entirety. Tall lists rely on the page scroll — the
   // auto-scroll in App aligns the question's top when the card exceeds the viewport.
   return (
-    <div role="group" aria-label="Answer options" className="mt-4 flex flex-col gap-2">
+    <div role="group" aria-label={t('pwa_input_answer_options')} className="mt-4 flex flex-col gap-2">
       {question.options!.map((opt) => (
         <button
           key={opt}
@@ -498,7 +505,7 @@ function MultiChoice({ question, onRespond }: { question: PreloadedQuestion; onR
     });
   return (
     <div className="mt-4 flex flex-col gap-2">
-      <div role="group" aria-label="Select all that apply" className="flex flex-col gap-2">
+      <div role="group" aria-label={t('pwa_input_select_all')} className="flex flex-col gap-2">
         {question.options!.map((opt) => {
           const on = selected.has(opt);
           return (
@@ -522,7 +529,7 @@ function MultiChoice({ question, onRespond }: { question: PreloadedQuestion; onR
         onClick={() => onRespond(question.id, Array.from(selected).join(','))}
         className="w-full mt-2 bg-primary text-on-primary font-bold py-3 rounded-full transition-all active:scale-95 hover:brightness-110"
       >
-        Done
+        {t('pwa_input_done')}
       </button>
     </div>
   );
@@ -537,9 +544,9 @@ function NumberInput({ question, onRespond }: { question: PreloadedQuestion; onR
         step={question.decimal ? '0.5' : '1'}
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        aria-label={plainText(question.text) || 'Enter a number'}
+        aria-label={plainText(question.text) || t('pwa_input_enter_number')}
         className="flex-1 bg-surface-container-low rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
-        placeholder="Enter a number"
+        placeholder={t('pwa_input_enter_number')}
       />
     </ConfirmRow>
   );
@@ -564,13 +571,13 @@ function TimeInput({ question, onRespond }: { question: PreloadedQuestion; onRes
   return (
     <ConfirmRow disabled={hh === '' || mm === ''} onConfirm={() => onRespond(question.id, `${hh}:${mm}`)}>
       <div className="flex flex-1 items-center gap-2">
-        <select value={hh} onChange={(e) => setHh(e.target.value)} className={selectCls} aria-label="Hour">
-          <option value="" disabled>HH</option>
+        <select value={hh} onChange={(e) => setHh(e.target.value)} className={selectCls} aria-label={t('pwa_input_hour')}>
+          <option value="" disabled>{t('pwa_input_hh')}</option>
           {TIME_HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
         </select>
         <span className="font-bold text-on-surface-variant">:</span>
-        <select value={mm} onChange={(e) => setMm(e.target.value)} className={selectCls} aria-label="Minute">
-          <option value="" disabled>MM</option>
+        <select value={mm} onChange={(e) => setMm(e.target.value)} className={selectCls} aria-label={t('pwa_input_minute')}>
+          <option value="" disabled>{t('pwa_input_mm')}</option>
           {minutes.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
@@ -600,16 +607,16 @@ function DurationInput({ question, onRespond }: { question: PreloadedQuestion; o
   return (
     <ConfirmRow disabled={h === '' || m === '' || total < 1} onConfirm={() => onRespond(question.id, String(total))}>
       <div className="flex flex-1 items-center gap-2">
-        <select value={h} onChange={(e) => setH(e.target.value)} className={selectCls} aria-label="Hours">
-          <option value="" disabled>Hours</option>
+        <select value={h} onChange={(e) => setH(e.target.value)} className={selectCls} aria-label={t('pwa_input_hours')}>
+          <option value="" disabled>{t('pwa_input_hours')}</option>
           {hours.map((x) => <option key={x} value={x}>{x}</option>)}
         </select>
-        <span className="text-sm font-medium text-on-surface-variant">h</span>
-        <select value={m} onChange={(e) => setM(e.target.value)} className={selectCls} aria-label="Minutes">
-          <option value="" disabled>Minutes</option>
+        <span className="text-sm font-medium text-on-surface-variant">{t('pwa_input_unit_h')}</span>
+        <select value={m} onChange={(e) => setM(e.target.value)} className={selectCls} aria-label={t('pwa_input_minutes')}>
+          <option value="" disabled>{t('pwa_input_minutes')}</option>
           {minutes.map((x) => <option key={x} value={x}>{x}</option>)}
         </select>
-        <span className="text-sm font-medium text-on-surface-variant">min</span>
+        <span className="text-sm font-medium text-on-surface-variant">{t('pwa_input_unit_min')}</span>
       </div>
     </ConfirmRow>
   );
@@ -623,7 +630,7 @@ function DateInput({ question, onRespond }: { question: PreloadedQuestion; onRes
         type="date"
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        aria-label={plainText(question.text) || 'Select a date'}
+        aria-label={plainText(question.text) || t('pwa_input_select_date')}
         className="flex-1 bg-surface-container-low rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50"
       />
     </ConfirmRow>
@@ -647,7 +654,7 @@ function VaScale({ question, onRespond, labelSizeClass }: { question: PreloadedQ
         max={max}
         value={val}
         onChange={(e) => setVal(Number(e.target.value))}
-        aria-label={plainText(question.text) || 'Visual analogue scale'}
+        aria-label={plainText(question.text) || t('pwa_input_va_scale')}
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={val}
@@ -658,7 +665,7 @@ function VaScale({ question, onRespond, labelSizeClass }: { question: PreloadedQ
         onClick={() => onRespond(question.id, String(val))}
         className="w-full bg-primary text-on-primary font-bold py-3 rounded-full transition-all active:scale-95 hover:brightness-110"
       >
-        Confirm
+        {t('pwa_input_confirm')}
       </button>
     </div>
   );
@@ -672,7 +679,7 @@ function ConfirmRow({ children, disabled, onConfirm }: { children: React.ReactNo
         onClick={onConfirm}
         disabled={disabled}
         className="bg-primary text-on-primary font-bold p-3 rounded-full transition-all active:scale-95 hover:brightness-110 disabled:opacity-40 disabled:active:scale-100"
-        aria-label="Confirm"
+        aria-label={t('pwa_input_confirm')}
       >
         <Check size={18} aria-hidden="true" />
       </button>

@@ -9,3 +9,14 @@ AddType application/manifest+json .webmanifest
     Header set Cache-Control "no-cache, no-store, must-revalidate"
   </IfModule>
 </FilesMatch>
+
+# handoff.html is opened from chat channels as a Telegram Mini App. Telegram's web clients show Mini Apps in an
+# iframe on telegram.org and load telegram-web-app.js from there. Everything else keeps the rules of the root .htaccess.
+# The policy is the root one plus https://telegram.org in script-src (test/backend/SecurityHeadersTest.php checks that).
+<Files "handoff.html">
+  <IfModule mod_headers.c>
+    Header always set Content-Security-Policy "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org https://telegram.org"
+    Header always unset X-Frame-Options
+    Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' blob: https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://raw.githubusercontent.com https://api.github.com https://kl-psychological-methodology.github.io; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'"
+  </IfModule>
+</Files>

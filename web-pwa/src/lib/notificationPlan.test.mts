@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire, ScheduleCheckin } from '../types.ts';
 import { planReminders, reminderId } from './notificationPlan.ts';
+import './testI18n.mts';
 
 const DAY = 86400000;
 const H = 3600000;

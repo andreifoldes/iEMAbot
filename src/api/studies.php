@@ -1,5 +1,6 @@
 <?php
 
+use backend\bugReports\GithubIssueReports;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\JsonOutput;
@@ -21,7 +22,11 @@ $studyStore = Configs::getDataStore()->getStudyStore();
 
 try {
     $key = isset($_GET['access_key']) ? strtolower(trim($_GET['access_key'])) : '';
-    $lang = Main::getLang(false);
+    // The participant web app asks for the language the researcher chose (study setting webLanguage)
+    // with study_lang. Unlike `lang` it does not set the language cookie, which would also switch the
+    // dashboard's language for whoever opened the app on that browser.
+    $studyLang = $_GET['study_lang'] ?? '';
+    $lang = (is_string($studyLang) && preg_match('/^[A-Za-z_]{2,10}$/', $studyLang)) ? $studyLang : Main::getLang(false);
     
     $ids = Configs::getDataStore()->getStudyAccessIndexStore()->getStudyIds($key);
     $dataStore = Configs::getDataStore();
@@ -46,7 +51,9 @@ $dataset = '[' .implode(',', $studiesJson) .']';
 //  - vapidPublicKey: lets it register web push (only used for webPushEnabled studies).
 //  - wearableProviders: which wearable providers have server credentials configured, so
 //    the PWA only offers the intersection of these and a study's wearablesProviders.
-// Both are safe to expose publicly.
+//  - errorReportsToGithub: error reports are also filed as issues on GitHub (private repository),
+//    which the report dialog tells the participant.
+// All are safe to expose publicly.
 $extra = [];
 $vapidPublicKey = Configs::get('vapid_public_key');
 if(!empty($vapidPublicKey))
@@ -54,6 +61,8 @@ if(!empty($vapidPublicKey))
 $wearableProviders = WearablesRegistry::configuredProviders();
 if(!empty($wearableProviders))
 	$extra['wearableProviders'] = $wearableProviders;
+if(GithubIssueReports::isConfigured())
+	$extra['errorReportsToGithub'] = true;
 
 if(!empty($extra))
 	echo JsonOutput::successStringWithExtra($dataset, $extra);

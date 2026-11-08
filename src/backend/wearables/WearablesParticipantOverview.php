@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace backend\wearables;
 
+use backend\sqlite\WearableExport;
 use backend\fileSystem\PathsFS;
 use backend\Paths;
 
@@ -39,7 +40,7 @@ class WearablesParticipantOverview {
 				$byUser[$userId][] = [
 					'provider' => $provider,
 					'lastSync' => self::lastSync($studyId, $userId, $provider),
-					'hasData'  => file_exists(PathsFS::fileWearablesData($studyId, $userId, $provider)),
+					'hasData'  => WearableExport::hasMeasurements($studyId, $userId, $provider),
 					'needsReconnect' => WearablesTokenStore::isRevoked($studyId, $userId, $provider),
 				];
 			}
@@ -62,7 +63,7 @@ class WearablesParticipantOverview {
 	 * server for them. Every notification is kept, whether or not a trigger uses it.
 	 */
 	private static function lastEvent(int $studyId, string $userId): ?array {
-		return WearablesEventArchive::last($studyId, $userId);
+		return WearableExport::lastEvent($studyId, $userId);
 	}
 
 	/** At least one linked provider the provider still accepts. */

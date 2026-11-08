@@ -1,0 +1,49 @@
+{
+  "_": {
+    "id": 1111,
+    "packageVersion": "9.9.9",
+    "serverVersion": 12,
+    "wearablesProviders": [],
+    "wearablesDataTypes": [],
+    "accessKeys": [],
+    "langCodes": [
+      "en"
+    ],
+    "title": "Minimal study",
+    "questionnaires": [
+      {
+        "internalId": 20001,
+        "virtualInputs": [],
+        "title": "Check-in",
+        "actionTriggers": [],
+        "pages": [
+          {
+            "inputs": [
+              {
+                "name": "note",
+                "listChoices": [],
+                "subInputs": []
+              }
+            ]
+          }
+        ],
+        "sumScores": []
+      }
+    ],
+    "eventUploadSettings": {},
+    "publicStatistics": {
+      "charts": []
+    },
+    "personalStatistics": {
+      "charts": []
+    },
+    "pluginData": {},
+    "channels": {
+      "telegram": {}
+    },
+    "schedule": {
+      "checkins": []
+    },
+    "lang": "en"
+  }
+}

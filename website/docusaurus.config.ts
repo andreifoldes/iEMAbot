@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'iEMAbot / ESMira Fork',
+  title: 'iEMAbot',
   tagline:
     'Open-source, self-hosted EMA for circadian and sleep research: ESMira backend + installable participant PWA',
   favicon: 'img/favicon.ico',
@@ -32,6 +32,23 @@ const config: Config = {
     },
   },
   themes: ['@docusaurus/theme-mermaid'],
+
+  plugins: [
+    [
+      // Keep old bookmarks working after pages moved into the Backend hierarchy.
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {from: '/pwa/question-types', to: '/backend/question-types'},
+          {from: '/pwa/cognitive-tasks', to: '/backend/question-types/cognitive-tasks'},
+          {from: '/backend/web-push', to: '/backend/channels/web-push'},
+          {from: '/backend/chat-channels', to: '/backend/channels/chat-channels'},
+          {from: '/android-app', to: '/backend/channels/android-app'},
+          {from: '/backend/phone-sensing', to: '/backend/channels/phone-sensing'},
+        ],
+      },
+    ],
+  ],
 
   i18n: {
     defaultLocale: 'en',
@@ -61,7 +78,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'iEMAbot / ESMira Fork',
+      title: 'iEMAbot',
       logo: {
         alt: 'iEMAbot',
         src: 'img/logo.png',
@@ -91,6 +108,7 @@ const config: Config = {
           items: [
             {label: 'Fork repository', href: 'https://github.com/andreifoldes/iEMAbot'},
             {label: 'Current status', to: '/current-status'},
+            {label: 'Maintainers', to: '/#maintainers'},
           ],
         },
         {

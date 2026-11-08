@@ -6,23 +6,19 @@ saved rows can then be compared column by column.
 
 ## 1. Create the demo study
 
-`tools/live-study/create-demo-all-types.php` creates (or refreshes in place) the study
-**"Demo: all question types"** with access key `demo-study`. It is published for the web, has the
-Telegram channel on, and every item's helper text says what each channel should do, so the study
-doubles as a manual checklist. Run it on the server as the web user (dry run without `apply`):
-
-```bash
-docker compose exec -T -u www-data esmira php -- apply < tools/live-study/create-demo-all-types.php
-```
-
-It prints the study id. The Telegram invite link comes from
-`php cli/telegram_setup.php invite <studyId> demo-study`, and the web link is `<server>/pwa/?key=demo-study`.
+Create a study titled **"Demo: all question types"** that holds one item of every input type. Publish
+it for the web, switch the Telegram channel on, and give every item helper text that says what each
+channel should do, so the study doubles as a manual checklist. Pick an access key of your own and note
+the study id. (The maintainers generate this study with a script kept in the private deployment
+repository.) The Telegram invite link comes from
+`php cli/telegram_setup.php invite <studyId> <access-key>`, and the web link is
+`<server>/pwa/?key=<access-key>`.
 
 ## 2. Web PWA: `pwa_demo.mjs`
 
 ```bash
 (cd web-pwa/a11y && npm ci)          # once: Playwright, shared with the accessibility audit
-node tools/e2e/pwa_demo.mjs https://<server>/pwa/ demo-study [screenshot.png]
+node tools/e2e/pwa_demo.mjs https://<server>/pwa/ <access-key> [screenshot.png]
 ```
 
 This emulates a phone and uses a fresh participant id. It consents, picks a name and answers every
@@ -39,7 +35,7 @@ api_id and api_hash from <https://my.telegram.org> and log in once, which create
 ```bash
 export TELEGRAM_API_ID=… TELEGRAM_API_HASH=… TELEGRAM_SESSION=/path/to/session
 uv run --with telethon --with python-dotenv tools/e2e/telegram_demo.py \
-  <bot_username> s<studyId>_demo-study https://<server>/esmira/
+  <bot_username> s<studyId>_<study-key> https://<server>/esmira/
 ```
 
 The driver joins through the deep link, consents, sets the time zone, opens the questionnaire with

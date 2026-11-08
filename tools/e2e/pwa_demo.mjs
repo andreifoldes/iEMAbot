@@ -8,7 +8,7 @@
  * completes.
  *
  * Uses the Playwright install of the accessibility audit (web-pwa/a11y,  there once):
- *   node tools/e2e/pwa_demo.mjs <pwa_base_url> [access_key=demo-study] [screenshot.png]
+ *   node tools/e2e/pwa_demo.mjs <pwa_base_url> <access_key> [screenshot.png]
  *   e.g. node tools/e2e/pwa_demo.mjs https://ema.example.org/pwa/
  */
 import { createRequire } from 'node:module';
@@ -16,7 +16,11 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(fileURLToPath(new URL('../../web-pwa/a11y/package.json', import.meta.url)));
 const { chromium, devices } = require('playwright');
 const BASE = (process.argv[2] || '').replace(/\/?$/, '/');
-const KEY = process.argv[3] || 'demo-study';
+const KEY = process.argv[3] || '';
+if (!BASE.startsWith('http') || !KEY) {
+  console.error('usage: node tools/e2e/pwa_demo.mjs <pwa_base_url> <access_key> [screenshot.png]');
+  process.exit(2);
+}
 const OUT = process.argv[4] || '';
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ ...devices['iPhone 13'] });

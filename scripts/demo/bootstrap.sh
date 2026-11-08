@@ -18,7 +18,9 @@ STUDY_ID=4242
 JAR="$(mktemp)"
 trap 'rm -f "$JAR"' EXIT
 
-api() { curl -fsS -c "$JAR" -b "$JAR" "$@"; }
+# BOOTSTRAP_CURL_ARGS: extra curl options, for example -k for a server with a private certificate.
+# shellcheck disable=SC2086 # deliberately split into separate options
+api() { curl -fsS ${BOOTSTRAP_CURL_ARGS:-} -c "$JAR" -b "$JAR" "$@"; }
 json_get() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(sys.argv[1], ""))' "$1"; }
 
 # Server is initialised once GetPermissions answers without needing InitESMira.

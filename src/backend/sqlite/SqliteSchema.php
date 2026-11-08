@@ -87,7 +87,41 @@ class SqliteSchema {
 			UNIQUE (study_id, user_id, provider, measurement_time, data_type, value)
 		)',
 
-		// Messages sent by participants to the researchers (replies from researchers are not collected data).
+		// Provider notifications of a linked wearable (see WearablesEventArchive): one row per notification, with the
+		// period it covers. Interval and local-time columns hold exactly what the CSV holds ('' when the provider omits it),
+		// so a row is identical in both stores and the UNIQUE key can recognise a re-import.
+		'CREATE TABLE IF NOT EXISTS wearable_events (
+			id INTEGER PRIMARY KEY,
+			study_id INTEGER NOT NULL,
+			user_id TEXT NOT NULL,
+			provider TEXT NOT NULL,
+			event TEXT NOT NULL,
+			detail TEXT NOT NULL,
+			received_at INTEGER NOT NULL,
+			interval_start TEXT NOT NULL,
+			interval_end TEXT NOT NULL,
+			local_start TEXT NOT NULL,
+			local_end TEXT NOT NULL,
+			UNIQUE (study_id, user_id, provider, event, detail, received_at, interval_start, interval_end, local_start, local_end)
+		)',
+
+		// Messages from the researchers to a participant, with where they are in their life: `pending` (waiting for the app to
+		// fetch them; `delivered` counts the fetches) or `archived` (the app has them; `read_at` is when). The files are the
+		// truth for the state, so a write replaces it. Participant messages are in participant_messages.
+		'CREATE TABLE IF NOT EXISTS researcher_messages (
+			id INTEGER PRIMARY KEY,
+			study_id INTEGER NOT NULL,
+			user_id TEXT NOT NULL,
+			sender TEXT NOT NULL,
+			content TEXT NOT NULL,
+			sent_at INTEGER NOT NULL,
+			state TEXT NOT NULL,
+			delivered INTEGER NOT NULL,
+			read_at INTEGER NOT NULL,
+			UNIQUE (study_id, user_id, sent_at)
+		)',
+
+		// Messages sent by participants to the researchers (replies from researchers are in researcher_messages).
 		'CREATE TABLE IF NOT EXISTS participant_messages (
 			id INTEGER PRIMARY KEY,
 			study_id INTEGER NOT NULL,
@@ -164,6 +198,8 @@ class SqliteSchema {
 		if($current === 1)
 			$pdo->exec('DROP TABLE IF EXISTS push_events');
 		// v3: sensor_data, sensor_chunks and sensor_batches added (created below).
+		// v4: wearable_events added (created below).
+		// v5: researcher_messages added (created below).
 
 		foreach(self::TABLES as $sql)
 			$pdo->exec($sql);

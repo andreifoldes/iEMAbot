@@ -114,11 +114,11 @@ export class Content extends SectionContent {
 			if(!compareSemVersion(this.sectionData.siteData.packageVersion, tagName)) {
 				continue
 			}
-			if(!assets?.length) {
+			if(!assets?.length && !this.getTools().containerImage) {
 				continue // nothing to install from
 			}
 
-			let data = { version: tagName, date: new Date(publishedAt), changeLog: body, downloadUrl: assets[0]["browser_download_url"] };
+			let data = { version: tagName, date: new Date(publishedAt), changeLog: body, downloadUrl: assets?.[0]?.["browser_download_url"] ?? "" };
 			if (prerelease) {
 				unstableReleases.push(data);
 			}
@@ -242,7 +242,7 @@ export class Content extends SectionContent {
 					template: {
 						title: Lang.get("messaging_channels"),
 						icon: m.trust(telegramSvg),
-						msg: ServerInfo.telegramBotUsername ? `@${ServerInfo.telegramBotUsername}` : undefined
+						msg: ServerInfo.telegramBotUsername ? `@${ServerInfo.telegramBotUsername}` : Lang.get("disabled")
 					},
 					href: this.getUrl("messagingChannels")
 				}),
@@ -270,7 +270,10 @@ export class Content extends SectionContent {
 							<span class="highlight">{this.newestVersionName}</span>
 						</div>
 						<div class="center spacingTop">
-							<input type="button" onclick={this.updateNow.bind(this)} value={Lang.get("update_now")} />
+							{this.getTools().containerImage
+								? <div>{Lang.get("info_update_container_image")}</div>
+								: <input type="button" onclick={this.updateNow.bind(this)} value={Lang.get("update_now")} />
+							}
 						</div>
 						{this.releaseData.map((data) =>
 							<div class="spacingTop">

@@ -1,4 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react';
+import { t } from '../lib/i18n';
 
 /** Side of the rendered code in px, including its quiet zone. */
 export const INSTALL_QR_SIZE = 176;
@@ -14,7 +15,7 @@ export default function InstallQr({ url, size = INSTALL_QR_SIZE }: { url: string
   return (
     <div className="inline-block bg-white rounded-xl shadow-inner overflow-hidden leading-none">
       <QRCodeSVG
-        title="QR code for this page"
+        title={t('pwa_qr_title')}
         value={url}
         size={size}
         marginSize={INSTALL_QR_MARGIN}

@@ -13,6 +13,7 @@ use backend\fileSystem\loader\FallbackTokenLoader;
 use backend\Main;
 use backend\Permission;
 use backend\PermissionTokenType;
+use backend\SecretCompare;
 use backend\subStores\FallbackTokenStore;
 
 class FallbackTokenStoreFS implements FallbackTokenStore
@@ -104,7 +105,7 @@ class FallbackTokenStoreFS implements FallbackTokenStore
 		$selectedSetupToken = null;
 
 		foreach ($setupTokens as $setupToken) {
-			if (strcmp($setupToken->hashedToken, $hashedToken) === 0) {
+			if (SecretCompare::equals($setupToken->hashedToken, $hashedToken)) {
 				$selectedSetupToken = $setupToken;
 			} else {
 				$trimmedSetupTokens[] = $setupToken;
@@ -179,7 +180,7 @@ class FallbackTokenStoreFS implements FallbackTokenStore
 			if (!$token instanceof InboundFallbackToken) {
 				throw new CriticalException("Invalid data in FallbackTokenStore");
 			}
-			if (strcmp($hashedToken, $token->hashedToken) === 0)
+			if (SecretCompare::equals($token->hashedToken, $hashedToken))
 				return true;
 		}
 		return false;
@@ -193,7 +194,7 @@ class FallbackTokenStoreFS implements FallbackTokenStore
 			if (!$token instanceof InboundFallbackToken) {
 				throw new CriticalException("Invalid data in FallbackTokenStore");
 			}
-			if (strcmp($hashedToken, $token->hashedToken) === 0)
+			if (SecretCompare::equals($token->hashedToken, $hashedToken))
 				return $token->otherServerUrl;
 		}
 		return "";

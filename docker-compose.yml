@@ -1,3 +1,4 @@
+# This is upstream ESMira's file and runs upstream's image. To run iEMAbot, use the self-host kit: deploy/selfhost/README.md
 services:
   esmira:
     image: jodlidev/esmira:latest

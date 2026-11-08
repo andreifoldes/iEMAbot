@@ -15,6 +15,14 @@ if(!isset($_GET['type'])) {
 	return;
 }
 
+//CSRF protection: this endpoint is driven by cookies/session, so a page on another site must not be able to
+//make a logged-in browser call it (e.g. <img src=".../admin.php?type=DeleteStudy&study_id=1">).
+if(\backend\Main::isCrossSiteRequest()) {
+	http_response_code(403);
+	echo JsonOutput::error('Cross-site request blocked');
+	return;
+}
+
 $classIndex = [
 	//no permission:
 	'DataFolderExists' => 'backend\admin\features\noPermission\DataFolderExists',
@@ -80,6 +88,7 @@ $classIndex = [
 	'SendTestPush' => 'backend\admin\features\writePermission\SendTestPush',
 	'SendTestPushToParticipant' => 'backend\admin\features\writePermission\SendTestPushToParticipant',
 	'WithdrawParticipant' => 'backend\admin\features\writePermission\WithdrawParticipant',
+	'DeleteParticipantData' => 'backend\admin\features\writePermission\DeleteParticipantData',
 	'SaveStudy' => 'backend\admin\features\writePermission\SaveStudy',
 	'MarkStudyAsUpdated' => 'backend\admin\features\writePermission\MarkStudyAsUpdated',
 	'GetOutboundFallbackUrls' => 'backend\admin\features\writePermission\GetOutboundFallbackUrls',
@@ -154,4 +163,4 @@ catch(CriticalException $e) {
 }
 catch(PageFlowException $e) {
 	echo JsonOutput::error($e->getMessage());
-}
+}

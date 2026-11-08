@@ -41,6 +41,19 @@ export const FALLBACK_NONE = "none"
 export const OVERLAP_DEFER = "defer"
 export const OVERLAP_TRUNCATE = "truncate"
 
+/** Open all day, every day, as often as the participant likes. What a study's first questionnaire starts with in the dashboard. */
+export const ALWAYS_OPEN_CHECKIN = {
+	parallel: true,
+	startType: BOUNDARY_FIXED,
+	startTime: 0,
+	endType: BOUNDARY_FIXED,
+	endTime: 0,
+	endNextDay: true,
+	prompt: PROMPT_NONE,
+	available: AVAILABLE_RANGE,
+	limit: LIMIT_NONE,
+}
+
 /**
  * One check-in: a questionnaire, the days it runs on, its daily time range, when it is prompted, when it can be
  * answered, how often it can be completed, and its notification.
@@ -154,4 +167,26 @@ export class StudySchedule extends DataStructure {
 	public bedDefault			= this.primitive<number>("bedDefault", 82800000)		// 23:00
 
 	public checkins				= this.objectArray("checkins", ScheduleCheckin)
+
+	/**
+	 * The study's only check-in, if it is ALWAYS_OPEN_CHECKIN. A planned check-in added next to it would not limit anything, because
+	 * that questionnaire could still be answered at any time. A researcher may also want this on purpose, so ask before replacing it.
+	 */
+	public getOnlyAlwaysOpen(): ScheduleCheckin | null {
+		const checkins = this.checkins.get()
+		if(checkins.length != 1)
+			return null
+		const checkin = checkins[0]
+		return checkin.parallel.get() == ALWAYS_OPEN_CHECKIN.parallel
+			&& checkin.startType.get() == ALWAYS_OPEN_CHECKIN.startType
+			&& checkin.startTime.get() == ALWAYS_OPEN_CHECKIN.startTime
+			&& checkin.endType.get() == ALWAYS_OPEN_CHECKIN.endType
+			&& checkin.endTime.get() == ALWAYS_OPEN_CHECKIN.endTime
+			&& checkin.endNextDay.get() == ALWAYS_OPEN_CHECKIN.endNextDay
+			&& checkin.prompt.get() == ALWAYS_OPEN_CHECKIN.prompt
+			&& checkin.available.get() == ALWAYS_OPEN_CHECKIN.available
+			&& checkin.limit.get() == ALWAYS_OPEN_CHECKIN.limit
+			? checkin
+			: null
+	}
 }

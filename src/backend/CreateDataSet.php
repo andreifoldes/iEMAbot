@@ -10,6 +10,7 @@ use backend\exceptions\CriticalException;
 use backend\exceptions\DataSetException;
 use backend\notifications\ParticipantVariableStore;
 use backend\schedule\Schedule;
+use backend\sqlite\CollectedDataDb;
 use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\UserDataStore;
 use stdClass;
@@ -54,8 +55,9 @@ class CreateDataSet {
 	public $output = [];
 	
 	public static function stripOneLineInput(string $s) {
-		if(strlen($s) > Configs::get('user_input_max_length'))
-			$s = substr($s, 0, Configs::get('user_input_max_length'));
+		$maxLength = (int) Configs::get('user_input_max_length');
+		if(strlen($s) > $maxLength) // cut by bytes, but never inside a multibyte character (that would leave invalid UTF-8)
+			$s = function_exists('mb_strcut') ? mb_strcut($s, 0, $maxLength, 'UTF-8') : substr($s, 0, $maxLength);
 		//it should be ok to save user input mostly "as is" to the filesystem as long as its not used otherwise:
 		$s = str_replace('"', '\'', $s);
 		
@@ -123,8 +125,11 @@ class CreateDataSet {
 		}
 	}
 	private function lineOutputError(int $datasetId, string $s) {
+		// A dataset reaches several stores (statistics, its questionnaire, the event log). Whichever fails last decides: the entry
+		// written at its position turns into the failure. (This used to write to $this->output[$datasetId], which is some other
+		// dataset's position or a new key, so `states` became a JSON object and a failed dataset could still read as saved.)
 		if(isset($this->outputIndex[$datasetId]))
-			$this->output[$datasetId] = ['dataSetId' => $datasetId, 'success' => false, 'error' => $s];
+			$this->output[$this->outputIndex[$datasetId]] = ['dataSetId' => $datasetId, 'success' => false, 'error' => $s];
 		else {
 			$this->outputIndex[$datasetId] = count($this->output);
 			$this->output[] = ['dataSetId' => $datasetId, 'success' => false, 'error' => $s];
@@ -391,8 +396,9 @@ class CreateDataSet {
 		catch(CriticalException $e) {
 			throw new DataSetException($e->getMessage());
 		}
-		
-		if(sizeof($accessKeys) && (!isset($dataSet->accessKey) || !in_array(strtolower(trim($dataSet->accessKey)), $accessKeys)))
+
+		// TODO(security): tracked in the maintainers' internal notes.
+		if(sizeof($accessKeys) && (!isset($dataSet->accessKey) || !SecretCompare::inList($accessKeys, strtolower(trim($dataSet->accessKey)))))
 			throw new DataSetException('Wrong accessKey: ' .($dataSet->accessKey ?? ''));
 		
 		
@@ -461,6 +467,11 @@ class CreateDataSet {
 		
 		
 		if($this->shouldWriteDataSet($dataSet)) {
+			// The reply to an earlier attempt got lost, so the app sent it again. It has what it needs: that the server holds it.
+			if($this->isResendOfStoredAnswers($dataSet)) {
+				$this->lineOutputSuccess($this->getDataSetId($dataSet));
+				return;
+			}
 			$this->handleEventDataSet($dataSet);
 			
 			if($eventType === self::DATASET_TYPE_QUESTIONNAIRE)
@@ -472,6 +483,17 @@ class CreateDataSet {
 			else if($eventType === self::DATASET_TYPE_QUIT)
 				$this->updateWithdrawal($studyId, true);
 		}
+	}
+	
+	/**
+	 * A participant's questionnaire answered at the same millisecond is the same submission: a resend gets a new entry id, but
+	 * keeps the time it was answered. Without a database to ask (or if asking fails) it counts as new: better twice than lost.
+	 */
+	private function isResendOfStoredAnswers(stdClass $dataSet): bool {
+		$responseTime = (int) ($dataSet->responseTime ?? 0);
+		return $dataSet->eventType === self::DATASET_TYPE_QUESTIONNAIRE
+			&& $responseTime > 0
+			&& CollectedDataDb::holdsQuestionnaireAnswer($this->getStudyId($dataSet), (int) ($dataSet->questionnaireInternalId ?? -1), (string) $this->userId, $responseTime);
 	}
 	
 	/**

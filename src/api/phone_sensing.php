@@ -6,6 +6,7 @@ use backend\fileSystem\PathsFS;
 use backend\JsonOutput;
 use backend\Main;
 use backend\PhoneSensingStore;
+use backend\SecretCompare;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -77,7 +78,7 @@ try {
 	}
 
 	$accessKeys = $dataStore->getStudyMetadataStore($studyId)->getAccessKeys();
-	if(sizeof($accessKeys) && !in_array(strtolower(trim((string) ($json['accessKey'] ?? ''))), $accessKeys)) {
+	if(sizeof($accessKeys) && !SecretCompare::inList($accessKeys, strtolower(trim((string) ($json['accessKey'] ?? ''))))) {
 		echo JsonOutput::error('Wrong accessKey');
 		return;
 	}

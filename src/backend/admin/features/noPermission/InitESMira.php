@@ -8,11 +8,12 @@ use backend\Configs;
 use backend\FileSystemBasics;
 use backend\exceptions\PageFlowException;
 use backend\Permission;
+use backend\SelfHost;
 use Throwable;
 
 class InitESMira extends NoPermission {
 	function exec(): array {
-		if(Configs::getDataStore()->isInit())
+		if(Configs::getDataStore()->isInit() || !SelfHost::firstRunPageAllowed())
 			throw new PageFlowException('Disabled');
 		else if(!isset($_POST['new_account']) || !isset($_POST['pass']))
 			throw new PageFlowException('Missing data');

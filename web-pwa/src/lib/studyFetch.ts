@@ -5,6 +5,7 @@
 import type { EsmiraStudy, StudiesEnvelope } from '../types.ts';
 import { getApiRoot } from './serverRoot.ts';
 import { rewriteBundledAssets } from './bundledAssets.ts';
+import { t } from './i18n.ts';
 
 declare const __BUNDLED_PUBLIC__: string[] | undefined;
 const bundled = typeof __BUNDLED_PUBLIC__ === 'undefined' ? [] : __BUNDLED_PUBLIC__;
@@ -16,6 +17,8 @@ export interface FetchedStudy {
   vapidPublicKey?: string;
   /** Wearable providers with credentials configured on the server. */
   wearableProviders?: string[];
+  /** The server also passes error reports on to developers on GitHub (shown to the participant). */
+  errorReportsToGithub?: boolean;
   /** True when the server could not be reached and this is the copy saved on the device. */
   fromCache?: boolean;
 }
@@ -27,8 +30,8 @@ function studyEnvKey(accessKey: string): string {
 }
 
 function pickStudy(env: StudiesEnvelope, studyId?: number): FetchedStudy {
-  if (!env.success) throw new Error(env.error || 'Study fetch failed');
-  if (!env.dataset?.length) throw new Error('No study found for this access key');
+  if (!env.success) throw new Error(env.error || t('pwa_api_study_fetch_failed'));
+  if (!env.dataset?.length) throw new Error(t('pwa_api_no_study'));
   const study = studyId != null
     ? env.dataset.find(s => s.id === studyId) ?? env.dataset[0]
     : env.dataset[0];
@@ -37,6 +40,7 @@ function pickStudy(env: StudiesEnvelope, studyId?: number): FetchedStudy {
     serverVersion: env.serverVersion,
     vapidPublicKey: env.vapidPublicKey,
     wearableProviders: env.wearableProviders,
+    errorReportsToGithub: env.errorReportsToGithub === true,
   };
 }
 
@@ -62,10 +66,35 @@ export async function fetchStudy(accessKey: string, studyId?: number): Promise<F
     if (cached) return { ...pickStudy(cached, studyId), fromCache: true };
     throw new Error(`studies.php returned ${resp.status}`);
   }
-  const env = (await resp.json()) as StudiesEnvelope;
-  const picked = pickStudy(env, studyId);
+  let env = (await resp.json()) as StudiesEnvelope;
+  let picked = pickStudy(env, studyId);
+  // The researcher chose the app's language: ask for the study's own text in it too, when the study
+  // has been translated into it. Any problem keeps the study as first fetched (its default language).
+  const wanted = studyLangToRequest(picked.study);
+  if (wanted) {
+    try {
+      const again = await fetch(`${url}&study_lang=${encodeURIComponent(wanted)}`, { headers: { Accept: 'application/json' } });
+      if (again.ok) {
+        const env2 = (await again.json()) as StudiesEnvelope;
+        picked = pickStudy(env2, studyId);
+        env = env2;
+      }
+    } catch { /* keep the first copy */ }
+  }
   try { localStorage.setItem(cacheKey, JSON.stringify(env)); } catch { /* storage full or unavailable: just no offline copy */ }
   return picked;
+}
+
+/**
+ * The language code to request the study in, when the researcher's `webLanguage` names a language the
+ * study is translated into and the study did not arrive in it. Otherwise null.
+ */
+export function studyLangToRequest(study: Pick<EsmiraStudy, 'webLanguage' | 'langCodes' | 'lang'>): string | null {
+  const norm = (c: string) => c.trim().replace('-', '_').toLowerCase();
+  const wanted = study.webLanguage ? norm(study.webLanguage) : '';
+  if (!wanted || (study.lang && norm(study.lang) === wanted)) return null;
+  const code = (study.langCodes ?? []).find((c) => typeof c === 'string' && norm(c) === wanted);
+  return code ?? null;
 }
 
 function readCachedEnvelope(key: string): StudiesEnvelope | null {

@@ -16,6 +16,7 @@ require_once __DIR__ . '/../autoload.php';
 class StudiesTest extends BaseApiTestSetup {
 	private $isAdmin = false;
 	private $hasException = false;
+	private $lastLang = null;
 	private $allJsons = [
 		123 => '{123}',
 		234 => '{234}',
@@ -52,7 +53,8 @@ class StudiesTest extends BaseApiTestSetup {
 		
 		$studyStore = $this->createStub(StudyStore::class);
 		$studyStore->method('getStudyLangConfigAsJson')
-			->willReturnCallback(function(int $studyId): string {
+			->willReturnCallback(function(int $studyId, string $lang = ''): string {
+				$this->lastLang = $lang;
 				if($this->hasException)
 					throw new CriticalException('Unit test exception');
 				return $this->allLangJsons[$studyId];
@@ -112,6 +114,34 @@ class StudiesTest extends BaseApiTestSetup {
 		
 		require DIR_BASE .'/api/studies.php';
 		$this->expectOutputString($this->arrayToJson($this->accessKeyIndex['key1'], true));
+	}
+	
+	function test_study_lang_is_passed_on_without_setting_the_cookie() {
+		$this->setGet(['access_key' => 'key1', 'study_lang' => 'de']);
+		
+		require DIR_BASE .'/api/studies.php';
+		$this->expectOutputString($this->arrayToJson($this->accessKeyIndex['key1'], true));
+		$this->assertSame('de', $this->lastLang);
+		$this->assertArrayNotHasKey('lang', $_COOKIE);
+	}
+	
+	function test_unsafe_study_lang_is_ignored() {
+		$this->setGet(['access_key' => 'key1', 'study_lang' => '../../etc/passwd']);
+		
+		require DIR_BASE .'/api/studies.php';
+		$this->expectOutputString($this->arrayToJson($this->accessKeyIndex['key1'], true));
+		$this->assertNotSame('../../etc/passwd', $this->lastLang);
+	}
+	
+	function test_error_reports_to_github_is_announced_only_when_configured() {
+		require DIR_BASE .'/api/studies.php';
+		$this->expectOutputString($this->arrayToJson($this->accessKeyIndex[''], true));
+	}
+	
+	function test_error_reports_to_github_flag_when_configured() {
+		\backend\Configs::resetConfig(['github_issues_repo' => 'owner/repo', 'github_issues_token' => 'token']);
+		require DIR_BASE .'/api/studies.php';
+		$this->expectOutputRegex('/"errorReportsToGithub":true/');
 	}
 	
 	function test_with_exception() {

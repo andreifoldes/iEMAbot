@@ -22,6 +22,7 @@
 **/charts
 **/docker-compose*
 **/compose.y*ml
+!deploy/selfhost/compose.yml
 !**/composer.json
 !**/composer.lock
 **/Dockerfile*

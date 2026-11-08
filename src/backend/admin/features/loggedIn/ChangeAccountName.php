@@ -39,7 +39,7 @@ class ChangeAccountName extends IsLoggedIn {
 		if(Permission::getAccountName() == $accountName) {
 			$_SESSION['account'] = $newAccountName;
 			if(isset($_COOKIE['account']))
-				Main::setCookie('account', $newAccountName, time()+31536000);
+				Main::setCookie('account', $newAccountName, time()+31536000, true);
 		}
 		
 		return [];

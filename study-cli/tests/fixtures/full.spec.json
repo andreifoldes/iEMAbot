@@ -1,0 +1,69 @@
+{
+  "title": "Sleep and mood study",
+  "published": true,
+  "accessKeys": ["sleepmood", "sm2026"],
+  "studyDescription": "<p>How you sleep and feel.</p>",
+  "informedConsentForm": "You agree to take part.",
+  "contactEmail": "lab@example.org",
+  "webPhoneOnly": true,
+  "messagePacingWpm": 200,
+  "sendMessagesAllowed": true,
+  "wearablesEnabled": true,
+  "wearablesProviders": ["withings"],
+  "channels": { "telegram": { "enabled": true } },
+  "eventUploadSettings": { "notification": true },
+  "questionnaires": [
+    {
+      "title": "Morning check-in",
+      "pages": [
+        {
+          "header": "Sleep",
+          "inputs": [
+            { "name": "bed_time", "responseType": "time", "text": "When did you go to bed?" },
+            { "name": "sleep_quality", "responseType": "likert", "likertSteps": 7, "required": true, "leftSideLabel": "bad", "rightSideLabel": "good" },
+            { "name": "sleep_note", "maxLength": 200, "required": false }
+          ]
+        },
+        {
+          "relevance": "sleep_quality > 3",
+          "inputs": [
+            { "name": "mood_today", "responseType": "list_single", "listChoices": ["Good", "Okay", "Bad"], "other": true },
+            { "name": "activities", "responseType": "list_multiple", "listChoices": ["Walk", "Read"] }
+          ]
+        }
+      ],
+      "sumScores": [{ "name": "total_score", "addList": ["sleep_quality"] }],
+      "virtualInputs": ["derived_flag"]
+    },
+    {
+      "title": "Evening",
+      "showPagination": false,
+      "pages": [
+        {
+          "inputs": [
+            {
+              "name": "dyn_item",
+              "responseType": "dynamic_input",
+              "subInputs": [
+                { "responseType": "likert", "text": "How stressed are you?" },
+                { "responseType": "likert", "text": "How energetic are you?" }
+              ]
+            },
+            { "name": "reaction_task", "responseType": "webapp", "url": "https://example.org/task/index.html", "text": "Reaction game", "webappDescription": "Tap as fast as you can." },
+            { "name": "voice_memo", "responseType": "record_audio", "maxLength": 120 },
+            { "name": "typed_memo", "responseType": "record_keystrokes", "minLength": 20 },
+            { "name": "energy_slider", "responseType": "va_scale", "maxValue": 100, "instruction": "Slide to your level." },
+            { "name": "show_picture", "responseType": "image", "url": "https://example.org/picture.png", "imageAlt": "A kitchen" }
+          ]
+        }
+      ]
+    }
+  ],
+  "schedule": {
+    "dayStart": 14400000,
+    "checkins": [
+      { "questionnaire": "Morning check-in", "startType": "fixed", "startTime": 21600000, "endType": "fixed", "endTime": 36000000, "prompt": "random", "reminderCount": 2 },
+      { "questionnaire": "Evening", "limit": "day" }
+    ]
+  }
+}

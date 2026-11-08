@@ -2,6 +2,7 @@
 
 namespace backend\fileSystem\loader;
 
+use backend\dataClasses\Message;
 use backend\exceptions\CriticalException;
 use backend\FileSystemBasics;
 
@@ -41,7 +42,7 @@ trait MessagesLoader {
 			else
 				return [];
 		}
-		return empty($content) ? [] : unserialize($content);
+		return empty($content) ? [] : FileSystemBasics::readSerialized($content, [Message::class]);
 	}
 	
 	/**

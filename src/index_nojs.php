@@ -1,5 +1,7 @@
 <?php
 
+// TODO: LIVE CHECK V6 (needs a browser): with scripts off, open a web questionnaire that has a "<" in a side label, submit, go back; the
+// answers are still filled in. Tracker Part 1.
 require_once 'backend/autoload.php';
 
 use backend\Configs;
@@ -57,7 +59,7 @@ function getPageObj(): Page {
  */
 function pageToOutput(Page $page) {
 	echo '<div class="sectionTop"><div class="sectionTitle">'
-			.$page->getTitle()
+			.backend\HtmlSanitizer::escape($page->getTitle())
 		.'</div></div>'
 		.'<div class="sectionContent">' .$page->getContent() .'</div>';
 }

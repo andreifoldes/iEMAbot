@@ -48,6 +48,8 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { t } from '../lib/i18n';
+import { rich } from './richText';
 import {
   CHROME_IOS_MIN,
   IOS_PUSH_MIN,
@@ -92,7 +94,7 @@ export function InstallPrompt({
               className="w-full inline-flex items-center justify-center gap-2 bg-secondary-container text-on-secondary-container font-semibold py-3 rounded-full active:scale-95 hover:brightness-95 transition-all"
             >
               <Download size={18} aria-hidden="true" />
-              Install app
+              {t('pwa_install_app')}
             </button>
             {!install.desktop && <FindAppHint os={findAppHintOS(install.ios)} />}
           </>
@@ -111,12 +113,12 @@ export function InstallPrompt({
     <div className={cn('relative shrink-0', className)}>
       <button
         onClick={platform === 'native' ? runNativePrompt : () => setShowHint((v) => !v)}
-        aria-label="Install app"
+        aria-label={t('pwa_install_app')}
         aria-expanded={platform === 'native' ? undefined : showHint}
         className="header-pill inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-semibold text-xs px-3 py-1.5 rounded-full active:scale-95 transition-all"
       >
         {platform === 'native' ? <Download size={14} aria-hidden="true" /> : <Share size={14} aria-hidden="true" />}
-        <span>Install</span>
+        <span>{t('pwa_install_pill')}</span>
       </button>
       {platform !== 'native' && showHint && (
         <div className="absolute right-0 top-full mt-2 w-72 z-50 text-on-surface">
@@ -134,15 +136,9 @@ function InstalledNotice({ install, className }: { install: PwaInstall; classNam
       <p className="flex items-start gap-2 text-sm text-on-surface leading-relaxed">
         <Check size={16} className="shrink-0 mt-0.5 text-primary" aria-hidden="true" />
         {install.desktop ? (
-          <span>
-            iEMAbot is installed. Click <strong>Open in app</strong> at the right end of the address
-            bar (or open it from your Dock or app launcher), then enter your invite code.
-          </span>
+          <span>{rich(t('pwa_install_done_desktop'))}</span>
         ) : (
-          <span>
-            Added to your Home Screen! Now open <strong>iEMAbot</strong> from there and enter your
-            invite code.
-          </span>
+          <span>{rich(t('pwa_install_done_mobile'))}</span>
         )}
       </p>
       {!install.desktop && <FindAppHint os={findAppHintOS(install.ios)} />}
@@ -164,38 +160,31 @@ function Key({ label, icon }: { label: string; icon: ReactNode }) {
 /** Numbered "Add to Home Screen" steps, worded for Safari or Chrome on iOS. */
 function iosSteps(browser: IOSBrowser): ReactNode[] {
   const isChrome = browser === 'chrome';
+  const share = <Key label={t('pwa_install_key_share')} icon={<Share size={14} aria-hidden="true" />} />;
+  const addHome = <Key label={t('pwa_install_key_add_home')} icon={<Plus size={14} aria-hidden="true" />} />;
   return [
-    isChrome ? (
-      <>
-        Tap the <Key label="Share" icon={<Share size={14} aria-hidden="true" />} /> icon to the right
-        of the address bar.
-      </>
-    ) : (
-      <>
-        Tap the{' '}
-        <span className={SHARE_ICON_CLASS}>
-          <MoreHorizontal size={14} aria-label="More (•••)" />
-        </span>{' '}
-        button at the bottom-right, then{' '}
-        <Key label="Share" icon={<Share size={14} aria-hidden="true" />} /> (on older iPhones, Share
-        is right in Safari’s toolbar).
-      </>
-    ),
-    <>
-      {isChrome ? (
-        <>
-          Tap <Key label="View More" icon={<ChevronDown size={14} aria-hidden="true" />} />, then scroll
-          down and choose
-        </>
-      ) : (
-        'Scroll down and choose'
-      )}{' '}
-      <Key label="Add to Home Screen" icon={<Plus size={14} aria-hidden="true" />} />.
-    </>,
-    <>
-      Tap <strong className="text-on-surface">Add</strong> in the top-right.
-    </>,
-    'Open the app from your Home Screen, then enter your invite code.',
+    isChrome
+      ? rich(t('pwa_install_ios_chrome_share'), { slots: { share } })
+      : rich(t('pwa_install_ios_safari_share'), {
+          slots: {
+            more: (
+              <span className={SHARE_ICON_CLASS}>
+                <MoreHorizontal size={14} aria-label={t('pwa_install_more_aria')} />
+              </span>
+            ),
+            share,
+          },
+        }),
+    isChrome
+      ? rich(t('pwa_install_ios_chrome_add'), {
+          slots: {
+            viewmore: <Key label={t('pwa_install_key_view_more')} icon={<ChevronDown size={14} aria-hidden="true" />} />,
+            addhome: addHome,
+          },
+        })
+      : rich(t('pwa_install_ios_safari_add'), { slots: { addhome: addHome } }),
+    rich(t('pwa_install_ios_tap_add'), { strongClass: 'text-on-surface' }),
+    t('pwa_install_open_app'),
   ];
 }
 
@@ -216,19 +205,13 @@ function iosBlockedContent(support: IOSSupport): Instruction | null {
   const { blockReason, version, browserVersion } = support;
   switch (blockReason) {
     case 'os-outdated': {
-      const current = version ? `${version.major}.${version.minor}` : 'an older version';
+      const current = version ? `${version.major}.${version.minor}` : t('pwa_install_older_version');
       return {
         icon: AlertTriangle,
         warn: true,
-        title: 'Update iOS to install the app',
+        title: t('pwa_install_ios_update_title'),
         steps: [
-          <>
-            This device is running iOS {current}. Update to{' '}
-            <strong className="text-on-surface">
-              iOS {IOS_PUSH_MIN.major}.{IOS_PUSH_MIN.minor} or later
-            </strong>{' '}
-            (Settings → General → Software Update) to install iEMAbot and receive reminders.
-          </>,
+          rich(t('pwa_install_ios_update_body', current, `${IOS_PUSH_MIN.major}.${IOS_PUSH_MIN.minor}`), { strongClass: 'text-on-surface' }),
         ],
       };
     }
@@ -236,25 +219,18 @@ function iosBlockedContent(support: IOSSupport): Instruction | null {
       return {
         icon: AlertTriangle,
         warn: true,
-        title: 'Update Chrome to install the app',
+        title: t('pwa_install_chrome_update_title'),
         steps: [
-          <>
-            Your Chrome{browserVersion ? ` (v${browserVersion})` : ''} is too old to add apps to the
-            Home Screen (needs v{CHROME_IOS_MIN}+). Update Chrome in the App Store, or open this page
-            in <strong className="text-on-surface">Safari</strong>.
-          </>,
+          rich(t('pwa_install_chrome_update_body', browserVersion ? ` (v${browserVersion})` : '', CHROME_IOS_MIN), { strongClass: 'text-on-surface' }),
         ],
       };
     case 'unsupported-browser':
       return {
         icon: AlertTriangle,
         warn: true,
-        title: 'Open this page in Safari or Chrome',
+        title: t('pwa_install_safari_chrome_title'),
         steps: [
-          <>
-            On iPhone and iPad, only <strong className="text-on-surface">Safari</strong> and{' '}
-            <strong className="text-on-surface">Chrome</strong> can add iEMAbot to your Home Screen.
-          </>,
+          rich(t('pwa_install_safari_chrome_body'), { strongClass: 'text-on-surface' }),
         ],
       };
     default:
@@ -269,7 +245,7 @@ function instructionFor(platform: Exclude<InstallPlatform, 'native'>, install: P
       if (blocked) return blocked;
       return {
         icon: Share,
-        title: 'Add this app to your Home Screen',
+        title: t('pwa_install_ios_title'),
         steps: iosSteps(install.iosSupport.browser),
         hint: 'ios',
       };
@@ -278,60 +254,52 @@ function instructionFor(platform: Exclude<InstallPlatform, 'native'>, install: P
       return {
         icon: Globe,
         warn: true,
-        title: 'Open this page in your browser',
+        title: t('pwa_install_inapp_title'),
         steps: install.ios
           ? [
-              'Copy the link below.',
-              <>
-                Open <strong className="text-on-surface">Safari</strong> (or Chrome) and paste it into
-                the address bar.
-              </>,
+              t('pwa_install_inapp_copy'),
+              rich(t('pwa_install_inapp_safari'), { strongClass: 'text-on-surface' }),
             ]
           : [
-              <>
-                Tap the <strong className="text-on-surface">⋮</strong> menu (top-right).
-              </>,
-              <>
-                Choose <strong className="text-on-surface">“Open in Chrome”</strong> (or “Open in
-                browser”).
-              </>,
+              rich(t('pwa_install_inapp_menu'), { strongClass: 'text-on-surface' }),
+              rich(t('pwa_install_inapp_choose'), { strongClass: 'text-on-surface' }),
             ],
         extra: <CopyLink />,
       };
     case 'macos-safari':
       return {
         icon: Download,
-        title: 'Add this app to your Dock',
+        title: t('pwa_install_dock_title'),
         steps: [
-          'In Safari’s menu bar, choose File → “Add to Dock” (or the Share button → “Add to Dock”).',
-          'Open the app from your Dock, then enter your invite code.',
+          t('pwa_install_dock_step1'),
+          t('pwa_install_dock_step2'),
         ],
       };
     case 'android':
       return {
         icon: MoreVertical,
-        title: 'Install this app',
+        title: t('pwa_install_this_app'),
         steps: [
-          'Open your browser’s menu (⋮).',
-          'Tap “Install app” or “Add to Home screen”.',
-          'Open the app from your Home Screen, then enter your invite code.',
+          t('pwa_install_android_menu'),
+          t('pwa_install_android_tap'),
+          t('pwa_install_open_app'),
         ],
         hint: 'android',
       };
     case 'desktop-chromium':
       return {
         icon: Download,
-        title: 'Install this app',
+        title: t('pwa_install_this_app'),
         steps: [
-          'Click the install icon (a screen with a down-arrow, or ⊕) at the right end of the address bar — or open the browser menu (⋮) → “Save and Share” → “Install page as app…”. If the address bar shows “Open in app” instead, it is already installed: click that.',
-          'Open the installed app, then enter your invite code.',
+          t('pwa_install_desktop_step1'),
+          t('pwa_install_desktop_step2'),
         ],
       };
     case 'unsupported':
       return {
         icon: ExternalLink,
-        title: 'This browser can’t install the app',
-        steps: ['Open this page in Chrome, Edge or Safari to install the app and continue.'],
+        title: t('pwa_install_unsupported_title'),
+        steps: [t('pwa_install_unsupported_step')],
         extra: <CopyLink />,
       };
   }
@@ -392,7 +360,7 @@ function InstallInstructions({
           )}
         </div>
         {onClose && (
-          <button onClick={onClose} aria-label="Dismiss" className="shrink-0 text-on-surface-variant">
+          <button onClick={onClose} aria-label={t('pwa_install_dismiss')} className="shrink-0 text-on-surface-variant">
             <X size={16} aria-hidden="true" />
           </button>
         )}
@@ -421,7 +389,7 @@ function CopyLink() {
       className="mt-2.5 w-full inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container-high dark:bg-surface-container-highest text-on-surface font-medium text-xs active:scale-95 transition-all"
     >
       {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-      <span className="truncate">{copied ? 'Link copied' : url}</span>
+      <span className="truncate">{copied ? t('pwa_install_link_copied') : url}</span>
     </button>
   );
 }
@@ -443,13 +411,12 @@ function PhoneHandoff({ defaultOpen }: { defaultOpen: boolean }) {
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant hover:text-on-surface underline underline-offset-2 transition-colors"
       >
         <Smartphone size={14} aria-hidden="true" />
-        {open ? 'Hide QR code' : 'Use your phone instead'}
+        {open ? t('pwa_install_hide_qr') : t('pwa_install_use_phone')}
       </button>
       {open && (
         <div className="mt-3 flex flex-col items-center gap-2">
           <p className="text-xs text-on-surface-variant leading-relaxed">
-            iEMAbot works best on a phone. Scan this code with your phone camera to continue there, or
-            copy the link below.
+            {t('pwa_install_phone_note')}
           </p>
           <Suspense
             fallback={
@@ -464,8 +431,7 @@ function PhoneHandoff({ defaultOpen }: { defaultOpen: boolean }) {
             <CopyLink />
           </div>
           <p className="text-[12px] text-on-surface-variant leading-relaxed">
-            Open it in <strong>Safari</strong> or <strong>Chrome</strong> (iPhone), or{' '}
-            <strong>Chrome</strong> (Android).
+            {rich(t('pwa_install_phone_browsers'))}
           </p>
         </div>
       )}

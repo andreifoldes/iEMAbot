@@ -19,7 +19,7 @@ class ResponsesIndexLoader {
 			throw new CriticalException("Study seems to be broken");
 		}
 		
-		return unserialize(file_get_contents($pathIndex));
+		return FileSystemBasics::readSerialized(file_get_contents($pathIndex), [ResponsesIndex::class]);
 	}
 	
 	/**

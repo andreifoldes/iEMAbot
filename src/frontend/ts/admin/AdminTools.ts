@@ -26,6 +26,7 @@ export class AdminTools implements AdminToolsInterface {
 	public accountName: string = ""
 	public readonly freeDiskSpace: number
 	public readonly totalDiskSpace: number
+	public readonly containerImage: boolean
 
 	constructor(data: LoginDataInterface) {
 		this.hasErrors = data.hasErrors
@@ -36,6 +37,7 @@ export class AdminTools implements AdminToolsInterface {
 		this.accountName = data.accountName
 		this.canCreate = data.canCreate
 		this.canIssueFallbackTokens = data.canIssueFallbackTokens
+		this.containerImage = !!data.containerImage
 
 
 		if (data.isAdmin) {

@@ -2,6 +2,7 @@
 
 namespace backend\noJs\pages;
 
+use backend\HtmlSanitizer;
 use backend\CreateDataSet;
 use backend\exceptions\CriticalException;
 use backend\exceptions\PageFlowException;
@@ -84,10 +85,7 @@ class QuestionnaireAttend implements Page {
 		}
 		else if($this->inputObj->isCompleted) {
 			return '<p class="center">'
-				.($this->study->webQuestionnaireCompletedInstructions
-					?? Lang::get('default_webQuestionnaireCompletedInstructions')
-					?: Lang::get('default_webQuestionnaireCompletedInstructions')
-				)
+				.(HtmlSanitizer::clean($this->study->webQuestionnaireCompletedInstructions ?? '') ?: Lang::get('default_webQuestionnaireCompletedInstructions'))
 				.'</p></div>';
 		}
 		else if($this->dataMissing) {

@@ -63,7 +63,7 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 		$this->press($this->buttonData('Yes'), $at);
 		$this->press($this->buttonData('4'), $at);
 		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
-		$csv = file_get_contents(PathsFS::fileResponses(self::STUDY, (string) self::QID));
+		$csv = $this->exportedCsv(self::STUDY, (string) self::QID);
 		$this->assertStringContainsString($binding['userId'], $csv);
 		$this->assertStringContainsString('Telegram', $csv);
 
@@ -117,7 +117,7 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 
 		HandoffService::complete($token, ['value' => 63]);
 		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
-		$csv = file_get_contents(PathsFS::fileResponses(self::STUDY, (string) self::QID));
+		$csv = $this->exportedCsv(self::STUDY, (string) self::QID);
 		$this->assertStringEndsWith('"0";"2";"63"', trim($csv));
 
 		// the token cannot be replayed
@@ -165,10 +165,8 @@ class TelegramFlowTest extends ChannelFlowTestCase {
 			$this->service->handleEvent($ev, $now);
 
 		$this->assertStringContainsString('Your answers have been saved', $this->sentTexts());
-		$csv = file(PathsFS::fileResponses(4545, '888'));
-		$row = str_getcsv(trim(end($csv)), ';');
-		$header = str_getcsv(trim($csv[0]), ';');
-		$entryId = $row[array_search('entryId', $header)];
+		$rows = $this->exportedRows(4545, '888');
+		$entryId = end($rows)['entryId'];
 		$file = \backend\Paths::fileAudioFromData(4545, $binding['userId'], (int) $entryId, 'memo');
 		$this->assertFileExists($file);
 		$this->assertSame('OggS-fake-voice-VOICE1', file_get_contents($file));

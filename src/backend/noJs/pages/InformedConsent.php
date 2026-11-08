@@ -2,6 +2,7 @@
 
 namespace backend\noJs\pages;
 
+use backend\HtmlSanitizer;
 use backend\exceptions\CriticalException;
 use Exception;
 use backend\noJs\NoJsMain;
@@ -20,7 +21,7 @@ class InformedConsent implements Page {
 		
 		$output = '<p class="wrap">';
 		if($study != null && isset($study->informedConsentForm))
-			$output .= $study->informedConsentForm;
+			$output .= HtmlSanitizer::escape($study->informedConsentForm); //plain-text field
 		$output .= '</p><div class="titleRow">'.Lang::get('cookie_consent') .'</div>
 			<p class="wrap">' .Lang::get('cookie_consent_desc') .'</p>
 			<form method="post" action="" class="center">

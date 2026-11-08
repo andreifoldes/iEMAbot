@@ -15,6 +15,7 @@ import rewardsSvg from "../../imgs/dashIcons/rewards.svg?raw"
 import settingsSvg from "../../imgs/dashIcons/settings.svg?raw"
 import wearablesSvg from "../../imgs/dashIcons/participate.svg?raw"
 import phoneSensingSvg from "../../imgs/dashIcons/summary.svg?raw"
+import { ServerInfo } from "../constants/ServerInfo";
 import telegramSvg from "../../imgs/dashIcons/telegram.svg?raw"
 import calendarSvg from "../../imgs/icons/calendar.svg?raw"
 import {Study} from "../data/study/Study";
@@ -117,7 +118,7 @@ export class Content extends SectionContent {
 			DashElement(null, {template: {title: Lang.get("push_notifications"), icon: m.trust(alarmsSvg) }, href: this.getUrl("pushNotifications")}),
 			DashElement(null, {template: {title: Lang.get("wearables"), icon: m.trust(wearablesSvg) }, href: this.getUrl("wearables")}),
 			DashElement(null, {template: {title: Lang.get("phone_sensing"), icon: m.trust(phoneSensingSvg), noCompatibilityIcon: ["Web", "iOS"] }, href: this.getUrl("phoneSensing")}),
-			DashElement(null, {
+			ServerInfo.telegramConfigured && DashElement(null, {
 				template: {
 					title: Lang.get("telegram"),
 					icon: m.trust(telegramSvg),

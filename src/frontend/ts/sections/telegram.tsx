@@ -211,10 +211,11 @@ export class Content extends SectionContent {
 	public getView(): Vnode<any, any> {
 		const study = this.getStudyOrThrow()
 		const enabled = study.channels.telegram.enabled.get()
+		// Optional: without a bot on this server there is nothing here to use, only where to set one up.
+		if(!this.info.configured)
+			return <div class="center highlight spacingTop">{Lang.get("telegram_not_set_up_on_server")}</div>
 		return <div>
 			{DashRow(DashElement("stretched", { content: this.settingsView(study) }))}
-			{!this.info.configured &&
-				<div class="center highlight spacingTop">{Lang.get("telegram_not_set_up_on_server")}</div>}
 
 			{enabled && this.info.configured && <div>
 				{DashRow(

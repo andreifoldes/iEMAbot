@@ -1,5 +1,5 @@
 import {Lang} from "../singletons/Lang";
-import {lt} from "semver";
+import {lt, valid} from "semver";
 
 export function safeConfirm(msg: string): boolean {
 	return confirm(msg) && (prompt(Lang.get("confirm_again")) || "").toLowerCase() === "ok"
@@ -20,6 +20,10 @@ export function createAppUrl(accessKey: string, id: number, alwaysAddId: boolean
 	return alwaysAddId && accessKey
 		? getBaseUrl(protocol) + "app-" + id + "-" + accessKey
 		: getBaseUrl(protocol) + "app-" + (accessKey || id);
+}
+/** The link participants sign up with: the participant app. A study without an access key is found by its id. */
+export function createParticipantUrl(accessKey: string, id: number): string {
+	return `${location.origin}/pwa/?${accessKey ? `key=${encodeURIComponent(accessKey)}` : `id=${id}`}`
 }
 export function createStudyUrl(accessKey: string, id: number, alwaysAddId: boolean = false, protocol: string = "https"): string {
 	return alwaysAddId && accessKey
@@ -64,7 +68,9 @@ export function compareSemVersion(smaller: string, bigger: string) {
 		bigger = bigger.substring(4);
 	}
 	
-	return lt(smaller, bigger)
+	// A tag that is no version (a release of the Android app, say) is not newer than anything. Must not throw:
+	// the admin home page loads this list before it renders.
+	return !!valid(smaller) && !!valid(bigger) && lt(smaller, bigger)
 }
 
 export function getReadableByteSize(bytes: number): string {

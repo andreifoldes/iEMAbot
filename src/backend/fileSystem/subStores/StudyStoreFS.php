@@ -16,6 +16,8 @@ use backend\subStores\StatisticsStoreWriter;
 use backend\subStores\StudyAccessIndexStore;
 use backend\subStores\StudyStore;
 use backend\sqlite\CollectedDataDb;
+use backend\sqlite\ResponsesExport;
+use backend\sqlite\Spool;
 use stdClass;
 
 require_once DIR_BASE . 'backend/responseFileKeys.php';
@@ -82,128 +84,38 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 	}
 
 	/**
+	 * "Create backup": a dated copy of one file, written as an export of the database at this moment.
 	 * @throws CriticalException
 	 */
 	private function copyResponseFile(int $studyId, string $identifier)
 	{
-		$file_name = PathsFS::fileResponses($studyId, $identifier);
-		$file_backupName = PathsFS::fileResponsesBackup($studyId, $identifier);
-
-		if (!copy($file_name, $file_backupName))
-			throw new CriticalException("Copying $file_name to $file_backupName failed");
+		ResponsesExport::writeCopy($studyId, $identifier, PathsFS::fileResponsesBackup($studyId, $identifier), Configs::get('csv_delimiter'));
 	}
 
 	/**
-	 * @throws CriticalException
-	 */
-	private function correctResponseFile(
-		array          $newValuesIndex,
-		ResponsesIndex $oldKeys,
-		ResponsesIndex $newKeys,
-		string         $pathResponses,
-		string         $pathResponsesBackup,
-		int      	   $studyId,
-		string         $identifier
-	) {
-		//we read the backup and create a new responses file from that:
-
-		$csvDelimiter = Configs::get('csv_delimiter');
-		$handleNewResponses = fopen($pathResponses, 'w');
-		$handleBackup = fopen($pathResponsesBackup, 'r');
-
-		if (!$handleNewResponses || !$handleBackup)
-			throw new CriticalException("Could not open $pathResponses or $pathResponsesBackup");
-
-		flock($handleNewResponses, LOCK_EX);
-
-		fgets($handleBackup); //skip first line - this is the old header. We dont need it
-
-
-		if (feof($handleBackup)) { //there is no data. So we can just use the new headers
-			//we use $newKeys because it has the correct sorting
-			fputs($handleNewResponses, Main::arrayToCSV($newKeys->keys, $csvDelimiter));
-			ResponsesIndexLoader::exportFile($studyId, $identifier, $newKeys);
-			unlink($pathResponsesBackup); //there is no point in keeping this backup
-		} else {
-			$addedContent = '';
-			foreach ($newValuesIndex as $value) { //Adding new keys to the end of $oldKey and preparing and $addedContent
-				$addedContent .= $csvDelimiter . '""';
-				$oldKeys->addName($value);
-			}
-
-			fputs($handleNewResponses, Main::arrayToCSV($oldKeys->keys, $csvDelimiter));
-
-			while (($line = fgets($handleBackup)) !== false) {
-				fputs($handleNewResponses, "\n" . rtrim($line, "\n") . $addedContent);
-			}
-
-			ResponsesIndexLoader::exportFile($studyId, $identifier, $oldKeys);
-		}
-
-
-		fflush($handleNewResponses);
-		flock($handleNewResponses, LOCK_UN);
-		fclose($handleNewResponses);
-		fclose($handleBackup);
-	}
-
-	/**
+	 * Keep the response index (the column list) of one file up to date. The answers are in the database, which stores them by column
+	 * name, so a new variable needs no rewriting. Removed keys stay, new ones are added at the end; while there are no answers at all
+	 * (also after a reset) the index is simply the new one.
 	 * @throws CriticalException
 	 */
 	private function writeIndexAndResponsesFiles(stdClass $study, string $identifier, ResponsesIndex $questionnaireIndex)
 	{
-		//Note: When there is already data:
-		// If keys are removed, they will stay in the headers
-		// if keys are changed or new, they will be added to the end
-
 		if (isset($study->randomGroups) && $study->randomGroups >= 2 && $identifier !== PathsFS::FILENAME_WEB_ACCESS)
 			array_splice($questionnaireIndex->keys, 0, 0, 'group');
 
 		$studyId = (int) $study->id;
-		$pathResponses = PathsFS::fileResponses($studyId, $identifier);
 		$pathIndex = PathsFS::fileResponsesIndex($studyId, $identifier);
-
-		//if file does not exist we can just create them and be done with it:
-		if (!file_exists($pathResponses) || !file_exists($pathIndex)) {
-			$csvDelimiter = Configs::get('csv_delimiter');
-			FileSystemBasics::writeFile($pathResponses, Main::arrayToCSV($questionnaireIndex->keys, $csvDelimiter));
+		if (!file_exists($pathIndex) || !CollectedDataDb::hasResponses($studyId, $identifier)) {
 			ResponsesIndexLoader::exportFile($studyId, $identifier, $questionnaireIndex);
 			return;
 		}
 		$oldIndex = ResponsesIndexLoader::importFile($studyId, $identifier);
 		$oldIndex->types = $questionnaireIndex->types;
-
-		//finding out if there are new headers:
-		$index = [];
-		foreach ($questionnaireIndex->keys as $value) {
-			$index[$value] = $value;
+		foreach ($questionnaireIndex->keys as $name) {
+			if (!in_array($name, $oldIndex->keys, true))
+				$oldIndex->addName($name);
 		}
-		foreach ($oldIndex->keys as $value) {
-			unset($index[$value]);
-		}
-
-		if (empty($index)) { //no new headers
-			//save types in case they have changed (but we need to use oldIndex in case order of items is different)
-			$oldIndex->types = $questionnaireIndex->types;
-			ResponsesIndexLoader::exportFile($studyId, $identifier, $oldIndex);
-			return;
-		}
-
-		$pathResponsesBackup = PathsFS::fileResponsesBackup($studyId, $identifier);
-
-		//move responses to a backup:
-		if (rename($pathResponses, $pathResponsesBackup))
-			chmod($pathResponsesBackup, 0666);
-		else
-			throw new CriticalException("Could not rename $pathResponses to $pathResponsesBackup");
-
-		//if the file is too big to be changed on the fly, we just create a new file and that's it:
-		if (filesize($pathResponsesBackup) > Configs::get('max_filesize_for_changes')) {
-			$csvDelimiter = Configs::get('csv_delimiter');
-			FileSystemBasics::writeFile($pathResponses, Main::arrayToCSV($questionnaireIndex->keys, $csvDelimiter));
-			ResponsesIndexLoader::exportFile($studyId, $identifier, $questionnaireIndex);
-		} else
-			$this->correctResponseFile($index, $oldIndex, $questionnaireIndex, $pathResponses, $pathResponsesBackup, $studyId, $identifier);
+		ResponsesIndexLoader::exportFile($studyId, $identifier, $oldIndex);
 	}
 
 	/**
@@ -257,8 +169,8 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 
 	public function questionnaireExists(int $studyId, int $questionnaireId): bool
 	{
-		$pathQuestionnaire = PathsFS::fileResponses($studyId, (string) $questionnaireId);
-		return file_exists($pathQuestionnaire);
+		// The response index is written together with the questionnaire's file, and is all that is left when the files are not written.
+		return file_exists(PathsFS::fileResponsesIndex($studyId, (string) $questionnaireId));
 	}
 
 	public function saveStudy(stdClass $studyCollection, array $questionnaireKeys)
@@ -297,18 +209,18 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 		$study = $this->getStudyConfig($studyId);
 		$metadata = Configs::getDataStore()->getStudyMetadataStore($studyId);
 
-		foreach ($study->questionnaires as $questionnaire) {
-			$this->copyResponseFile($studyId, (string) $questionnaire->internalId);
-		}
-
-		$this->copyResponseFile($studyId, PathsFS::FILENAME_EVENTS);
-		$this->copyResponseFile($studyId, PathsFS::FILENAME_WEB_ACCESS);
+		$identifiers = [PathsFS::FILENAME_EVENTS, PathsFS::FILENAME_WEB_ACCESS];
+		foreach ($study->questionnaires as $questionnaire)
+			array_unshift($identifiers, (string) $questionnaire->internalId);
+		foreach ($identifiers as $identifier)
+			$this->copyResponseFile($studyId, $identifier);
 		$metadata->updateMetadata($study);
 	}
 
 	public function emptyStudy(int $studyId, array $questionnaireKeys)
 	{
 		CollectedDataDb::deleteStudyData($studyId, false);
+		Spool::deleteStudy($studyId); // rows the database refused are answers too
 		FileSystemBasics::emptyFolder(PathsFS::folderResponses($studyId));
 		FileSystemBasics::emptyFolder(PathsFS::folderStatistics($studyId));
 		FileSystemBasics::emptyFolder(Paths::folderImages($studyId));
@@ -320,6 +232,7 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 			FileSystemBasics::emptyFolder(PathsFS::folderParticipantVariables($studyId));
 		// Again after the files are gone: an upload that raced the reset must not leave rows behind.
 		CollectedDataDb::deleteStudyData($studyId, false);
+		Spool::deleteStudy($studyId); // rows the database refused are answers too
 
 		$mediaZip = Paths::fileMediaZip($studyId);
 		if (file_exists($mediaZip))
@@ -347,9 +260,13 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 			realpath(PathsFS::fileResponses($studyId, PathsFS::FILENAME_EVENTS)),
 			realpath(PathsFS::fileResponses($studyId, PathsFS::FILENAME_WEB_ACCESS)),
 		];
+		$questionnaireIds = [];
 		foreach ($study->questionnaires as $questionnaire) {
 			$expected_filenames[] = realpath(PathsFS::fileResponses($studyId, (string) $questionnaire->internalId));	
+			$questionnaireIds[] = (int) $questionnaire->internalId;
 		}
+		// The files of removed questionnaires are deleted below, so their rows in the SQLite store go too.
+		CollectedDataDb::deleteResponsesExceptQuestionnaires($studyId, $questionnaireIds);
 		
 		$folderResponses = PathsFS::folderResponses($studyId);
 		foreach (array_diff(scandir($folderResponses), [".", ".."]) as $responseFile) {
@@ -392,6 +309,7 @@ class StudyStoreFS extends BaseStudyStoreFS implements StudyStore
 
 		BaseStudyStoreFS::delete($studyId);
 		CollectedDataDb::deleteStudyData($studyId, true);
+		Spool::deleteStudy($studyId);
 
 		$this->removeStudyFromPermissions($studyId);
 

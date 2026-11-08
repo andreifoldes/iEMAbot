@@ -1,0 +1,9 @@
+{
+  "title": "Minimal study",
+  "questionnaires": [
+    {
+      "title": "Check-in",
+      "pages": [{ "inputs": [{ "name": "note" }] }]
+    }
+  ]
+}

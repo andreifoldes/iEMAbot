@@ -18,6 +18,10 @@ if (!isset($_GET['fromUrl'])) {
 }
 
 $fromUrl = $_GET['fromUrl'];
+if(!\backend\fileSystem\PathsFS::isEncodedUrl($fromUrl)) {
+	echo JsonOutput::error("Faulty data");
+	return;
+}
 
 $studiesJson = [];
 $studyStore = Configs::getDataStore()->getFallbackStudyStore($fromUrl);

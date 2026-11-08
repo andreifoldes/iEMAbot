@@ -3,6 +3,7 @@
 use backend\Configs;
 use backend\JsonOutput;
 use backend\Main;
+use backend\notifications\NotificationText;
 use backend\notifications\PushSender;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
@@ -55,16 +56,23 @@ if($studyStore->isLocked($studyId)) {
 }
 
 // Welcome content, generated server-side from the study's own title (never trust
-// client-supplied push text). Falls back to a generic title if the config is unreadable.
-$title = 'Welcome';
+// client-supplied push text). Falls back to a generic title if the config is unreadable. The wording is in the
+// study's webLanguage, else the language of this participant's own request, else English.
+$lang = Main::getLang(false);
+$title = null;
 try {
-	$study = json_decode($studyStore->getStudyLangConfigAsJson($studyId, Main::getLang(false)), true);
-	if(is_array($study) && !empty($study['title']))
-		$title = 'Welcome to ' . $study['title'];
+	$study = json_decode($studyStore->getStudyLangConfigAsJson($studyId, $lang), true);
+	if(is_array($study)) {
+		if(!empty($study['webLanguage']))
+			$lang = NotificationText::langFor($study);
+		if(!empty($study['title']))
+			$title = NotificationText::get('pwa_notif_welcome_title', $lang, $study['title']);
+	}
 }
 catch(Throwable $e) { /* generic title */ }
+$title = $title ?? NotificationText::get('pwa_push_welcome_title_generic', $lang);
 
-$body = 'Notifications are on ✅ We\'ll remind you when a questionnaire is ready.';
+$body = NotificationText::get('pwa_push_welcome_body', $lang);
 
 $result = PushSender::sendTestToUser($studyId, $userId, $title, $body);
 

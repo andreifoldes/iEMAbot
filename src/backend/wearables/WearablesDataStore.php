@@ -7,48 +7,27 @@ use backend\Configs;
 use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
 use backend\Main;
+use backend\fileSystem\subStores\ResponsesStoreFS;
 use backend\sqlite\CollectedDataDb;
 
 /**
- * Append-only CSV store for fetched wearable data, one file per (study, participant,
- * provider). Columns: measurement_time, data_type, value (JSON), fetched_at. Uses the
- * server's configured csv_delimiter so the files open the same way as response exports.
+ * Fetched wearable data, kept in the database (wearable_measurements). COLUMNS and csvLine() describe the researcher's CSV download of it
+ * (WearableExport): userId, provider, measurement_time, data_type, value (JSON), fetched_at.
  */
 class WearablesDataStore {
 	const COLUMNS = ['userId', 'provider', 'measurement_time', 'data_type', 'value', 'fetched_at'];
 
 	/**
-	 * Append rows for one participant/provider. Each row:
+	 * Store rows for one participant/provider in the database. Each row:
 	 *   ['measurement_time' => string, 'data_type' => string, 'value' => mixed]
-	 * @throws \backend\exceptions\CriticalException
+	 * The database is the only copy: if it refuses, this throws, so the sync does not move its cursor past days it could not keep and
+	 * fetches them again next time (a row already held is ignored).
+	 * @return int number of rows given
 	 */
 	public static function append(int $studyId, string $userId, string $provider, array $rows): int {
 		if(empty($rows))
 			return 0;
-		$folder = PathsFS::folderWearablesData($studyId);
-		if(!is_dir($folder))
-			FileSystemBasics::createFolder($folder, true);
-
-		$delimiter = Configs::get('csv_delimiter') ?: ';';
-		$file = PathsFS::fileWearablesData($studyId, $userId, $provider);
-		$content = '';
-		if(!file_exists($file))
-			$content .= self::csvLine(self::COLUMNS, $delimiter) . "\n";
-
-		$now = (string) Main::getMilliseconds();
-		foreach($rows as $row) {
-			$value = $row['value'] ?? null;
-			$content .= self::csvLine([
-				$userId,
-				$provider,
-				(string) ($row['measurement_time'] ?? ''),
-				(string) ($row['data_type'] ?? $provider),
-				is_string($value) ? $value : json_encode($value),
-				$now,
-			], $delimiter) . "\n";
-		}
-		if(file_put_contents($file, $content, FILE_APPEND | LOCK_EX) !== false)
-			CollectedDataDb::addWearableMeasurements($studyId, $userId, $provider, $rows, (int) $now);
+		CollectedDataDb::storeWearableMeasurements($studyId, $userId, $provider, $rows, Main::getMilliseconds());
 		return count($rows);
 	}
 

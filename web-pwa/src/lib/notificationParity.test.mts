@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { coalesce, hash32, notificationTitle, withDeadline } from './notificationSpec.ts';
+import './testI18n.mts';
 
 const fx = JSON.parse(readFileSync(new URL('../../../test/fixtures/channels/notifications.json', import.meta.url), 'utf8'));
 

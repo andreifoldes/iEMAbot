@@ -2,6 +2,9 @@
 
 namespace backend\fileSystem\loader;
 
+use backend\dataClasses\FallbackSetupToken;
+use backend\dataClasses\InboundFallbackToken;
+use backend\dataClasses\OutboundFallbackToken;
 use backend\fileSystem\PathsFS;
 use backend\FileSystemBasics;
 
@@ -16,13 +19,13 @@ class FallbackTokenLoader
 		if (self::$inboundCache)
 			return self::$inboundCache;
 		$path = PathsFS::fileIncomingFallbackTokens();
-		return self::$inboundCache = file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return self::$inboundCache = file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), [InboundFallbackToken::class]) : [];
 	}
 
 	public static function exportInboundFile(array $inboundTokens)
 	{
 		$path = PathsFS::fileIncomingFallbackTokens();
-		FileSystemBasics::writeFile($path, serialize($inboundTokens));
+		FileSystemBasics::writeSecretFile($path, serialize($inboundTokens));
 		self::$inboundCache = $inboundTokens;
 	}
 
@@ -31,13 +34,13 @@ class FallbackTokenLoader
 		if (self::$outboundCache)
 			return self::$outboundCache;
 		$path = PathsFS::fileOutboundFallbackTokens();
-		return self::$outboundCache = file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return self::$outboundCache = file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), [OutboundFallbackToken::class]) : [];
 	}
 
 	public static function exportOutboundFile(array $outboundTokens)
 	{
 		$path = PathsFS::fileOutboundFallbackTokens();
-		FileSystemBasics::writeFile($path, serialize($outboundTokens));
+		FileSystemBasics::writeSecretFile($path, serialize($outboundTokens));
 		self::$outboundCache = $outboundTokens;
 	}
 
@@ -46,13 +49,13 @@ class FallbackTokenLoader
 		if (self::$setupCache)
 			return self::$setupCache;
 		$path = PathsFS::fileFallbackSetupTokens();
-		return self::$setupCache = file_exists($path) ? unserialize(file_get_contents($path)) : [];
+		return self::$setupCache = file_exists($path) ? FileSystemBasics::readSerialized(file_get_contents($path), [FallbackSetupToken::class]) : [];
 	}
 
 	public static function exportSetupFile(array $setupTokens)
 	{
 		$path = PathsFS::fileFallbackSetupTokens();
-		FileSystemBasics::writeFile($path, serialize($setupTokens));
+		FileSystemBasics::writeSecretFile($path, serialize($setupTokens));
 		self::$setupCache = $setupTokens;
 	}
 }

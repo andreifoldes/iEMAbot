@@ -31,16 +31,45 @@ precacheAndRoute(manifest);
 // network on a miss. Registered BEFORE the SPA navigation fallback, which would otherwise answer the
 // iframe's navigation with the app's own index page. `__ping` lets the page confirm this route exists.
 const TASK_PREFIX = new URL('t/', self.registration.scope).pathname;
+
+// Which server paths the route may serve. Same rules as lib/taskRoute.ts (kept as a copy: the worker
+// imports nothing from the app); taskRoute.test.mts runs this exact block against the same cases.
+// task-path-check:begin
+const TASK_ROOT = '/webapp/';
+function isTaskPath(pathname: string): boolean {
+  if (!pathname.startsWith(TASK_ROOT) || pathname.length === TASK_ROOT.length) return false;
+  if (pathname.includes('\\') || /%(2f|5c|00)/i.test(pathname)) return false;
+  const segments = pathname.slice(TASK_ROOT.length).split('/');
+  return segments.every((segment, i) => {
+    if (segment === '') return i === segments.length - 1;
+    try {
+      const decoded = decodeURIComponent(segment);
+      return decoded !== '.' && decoded !== '..' && !decoded.includes('/') && !decoded.includes('\\');
+    } catch {
+      return false;
+    }
+  });
+}
+// task-path-check:end
+
 registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith(TASK_PREFIX),
   async ({ url }) => {
     if (url.pathname === `${TASK_PREFIX}__ping`) {
       return new Response('ok', { headers: { 'x-esmira-task-route': '1', 'cache-control': 'no-store' } });
     }
-    const target = new URL(`/${url.pathname.slice(TASK_PREFIX.length)}`, url.origin);
+    // Only task files: anything else (the API, admin pages, other apps) is refused, not fetched on the page's behalf.
+    const taskPath = `/${url.pathname.slice(TASK_PREFIX.length)}`;
+    if (!isTaskPath(taskPath)) return new Response('Not a task file', { status: 403 });
+    const target = new URL(taskPath, url.origin);
     target.search = url.search;
     const hit = await caches.match(target.toString(), { ignoreSearch: true });
     const upstream = hit ?? (await fetch(target.toString()));
+    // A redirect must not lead out of the task directory either.
+    if (upstream.redirected) {
+      const final = new URL(upstream.url);
+      if (final.origin !== url.origin || !isTaskPath(final.pathname)) return new Response('Not a task file', { status: 403 });
+    }
     // Re-wrap: a Response keeps the URL it was fetched from (/webapp/...), and the browser resolves a
     // module script's relative imports against THAT, so the task would leave this path and go to the
     // network. A fresh Response has no URL of its own, so the request URL (under the task route) stays

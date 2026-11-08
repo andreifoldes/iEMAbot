@@ -3,6 +3,7 @@
 namespace backend\noJs\pages;
 
 use backend\CreateDataSet;
+use backend\HtmlSanitizer;
 use backend\exceptions\CriticalException;
 use backend\exceptions\PageFlowException;
 use Exception;
@@ -48,12 +49,12 @@ class StudyOverview implements Page {
         if ($this->study->studyOver ?? false) {
             $output .= '<div class="dashRow"><div class="dashEl small highlight stretched">' . Lang::get('study_over_message') . '</div></div>';
             if (isset($this->study->postStudyNote)) {
-                $output .= '<p>' . $this->study->postStudyNote . '<p>';
+                $output .= '<p>' . HtmlSanitizer::clean($this->study->postStudyNote) . '<p>';
             }
         }
 
         if (isset($this->study->studyDescription) && strlen($this->study->studyDescription))
-            $output .= '<div class="scrollBox">' .$this->study->studyDescription .'</div>';
+            $output .= '<div class="scrollBox">' .HtmlSanitizer::clean($this->study->studyDescription) .'</div>';
         
         if (!($this->study->studyOver ?? false)) {
             $output .= '<br/><div class="titleRow">' .Lang::get('questionnaires') .'</div>';
@@ -62,10 +63,10 @@ class StudyOverview implements Page {
                 if (!NoJsMain::questionnaireIsActive($questionnaire))
                 continue;
 
-                $name = $questionnaire->title ?? Lang::get('questionnaire');
+                $name = HtmlSanitizer::escape($questionnaire->title ?? Lang::get('questionnaire'));
                 $qId = $questionnaire->internalId;
                 if ($this->accessKey)
-                    $output .= "<a class=\"verticalPadding\" href=\"?key=$this->accessKey&id=$studyId&qid=$qId\">$name</a>";
+                    $output .= "<a class=\"verticalPadding\" href=\"?key=" .urlencode($this->accessKey) ."&id=$studyId&qid=$qId\">$name</a>";
                 else $output .= "<a class=\"verticalPadding\" href=\"?id=$studyId&qid=$qId\">$name</a>";
             }
 			$output .= '</div>';

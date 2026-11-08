@@ -4,7 +4,7 @@ export const ServerInfo = {
 	// When true, iOS/Android-only controls are greyed out (web PWA only deployment).
 	webOnlyMode: false,
 	// Whether a Telegram bot token is set on this server, and the bot's public @username
-	// (without "@"). Used to hint at missing setup next to the study's Telegram switch.
+	// (without "@"). Telegram is optional: its study panels and switches only show when a bot is set up.
 	telegramConfigured: false,
 	telegramBotUsername: "",
 }

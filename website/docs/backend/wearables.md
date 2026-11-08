@@ -35,14 +35,14 @@ empty, or does not intersect the provider's list, the provider defaults apply.
 Credentials are server-wide, set with the CLI:
 
 ```bash
-php cli/wearables_setup.php genkey                                  # token-encryption key
+php cli/wearables_setup.php genkey                                  # token-encryption key (refuses if one exists; --rotate replaces it)
 php cli/wearables_setup.php <withings|googlehealth> <client_id> <client_secret> [redirect_uri]
 ```
 
 | Config key | Purpose |
 | --- | --- |
 | `wearables_<provider>_client_id` / `_client_secret` | OAuth application credentials. |
-| `wearables_token_key` | 32-byte base64 key for token encryption. |
+| `wearables_token_key` | 32-byte base64 key for token encryption. Without it no token is stored and participants cannot connect a device. |
 | `wearables_redirect_uri` | Optional; default `scheme://host/<api dir>/wearables_oauth.php`. |
 | `wearables_pwa_path` | Optional; where to send the browser back (default `/pwa`). |
 
@@ -57,7 +57,9 @@ the app lives, what has to be registered besides the redirect URI, and how webho
 
 **Steps common to every provider**
 
-1. Run `php cli/wearables_setup.php genkey` once, before the first provider, to create the token-encryption key.
+1. Run `php cli/wearables_setup.php genkey` once, before the first provider, to create the token-encryption key
+   (setting up a provider also creates it when it is missing). Running `genkey` again later **refuses** unless you add
+   `--rotate`: a new key makes every stored token unreadable, so every participant would have to connect their device again.
 2. Decide the **redirect URI**: `https://<your-server>/<path>/api/wearables_oauth.php`. The provider compares it with
    the one ESMira sends **character for character**, so register exactly the string the researcher panel shows.
 3. Behind a reverse proxy or Docker the automatically derived URL is often wrong (plain `http`, or without the path
@@ -130,6 +132,31 @@ the app lives, what has to be registered besides the redirect URI, and how webho
 Without webhook registration, both providers still **link and sync**; only sensor-triggered prompts depend on the steps
 above.
 
+### Check the setup {/* #check-the-setup */}
+
+1. Open the study's **Wearables** panel in the researcher interface. The provider is listed as configured, and the
+   redirect URI shown is the string you registered with the provider (compare character for character).
+2. From the participant app, link a **test participant** to the provider with a real account and finish the provider's
+   consent page. The app returns with the device shown as connected.
+3. The data arrives with the next hourly sync, which fetches *completed days only* (see [Sync](#sync)), so expect it the next
+   day. To see it sooner, run `php cli/wearables_sync.php` as the web user inside the container; the file appears under
+   `studies/<id>/.wearables_data/`.
+4. For sensor triggers, look at the study's Wearables panel for the notifications that arrived (the event archive lists every
+   one, see [Webhooks](#webhooks-and-sensor-triggers)).
+
+### Troubleshooting {/* #troubleshooting */}
+
+| What you see | Cause and fix |
+| --- | --- |
+| The app says **"Wearables are not set up on this server."** when a participant taps connect | The token-encryption key is missing, so no token could be stored. Run `php cli/wearables_setup.php genkey` (or set up a provider, which creates it), then try again. |
+| The provider shows a **redirect URI mismatch** (or "invalid redirect") on its sign-in page | The registered string is not exactly the one ESMira sends. Copy it from the researcher panel. Behind a proxy or Docker pass the public URL as the last argument of the CLI call (step 3 above). |
+| A participant links, but **no data appears** | Data is fetched hourly and only for completed days up to yesterday. Check that the cron job runs, that the study's Wearables panel has the provider enabled, and wait a day. |
+| **Withings**: linking a second participant ID with the same Withings account broke the first participant's link | Withings allows one grant per user per app. Use one account per participant. |
+| **Withings**: webhooks stopped for everyone after the client secret was changed | The webhook key is derived from the client secret. Each participant has to link again. |
+| **Google Health**: links stop working after about a week | The consent screen is still in *Testing* mode (refresh tokens expire after 7 days, only test users can link). Publish it before a real study. |
+| **Google Health**: sensor prompts never fire, but linking and the daily download work | The webhook subscriber was not registered (step 4 of the Google Health steps), or PHP-FPM drops the `Authorization` header (add the `SetEnvIf` line). |
+| `genkey` says a key already exists | That is intended; see step 1. Only use `--rotate` if you accept that all participants must reconnect. |
+
 ## OAuth 2.0 flow
 
 ```mermaid
@@ -161,8 +188,10 @@ One file per study, participant and provider:
 `studies/<id>/.wearables_tokens/<userId>.<provider>`.
 
 - Payload: JSON encrypted with libsodium `secretbox`, stored as `v1:` + base64(nonce + ciphertext).
-- **Fallback:** if the `sodium` extension or key is missing, tokens are stored as `p0:` + **plaintext JSON**.
-  The Docker image installs `sodium`, and `genkey` creates the key.
+- **No key, no token.** If the `sodium` extension or the key is missing, nothing is stored: the connect endpoint answers
+  "Wearables are not set up on this server." before the participant is sent to the provider. The Docker image installs
+  `sodium`, and `genkey` (or setting up a provider) creates the key. Older versions wrote `p0:` + plaintext JSON in this
+  situation; such files are still read, and are encrypted the next time they are read.
 - Tokens refresh when under 5 minutes remain; the new refresh token is written immediately because Withings
   refresh tokens are single-use.
 - The **client secret** and the token key are stored in plaintext in the server config file.
@@ -293,7 +322,7 @@ What is and is not done:
   user deleting data) are not recorded.
 - Subscription is best effort: if it fails, linking still succeeds and the trigger's time fallback is what
   fires. An incomplete subscription is written to the server error log.
-- Disconnecting a provider deletes that participant's archived notifications for it, like the data already fetched; disconnecting the last one also drops the scheduler's event log.
+- Disconnecting a provider stops new notifications for it (the webhook finds the participant through the token, which is deleted) and keeps the archived ones, like the data already fetched; disconnecting the last provider also drops the scheduler's event log.
 - The Withings callback URL carries one key shared by all participants and appears in web server access logs;
   anyone who learns it can forge events for a Withings user id. Keep query strings out of access logs, and note
   that rotating the Withings client secret invalidates existing subscriptions (participants must re-link).
@@ -342,7 +371,7 @@ set the marker.
 
 The PWA shows a *Wearables* tile only when the study has wearables enabled **and** at least one of its
 providers is configured on the server. *Connect* navigates to the provider; *Disconnect* calls
-`wearables_disconnect.php`, which deletes the local token, data CSV and cursor for that provider.
+`wearables_disconnect.php`, which deletes the local token and cursor for that provider. Collection stops; the data CSV, the event archive and the database rows stay with the study.
 
 ## Known limitations
 

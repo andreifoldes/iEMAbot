@@ -3,7 +3,7 @@ set -uo pipefail
 
 # Black-box smoke test of a running ESMira container. Exits non-zero if any check fails.
 # Usage: smoke.sh BASE_URL        (run bootstrap.sh first so the demo study exists)
-# Env:   SMOKE_CONTAINER=name     also check cron and the stored CSV row inside that local container
+# Env:   SMOKE_CONTAINER=name     also check cron and the stored row inside that local container
 
 BASE="${1:?usage: smoke.sh BASE_URL}"
 BASE="${BASE%/}"
@@ -44,7 +44,7 @@ if [ -n "${SMOKE_CONTAINER:-}" ]; then
   check "cron daemon running"           docker exec "$C" pgrep cron
   check "push + wearables cron jobs installed" \
     docker exec "$C" sh -c 'test -f /etc/cron.d/esmira-push && test -f /etc/cron.d/esmira-wearables'
-  check "response persisted to CSV"     docker exec "$C" grep -q smoke /var/www/html/esmira_data/studies/4242/responses/424201.csv
+  check "response persisted"            docker exec "$C" php -r '$d=new PDO("sqlite:/var/www/html/esmira_data/iemabot.sqlite"); exit($d->query("select count(*) from responses where data like \"%smoke%\"")->fetchColumn() > 0 ? 0 : 1);'
   check "SQLite store has rows"         docker exec "$C" php -r '$d=new PDO("sqlite:/var/www/html/esmira_data/iemabot.sqlite"); exit($d->query("select count(*) from responses")->fetchColumn() > 0 ? 0 : 1);'
 fi
 

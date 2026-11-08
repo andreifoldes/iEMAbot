@@ -30,7 +30,7 @@ form, FAQ, contact email, reward instructions).
 
 | Field | Purpose | Designer UI |
 | --- | --- | --- |
-| `webPushEnabled` | Turn on Web Push reminders | [Push panel](./web-push.md) |
+| `webPushEnabled` | Turn on Web Push reminders | [Push panel](./channels/web-push.md) |
 | `schedule` | The study's one schedule: which questionnaires open when and when participants are prompted, on every channel (check-ins with days, ranges, prompts, limits and notifications; see [Scheduling](./scheduling.md)) | Schedule panel |
 | `webPhoneOnly` | Run the web app on smartphones only; other devices get an invite page with a QR code | Study settings, next to study availability |
 | `webLocalOnly` | The web app sends nothing to the server: no answers, join or other events, telemetry, push or PID lock; answers stay on the device | **None**, source-edit only |
@@ -92,7 +92,7 @@ apps. They have designer fields on the question's edit page:
 
 For `record_keystrokes`, `ResponsesIndex.php` creates three columns: `<name>`, `<name>~text` and
 `<name>~capture_mode`, and the keystroke log is uploaded as a CSV into `media/keystrokes/`. Details in
-[PWA question types](../pwa/question-types.md#keystroke-fallback).
+[PWA question types](./question-types/index.md#keystroke-fallback).
 
 ## Web-only mode {/* #web-only-mode */}
 
@@ -104,4 +104,4 @@ logo and footer. <span className="status status--shipped">Shipped</span>
 
 ESMira's Merlin scripts power `relevance`, `textScript`, end-of-questionnaire script blocks and script
 filters. The designer flags them web-incompatible; the PWA does **not** run Merlin. It translates only
-simple `relevance` expressions, see [Relevance conditions](../pwa/question-types.md#relevance-conditions).
+simple `relevance` expressions, see [Relevance conditions](./question-types/index.md#relevance-conditions).

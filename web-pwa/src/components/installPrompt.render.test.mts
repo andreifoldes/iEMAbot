@@ -22,6 +22,7 @@ import {
   type FakeBrowser,
   type FakeBrowserOptions,
 } from '../lib/fakeBrowser.mts';
+import '../lib/testI18n.mts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PAGE_URL = 'https://example.test/pwa/';

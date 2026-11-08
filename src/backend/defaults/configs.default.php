@@ -8,7 +8,6 @@ return [
 	'max_msgs_per_user' => 100,
 	'max_possible_backups_per_day' => 1000, //should never be reached. Mainly there to prevent too many backups in case of a bug
 	'max_filesize_for_uploads' => 100000000, //100mb
-	'max_filesize_for_changes' => 1000000000, //1gb; when variables are changed, lines will be adjusted. If file is too big, a new file will be created instead (after backup of course!)
 	'dataset_server_timeout' => 1000, //milliseconds between received datasets (per user) or the server will decline them (excludes quit event)
 	'statistics_timed_storage_max_entries' => 2000, //number of separate entries in timed statistics; higher numbers leads to bigger files for statistics and higher performance impact when adding new values too statistics (and can also lag the statistic charts)
 	'statistics_per_data_storage_max_entries' => 2000, //number of kept entries in data statistics; If there are more entries, the oldest ones will be deleted; higher numbers leads to bigger files for statistics and higher performance impact when adding new values too statistics (and can also lag the statistic charts)
@@ -21,7 +20,9 @@ return [
 	
 	'csv_delimiter' => ';',
 	
-	// Everything collected from participants is also written to a SQLite database in the data folder (esmira_data/iemabot.sqlite):
+	// Everything collected from participants is stored in a SQLite database in the data folder (esmira_data/iemabot.sqlite), which is the only copy of the
+	// answers (CSV exists only as the export of it). Answers and wearable data are stored whatever this says; it switches the best-effort extras
+	// (push events, client info, messages, media metadata, the nightly snapshot copy) off.
 	'sqlite_enabled' => true,
 	'sqlite_media_content_max_bytes' => 16000000, //files larger than this keep only metadata + checksum in the database (the file stays on disk)
 	'sqlite_store_media_content' => true, //also keep a copy of uploaded images/audio/keystroke logs as BLOBs. The files stay on disk either way; set to false to keep only metadata and a checksum in the database

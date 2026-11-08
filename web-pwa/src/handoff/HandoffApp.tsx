@@ -13,11 +13,15 @@ import {
   cognitiveSummaryValue, cognitiveTrialRows, newCognitiveSession, type M2c2Complete,
 } from '../lib/cognitiveTrials';
 import { closeTelegram, isInTelegram } from '../lib/telegramWebApp';
+import { t } from '../lib/i18n';
+import { TASK_IFRAME_SANDBOX } from '../lib/taskRoute';
+import { useLang } from '../lib/i18nStore';
 import type { EsmiraQuestionnaire, PreloadedQuestion } from '../types';
 
 type Phase = 'loading' | 'question' | 'sending' | 'done' | 'error';
 
 export function HandoffApp({ token }: { token: string }) {
+  useLang(); // re-render when the interface language loads
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState('');
   const [item, setItem] = useState<HandoffItem | null>(null);
@@ -27,7 +31,7 @@ export function HandoffApp({ token }: { token: string }) {
 
   useEffect(() => {
     if (!token) {
-      setError('This link is incomplete.');
+      setError(t('pwa_handoff_incomplete_link'));
       setPhase('error');
       return;
     }
@@ -77,13 +81,13 @@ export function HandoffApp({ token }: { token: string }) {
   }, [webview, question]);
 
   if (phase === 'loading' || phase === 'sending') {
-    return <Centered><p className="text-on-surface-variant">{phase === 'loading' ? 'Loading…' : 'Saving…'}</p></Centered>;
+    return <Centered><p className="text-on-surface-variant">{phase === 'loading' ? t('pwa_handoff_loading') : t('pwa_handoff_saving')}</p></Centered>;
   }
   if (phase === 'error' || !question) {
     return (
       <Centered>
-        <p className="font-semibold text-on-surface">{error || 'This question is not available.'}</p>
-        <p className="text-sm text-on-surface-variant mt-2">You can close this page and continue in the chat.</p>
+        <p className="font-semibold text-on-surface">{error || t('pwa_handoff_unavailable')}</p>
+        <p className="text-sm text-on-surface-variant mt-2">{t('pwa_handoff_close_page')}</p>
       </Centered>
     );
   }
@@ -91,9 +95,9 @@ export function HandoffApp({ token }: { token: string }) {
     return (
       <Centered>
         <p className="text-2xl" aria-hidden="true">✅</p>
-        <p className="font-semibold text-on-surface mt-2">Thank you!</p>
+        <p className="font-semibold text-on-surface mt-2">{t('pwa_handoff_thanks')}</p>
         <p className="text-sm text-on-surface-variant mt-1">
-          {isInTelegram() ? 'Returning to the chat…' : 'You can close this page and continue in the chat.'}
+          {isInTelegram() ? t('pwa_handoff_returning') : t('pwa_handoff_close_page')}
         </p>
       </Centered>
     );
@@ -132,13 +136,14 @@ export function HandoffApp({ token }: { token: string }) {
               onClick={() => setWebview(null)}
               className="px-3 py-2 bg-surface-container-highest rounded-full text-sm font-semibold"
             >
-              Close
+              {t('pwa_handoff_close')}
             </button>
           </header>
           <iframe
             src={webview.url}
             title={webview.title}
             className="flex-1 w-full border-0"
+            sandbox={TASK_IFRAME_SANDBOX}
             allow="autoplay; fullscreen; accelerometer; gyroscope"
           />
         </div>

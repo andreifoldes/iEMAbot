@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZoomIn } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { t } from '../lib/i18n';
 
 const EDGE_PX = 8; // gap between the button and the picture's corner
 
@@ -65,7 +66,7 @@ export function PromptImage({ src, alt, className, imgClassName }: Props) {
         <button
           type="button"
           onClick={() => imgRef.current?.click()}
-          aria-label="Enlarge picture"
+          aria-label={t('pwa_image_enlarge')}
           className="absolute p-2 rounded-full bg-black/70 text-white shadow-md hover:bg-black/80 active:scale-95 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
           style={{ right: inset.right + EDGE_PX, bottom: inset.bottom + EDGE_PX }}
         >

@@ -13,4 +13,5 @@ export interface LoginDataInterface {
 	hasErrors: boolean
 	totalDiskSpace: number
 	freeDiskSpace: number
+	containerImage: boolean
 }

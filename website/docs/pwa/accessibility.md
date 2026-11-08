@@ -45,7 +45,7 @@ empty changes nothing for existing studies.
 Run it locally:
 
 ```bash
-npm run a11y:setup   # one-off: installs the audit's dependencies
+npm run a11y:setup   # one-off: installs the audit's dependencies from its lockfile (no install scripts) and Chromium
 npm run a11y
 ```
 

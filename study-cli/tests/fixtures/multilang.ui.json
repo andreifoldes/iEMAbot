@@ -1,0 +1,148 @@
+{
+  "_": {
+    "id": 1111,
+    "packageVersion": "9.9.9",
+    "serverVersion": 12,
+    "wearablesProviders": [],
+    "wearablesDataTypes": [],
+    "accessKeys": [],
+    "langCodes": [
+      "en",
+      "de"
+    ],
+    "title": "Mood study",
+    "studyDescription": "About the study.",
+    "questionnaires": [
+      {
+        "internalId": 20001,
+        "virtualInputs": [],
+        "title": "Daily",
+        "actionTriggers": [],
+        "pages": [
+          {
+            "header": "Today",
+            "inputs": [
+              {
+                "responseType": "list_single",
+                "name": "mood_now",
+                "text": "How do you feel?",
+                "listChoices": [
+                  "Good",
+                  "Bad"
+                ],
+                "subInputs": []
+              },
+              {
+                "name": "only_english",
+                "text": "No translation for this one.",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "image",
+                "name": "shared_url",
+                "text": "Look",
+                "url": "https://example.org/a.png",
+                "listChoices": [],
+                "subInputs": []
+              }
+            ]
+          }
+        ],
+        "sumScores": []
+      }
+    ],
+    "eventUploadSettings": {},
+    "publicStatistics": {
+      "charts": []
+    },
+    "personalStatistics": {
+      "charts": []
+    },
+    "pluginData": {},
+    "channels": {
+      "telegram": {}
+    },
+    "schedule": {
+      "checkins": [
+        {
+          "questionnaireId": 20001
+        }
+      ]
+    },
+    "lang": "en"
+  },
+  "de": {
+    "id": 1111,
+    "packageVersion": "9.9.9",
+    "serverVersion": 12,
+    "wearablesProviders": [],
+    "wearablesDataTypes": [],
+    "accessKeys": [],
+    "langCodes": [
+      "en",
+      "de"
+    ],
+    "title": "Stimmungsstudie",
+    "studyDescription": "Über die Studie.",
+    "questionnaires": [
+      {
+        "internalId": 20001,
+        "virtualInputs": [],
+        "title": "Täglich",
+        "actionTriggers": [],
+        "pages": [
+          {
+            "header": "Heute",
+            "inputs": [
+              {
+                "responseType": "list_single",
+                "name": "mood_now",
+                "text": "Wie fühlst du dich?",
+                "listChoices": [
+                  "Gut",
+                  "Schlecht"
+                ],
+                "subInputs": []
+              },
+              {
+                "name": "only_english",
+                "text": "No translation for this one.",
+                "listChoices": [],
+                "subInputs": []
+              },
+              {
+                "responseType": "image",
+                "name": "shared_url",
+                "text": "Look",
+                "url": "https://example.org/a.png",
+                "listChoices": [],
+                "subInputs": []
+              }
+            ]
+          }
+        ],
+        "sumScores": []
+      }
+    ],
+    "eventUploadSettings": {},
+    "publicStatistics": {
+      "charts": []
+    },
+    "personalStatistics": {
+      "charts": []
+    },
+    "pluginData": {},
+    "channels": {
+      "telegram": {}
+    },
+    "schedule": {
+      "checkins": [
+        {
+          "questionnaireId": 20001
+        }
+      ]
+    },
+    "lang": "de"
+  }
+}

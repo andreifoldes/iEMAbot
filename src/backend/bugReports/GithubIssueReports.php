@@ -29,6 +29,8 @@ class GithubIssueReports {
 	/** Reports GitHub could not take for this long are dropped (they stay in the messages). */
 	const MAX_AGE_MS = 7 * 86400000;
 	const API = 'https://api.github.com';
+	/** Start of the message when the repository is not private (setup checks for it). */
+	const NOT_PRIVATE = 'Not private: ';
 
 	public static function isConfigured(): bool {
 		return self::repo() !== '' && (string) Configs::get('github_issues_token') !== '';
@@ -68,10 +70,13 @@ class GithubIssueReports {
 
 	/**
 	 * Post every queued report. Stops at the first failure and leaves the rest for the next run.
-	 * $post(string $url, string $token, array $payload): array{status: int, body: array} is for tests.
+	 * $post(string $url, string $token, array $payload) and $get(string $url, string $token) return
+	 * array{status: int, body: array}; they are for tests.
+	 * Reports contain what participants wrote, so nothing is posted unless GitHub says the repository
+	 * is private (checked at the start of every run that has something to send).
 	 * @return array{sent: int, queued: int, dropped: int, error?: string}
 	 */
-	public static function run(?callable $post = null, ?int $nowMs = null): array {
+	public static function run(?callable $post = null, ?int $nowMs = null, ?callable $get = null): array {
 		$result = ['sent' => 0, 'queued' => 0, 'dropped' => 0];
 		if(!self::isConfigured())
 			return $result;
@@ -90,6 +95,14 @@ class GithubIssueReports {
 		try {
 			// Network calls happen outside the queue lock so save_message.php is never held up.
 			$queue = (JsonFile::read(self::fileQueue()) ?? [])['queue'] ?? [];
+			if($queue) {
+				$problem = self::checkPrivate($get ?? [self::class, 'httpGet']);
+				if($problem !== '') {
+					$result['error'] = $problem;
+					$result['queued'] = count($queue);
+					return $result;
+				}
+			}
 			$done = 0;
 			$url = self::API . '/repos/' . self::repo() . '/issues';
 			foreach($queue as $item) {
@@ -257,7 +270,21 @@ class GithubIssueReports {
 			return 'GitHub returned ' . ($res['status'] ?? 0) . ': ' . (string) ($res['body']['message'] ?? '');
 		if(empty($res['body']['has_issues']))
 			return 'Issues are switched off for ' . self::repo() . '.';
-		return '';
+		return self::notPrivateMessage($res['body']);
+	}
+
+	/** Like check(), but only asks whether the repository is private. Returns an error message, or '' when it is. */
+	private static function checkPrivate(callable $get): string {
+		$res = $get(self::API . '/repos/' . self::repo(), (string) Configs::get('github_issues_token'));
+		if(($res['status'] ?? 0) !== 200)
+			return 'Could not check the repository: GitHub returned ' . ($res['status'] ?? 0) . '.';
+		return self::notPrivateMessage($res['body'] ?? []);
+	}
+
+	private static function notPrivateMessage(array $repository): string {
+		if(($repository['private'] ?? false) === true)
+			return '';
+		return self::NOT_PRIVATE . self::repo() . ' is not a private repository. Reports contain what participants wrote, so they are only filed in a private repository.';
 	}
 
 	/** Store the repository and token (only what changed is written). Empty strings switch it off. */

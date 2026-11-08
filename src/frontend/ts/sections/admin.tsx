@@ -19,6 +19,7 @@ import { AddDropdownMenus } from "../helpers/AddDropdownMenus";
 import { RssFetcher, RssItem } from "../singletons/RssFetcher";
 import { NewsItem } from "../components/NewsItem";
 import { SectionData } from "../site/SectionData";
+import { LatestRelease, ReleaseFetcher } from "../singletons/ReleaseFetcher";
 
 const MINIMAL_DISK_SPACE = 1000 * 1000 * 100 //100 Mb
 /**
@@ -28,6 +29,7 @@ const MINIMAL_DISK_SPACE = 1000 * 1000 * 100 //100 Mb
 export class Content extends SectionContent {
 	private readonly addDropdownMenus = new AddDropdownMenus(this)
 	private rssItems: RssItem[]
+	private latestRelease: LatestRelease | null
 
 	public static preLoad(sectionData: SectionData): Promise<any>[] {
 		return [
@@ -35,13 +37,15 @@ export class Content extends SectionContent {
 				.catch(() => {
 					sectionData.loader.error(Lang.get("error_news"))
 					return []
-				})
+				}),
+			ReleaseFetcher.loadLatestStable(sectionData.siteData.packageVersion, !sectionData.getTools().containerImage)
 		]
 	}
 
-	constructor(section: SectionData, rssItems: RssItem[]) {
+	constructor(section: SectionData, rssItems: RssItem[], latestRelease: LatestRelease | null) {
 		super(section)
 		this.rssItems = rssItems
+		this.latestRelease = latestRelease
 	}
 
 	public title(): string {
@@ -85,6 +89,14 @@ export class Content extends SectionContent {
 		return <div>
 			{
 				DashRow(
+					tools.isAdmin && !!this.latestRelease &&
+					DashElement("stretched", {
+						highlight: true,
+						small: true,
+						href: this.getUrl("serverSettings"),
+						content: <div class="highlight">{Lang.get("info_newVersionAvailable")} {this.latestRelease?.version}</div>
+					}),
+
 					tools.isAdmin && tools.freeDiskSpace < MINIMAL_DISK_SPACE &&
 					DashElement("stretched", {
 						highlight: true,

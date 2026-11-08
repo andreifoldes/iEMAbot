@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import type { EsmiraQuestionnaire } from '../types.ts';
 import { adaptQuestionnaire } from './esmiraAdapter.ts';
 import { OfflineSurveyEngine } from './surveyEngine.ts';
+import './testI18n.mts';
 
 const REASON = 'morningBedExitReason';
 const CHOICES = ['Needed the bathroom', 'Discomfort or pain', "Couldn't sleep / restless", 'Something else'];

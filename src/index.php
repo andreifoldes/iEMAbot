@@ -22,7 +22,9 @@ if($dataStore->isInit()) {
 		$studyId = (int)$_GET['id'];
 		if(isset($_GET['app_install'])) {
 			$jsKey = "appInstall,id:$studyId";
-		} else if(isset($_GET['from_url'])) {
+		} else if(isset($_GET['from_url']) && \backend\fileSystem\PathsFS::isEncodedUrl($_GET['from_url'])) {
+			//from_url is a base64-encoded server address (see .htaccess). Anything else is rejected:
+			//$jsKey is echoed into an inline event handler below and ends up in file paths.
 			$fromUrl = $_GET['from_url'];
 			$jsKey = "fallbackAppInstall,id:$studyId,fromUrl:$fromUrl";
 		} else {
@@ -95,10 +97,15 @@ $pluginsEnabled = $pluginStore->isEnabled();
 		}
 	?></script>
 </head>
-<body onload="ESMira.init(<?php echo "'$jsKey','$servername',$serverVersion,'$accessKey','$lang','$type'," . (Configs::get('webOnlyMode') ? 'true' : 'false') . ",$telegramConfigured,'$telegramBotUsername'"; ?>)">
+<body data-esmira-init="<?php
+	//ESMira.init() arguments for frontend/ts/index.ts, which reads them after the page has loaded. They travel as a data
+	//attribute (not an inline onload handler) so a Content-Security-Policy can forbid inline script. The JSON array keeps
+	//request data inside its strings; htmlspecialchars keeps it inside the attribute.
+	echo htmlspecialchars(Main::jsLiteral([$jsKey, $servername, $serverVersion, $accessKey, $lang, $type, (bool) Configs::get('webOnlyMode'), $telegramConfigured === 'true', $telegramBotUsername]), ENT_QUOTES);
+?>">
 
 <div id="header">
-	<a href="#<?php echo $jsKey; ?>">
+	<a href="#<?php echo htmlspecialchars($jsKey, ENT_QUOTES); ?>">
 		<img src="frontend/imgs/iemabot_logo.svg" alt="iEMAbot"/>
 	</a>
 	<div class="title" id="headerServerName"></div>
@@ -112,9 +119,9 @@ $pluginsEnabled = $pluginStore->isEnabled();
 				<noscript>
 					<div class="center highlight">
 						No JavaScript detected. if you are not redirected automatically, click
-						<a href="<?php echo $noJsUrl; ?>">here</a>
+						<a href="<?php echo htmlspecialchars($noJsUrl, ENT_QUOTES); ?>">here</a>
 					</div>
-					<meta http-equiv="refresh" content="0; url=<?php echo $noJsUrl; ?>"/>
+					<meta http-equiv="refresh" content="0; url=<?php echo htmlspecialchars($noJsUrl, ENT_QUOTES); ?>"/>
 				</noscript>
 			</div>
 		</div>

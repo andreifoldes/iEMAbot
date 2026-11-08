@@ -117,6 +117,9 @@ class MessagesStoreFS implements MessagesStore {
 			$path = PathsFS::fileMessagePending($studyId, $userId);
 			if(file_exists($path) && !unlink($path))
 				throw new CriticalException('Could not update messages');
+			// importFile() above keeps the file open and locked until exportFile() or close(). Nothing is exported here, and a
+			// later write in the same process would go into the deleted file and be lost.
+			MessagesPendingLoader::close();
 		}
 		else
 			MessagesPendingLoader::exportFile($studyId, $userId, $newPendingMessages);
@@ -133,6 +136,10 @@ class MessagesStoreFS implements MessagesStore {
 			
 			MessagesArchivedLoader::exportFile($studyId, $userId, $archivedMessages);
 		}
+		CollectedDataDb::saveResearcherMessages($studyId, $userId, array_merge(
+			array_map(fn(Message $m) => [$m, 'pending'], $newPendingMessages),
+			array_map(fn(Message $m) => [$m, 'archived'], $newArchivedMessages)
+		));
 	}
 	public function setMessagesAsRead(int $studyId, string $userId, array $messageTimestamps) {
 		$pathUnread = PathsFS::fileMessageUnread($studyId, $userId);
@@ -167,6 +174,7 @@ class MessagesStoreFS implements MessagesStore {
 		$msg = new Message($from, $content, true);
 		$messages[] = $msg;
 		MessagesPendingLoader::exportFile($studyId, $userId, $messages);
+		CollectedDataDb::saveResearcherMessages($studyId, $userId, [[$msg, 'pending']]);
 		return $msg->sent;
 	}
 	
@@ -195,6 +203,7 @@ class MessagesStoreFS implements MessagesStore {
 		foreach($messages as $index => $cMsg) {
 			if($cMsg->sent == $sentTimestamp) {
 				array_splice($messages, $index, 1);
+				CollectedDataDb::deleteResearcherMessage($studyId, $userId, $sentTimestamp);
 				break;
 			}
 		}

@@ -128,7 +128,7 @@ default (an average adult reading speed), lower for more time, 0 to show message
 ## End-of-questionnaire snapshot
 
 A study with `webSnapshot` set to `checkin-readout` (source-edit only) adds three messages after a check-in, mirroring
-the Telegram bot's checkin-readout study:
+the Telegram bot's check-in study:
 
 1. **Snapshot**: a mood line from the I-PANAS-SF items (`alert`, `inspired`, `active` against `nervous`, `upset`,
    `afraid`) and a sleepiness line from the `kss` item.
@@ -237,7 +237,7 @@ providers (Withings, Google Health). Otherwise nothing wearable-related appears.
 - **Connecting.** *Connect* leaves the app for the provider's sign-in page (a full-page navigation, because providers
   refuse to be framed). The server then redirects back to the app, which shows a toast, "*Provider* connected" or
   "*Provider* connection failed", for about five seconds and refreshes the list.
-- **Disconnecting.** *Disconnect* removes the server's stored token, data and sync cursor for that provider. It does not
+- **Disconnecting.** *Disconnect* removes the server's stored token and sync cursor for that provider, so nothing more is collected; what was already collected stays with the study, and the app tells the participant to contact the researchers if they want it removed. It does not
   revoke access at the provider, so a participant who wants that must also do it in the provider's own settings.
 - **Reconnecting.** A link stops working if access is revoked at the provider, or if the same provider account is linked
   under a second participant ID. The app then shows the amber state above, and linking again restores syncing; days

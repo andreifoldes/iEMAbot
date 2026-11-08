@@ -4,5 +4,5 @@ return [
 		'de' => 'test name - de',
 		'en' => 'test name - en'
 	],
-	'defaultLang' => 'de'
+	'defaultLang' => 'de',
 ];

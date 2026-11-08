@@ -185,6 +185,8 @@ export interface EsmiraStudy {
   version?: number;
   subVersion?: number;
   lang?: string;
+  /** Languages the study has been translated into (codes like "de"). */
+  langCodes?: string[];
   title: string;
   studyDescription?: string;
   informedConsentForm?: string;
@@ -214,6 +216,8 @@ export interface EsmiraStudy {
   schedule?: ScheduleConfig;
   /** When true, the researcher restricted the web app to smartphones. Other devices see
    *  an invite page with a QR code instead of the study (see lib/phoneGate.ts). */
+  /** Interface language chosen by the researcher (locale code, e.g. "de"); empty = automatic. */
+  webLanguage?: string;
   webPhoneOnly?: boolean;
   /** Names an end-of-questionnaire read-out of the participant's own answers (see
    *  lib/snapshot.ts). Source-edit only; empty/unknown = none. */
@@ -266,6 +270,9 @@ export interface StudiesEnvelope {
   /** Wearable providers with OAuth credentials configured on the server. The PWA only
    *  offers those that are also listed in a study's `wearablesProviders`. */
   wearableProviders?: string[];
+  /** True when the server also files error reports as issues in a private GitHub repository;
+   *  the report dialog then says so. */
+  errorReportsToGithub?: boolean;
 }
 
 /** A connected wearable as reported by api/wearables_status.php. */

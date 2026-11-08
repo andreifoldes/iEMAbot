@@ -56,6 +56,8 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// tablets get an invite page with a QR code to continue on a phone instead
 	// (see web-pwa/src/lib/phoneGate.ts). A convenience check in the browser, not a security measure.
 	public webPhoneOnly = this.primitive<boolean>("webPhoneOnly", false)
+	/** Language of the participant web app's interface ("" = automatic). See web-pwa/src/lib/i18nStore.ts. */
+	public webLanguage = this.primitive<string>("webLanguage", "")
 	// Names an end-of-questionnaire read-out of the participant's own answers in the PWA
 	// (see web-pwa/src/lib/snapshot.ts). No editor control: set in the study source.
 	public webSnapshot = this.primitive<string>("webSnapshot", "")
@@ -124,7 +126,7 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	public contactEmail = this.translatable("contactEmail", "")
 	public rewardEmailContent = this.translatable("rewardEmailContent", "")
 	public rewardInstructions = this.translatable("rewardInstructions", "")
-	// Text of that message; empty = the default (NotificationSpec::STUDY_END_BODY).
+	// Text of that message; empty = the default (NotificationSpec::studyEndBody(), translated).
 	public studyEndNotification = this.translatable("studyEndNotification", "")
 	public postStudyNote = this.translatable("postStudyNote", "")
 	public faq = this.translatable("faq", "")

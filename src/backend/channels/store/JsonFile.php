@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace backend\channels\store;
 
 use backend\exceptions\CriticalException;
+use backend\FileSystemBasics;
 
 /**
  * Small JSON file helpers for the channel stores. withLock() serialises every
@@ -24,6 +25,7 @@ class JsonFile {
 		self::ensureFolder(dirname($path));
 		if(file_put_contents($path, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX) === false)
 			throw new CriticalException("Writing '$path' failed");
+		FileSystemBasics::restrictToOwner($path, FileSystemBasics::SECRET_FILE_MODE);
 	}
 
 	public static function delete(string $path): void {
@@ -42,6 +44,7 @@ class JsonFile {
 		$h = fopen($path, 'c+');
 		if($h === false)
 			throw new CriticalException("Opening '$path' failed");
+		FileSystemBasics::restrictToOwner($path, FileSystemBasics::SECRET_FILE_MODE);
 		try {
 			if(!flock($h, LOCK_EX))
 				throw new CriticalException("Locking '$path' failed");
@@ -72,7 +75,7 @@ class JsonFile {
 	public static function ensureFolder(string $folder): void {
 		if(is_dir($folder))
 			return;
-		if(!@mkdir($folder, 0744, true) && !is_dir($folder))
+		if(!@mkdir($folder, FileSystemBasics::SECRET_FOLDER_MODE, true) && !is_dir($folder))
 			throw new CriticalException("Creating the folder '$folder' failed");
 	}
 }

@@ -13,7 +13,7 @@
  * renderable question type — likert, single/multiple choice, yes/no, free text,
  * number, time, duration, date, visual-analogue scale, voice memo, cognitive
  * task, and info/image — is exercised regardless of what the live study contains.
- * The fixture is the real `ssrc` study (its morning / momentary / evening bundle)
+ * The fixture is a real study (its morning / momentary / evening bundle)
  * plus an injected "All Question Types" questionnaire, so the requested sample
  * bundle is audited too. Set A11Y_MODE=live to instead drive the real study over
  * the network (catches server-side drift; needs VPN/connectivity).
@@ -23,7 +23,7 @@
  *
  * Env knobs:
  *   A11Y_MODE        fixture (default) | live
- *   A11Y_KEY         study invite code for live mode (default: ssrc)
+ *   A11Y_KEY         study invite code for live mode (default: demo-study, the fixture's key)
  *   A11Y_PORT        vite preview port (default: 4318)
  *   A11Y_BASE_URL    audit an already-running server instead of spawning preview
  *   A11Y_FAIL_ON     comma list of impacts that fail the gate (default critical,serious)

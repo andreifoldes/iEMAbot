@@ -70,4 +70,29 @@ class GetNewIdTest extends BaseWritePermissionTestSetup {
 		$this->expectExceptionMessage('Could not find an unused id');
 		$obj->execAndOutput();
 	}
+	function test_study_ids_stay_in_the_four_digit_range() {
+		$obj = new GetNewId();
+		for($i=0; $i<200; ++$i) {
+			$id = $obj->createRandomId(false, []);
+			$this->assertIsInt($id);
+			$this->assertGreaterThanOrEqual(1000, $id);
+			$this->assertLessThanOrEqual(9999, $id);
+		}
+	}
+	function test_questionnaire_ids_stay_in_the_five_digit_range() {
+		$obj = new GetNewId();
+		for($i=0; $i<200; ++$i) {
+			$id = $obj->createRandomId(true, []);
+			$this->assertIsInt($id);
+			$this->assertGreaterThanOrEqual(10000, $id);
+			$this->assertLessThanOrEqual(99999, $id);
+		}
+	}
+	function test_ids_are_not_the_same_every_time() {
+		$obj = new GetNewId();
+		$seen = [];
+		for($i=0; $i<50; ++$i)
+			$seen[$obj->createRandomId(false, [])] = true;
+		$this->assertGreaterThan(1, count($seen));
+	}
 }

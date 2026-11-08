@@ -61,3 +61,13 @@
   color: #d4d4e0;
   border-color: #77778a;
 }
+
+/* Sidebar entries researchers use most (question types): accent bar and bold label */
+.menu__list-item.sidebar-highlight > .menu__list-item-collapsible > .menu__link {
+  font-weight: 700;
+}
+.menu__list-item.sidebar-highlight {
+  border-left: 3px solid var(--ifm-color-primary);
+  padding-left: 0.25rem;
+  margin-left: -0.25rem;
+}

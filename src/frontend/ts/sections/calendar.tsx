@@ -1,11 +1,15 @@
 import { SectionContent } from "../site/SectionContent";
 import m, { Component, Vnode, VnodeDOM } from "mithril";
-import { Calendar, EventInput } from "@fullcalendar/core";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import listPlugin from "@fullcalendar/list";
-import deLocale from "@fullcalendar/core/locales/de";
-import ukLocale from "@fullcalendar/core/locales/uk";
+import { Calendar, EventInput } from "fullcalendar";
+import dayGridPlugin from "fullcalendar/daygrid";
+import timeGridPlugin from "fullcalendar/timegrid";
+import listPlugin from "fullcalendar/list";
+import classicThemePlugin from "fullcalendar/themes/classic";
+import deLocale from "fullcalendar/locales/de";
+import ukLocale from "fullcalendar/locales/uk";
+import "fullcalendar/skeleton.css";
+import "fullcalendar/themes/classic/theme.css";
+import "fullcalendar/themes/classic/palette.css";
 import { Lang, LangKey } from "../singletons/Lang";
 import { Study } from "../data/study/Study";
 import { DashRow } from "../components/DashRow";
@@ -39,6 +43,26 @@ interface CalendarWindow {
 	reminders: number[]
 	state?: WindowState
 	completedAt?: number | null
+	/** One entry per notification (the prompt, then its reminders) with what the push log holds for it. Participant view only. */
+	pushes?: NotificationRecord[]
+}
+
+/** A planned notification (participant-local ms) and when it was sent, failed, delivered and opened; null = not logged. */
+interface NotificationRecord {
+	at: number
+	sent: number | null
+	failed: number | null
+	received: number | null
+	clicked: number | null
+}
+
+type PushStatus = "opened" | "received" | "sent" | "failed" | "none" | "planned"
+
+/** What a window block shows for one notification. */
+interface NotificationLine {
+	text: string
+	color: string
+	tooltip: string
 }
 
 interface CalendarDay {
@@ -85,6 +109,37 @@ const STATE_LABELS: Record<WindowState, LangKey> = {
 }
 const STATES: WindowState[] = ["completed", "covered", "missed", "open", "upcoming", "withdrawn"]
 
+const PUSH_COLORS: Record<PushStatus, string> = {
+	opened: "#00695c",
+	received: "#00838f",
+	sent: "#6a1b9a",
+	failed: "#ad1457",
+	none: "#757575",
+	planned: "#b0bec5",
+}
+const PUSH_LABELS: Record<PushStatus, LangKey> = {
+	opened: "calendar_push_opened",
+	received: "calendar_push_received",
+	sent: "calendar_push_sent",
+	failed: "calendar_push_failed",
+	none: "calendar_push_none",
+	planned: "calendar_push_planned",
+}
+const PUSH_STATUSES: PushStatus[] = ["opened", "received", "sent", "failed", "none", "planned"]
+
+/** How far a notification got. A later step wins (a tap implies delivery); nothing logged is only "none" once it was due. */
+function pushStatus(n: NotificationRecord, nowLocal: number): PushStatus {
+	if(n.clicked != null)
+		return "opened"
+	if(n.received != null)
+		return "received"
+	if(n.sent != null)
+		return "sent"
+	if(n.failed != null)
+		return "failed"
+	return n.at > nowLocal ? "planned" : "none"
+}
+
 function pad(n: number): string {
 	return String(n).padStart(2, "0")
 }
@@ -92,6 +147,10 @@ function pad(n: number): string {
 function clock(tod: number): string {
 	const mins = Math.floor((((tod % DAY) + DAY) % DAY) / MINUTE)
 	return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`
+}
+/** "HH:MM:SS" of a time of day in ms. */
+function clockSeconds(tod: number): string {
+	return `${clock(tod)}:${pad(Math.floor((((tod % DAY) + DAY) % DAY) / 1000) % 60)}`
 }
 /** A participant-local timestamp as "YYYY-MM-DD HH:MM". */
 function localDateTime(t: number): string {
@@ -113,6 +172,11 @@ interface CalendarViewAttrs {
 	initialDate: number
 }
 
+function notificationLines(props: Record<string, any> | undefined): NotificationLine[] {
+	const lines = props?.notifications
+	return Array.isArray(lines) ? lines : []
+}
+
 /** FullCalendar in participant-local time (the times are local wall-clock ms, so the calendar runs in UTC). */
 class CalendarView implements Component<CalendarViewAttrs, any> {
 	private calendar?: Calendar
@@ -123,7 +187,7 @@ class CalendarView implements Component<CalendarViewAttrs, any> {
 		this.events = vNode.attrs.events
 		this.initialDate = vNode.attrs.initialDate
 		this.calendar = new Calendar(vNode.dom as HTMLElement, {
-			plugins: [dayGridPlugin, timeGridPlugin, listPlugin],
+			plugins: [classicThemePlugin, dayGridPlugin, timeGridPlugin, listPlugin],
 			locales: [deLocale, ukLocale],
 			locale: Lang.code,
 			timeZone: "UTC",
@@ -137,8 +201,36 @@ class CalendarView implements Component<CalendarViewAttrs, any> {
 			dayMaxEvents: false,
 			nowIndicator: false,
 			eventTimeFormat: { hour: "2-digit", minute: "2-digit", hour12: false },
-			slotLabelFormat: { hour: "2-digit", minute: "2-digit", hour12: false },
+			slotHeaderFormat: { hour: "2-digit", minute: "2-digit", hour12: false },
 			events: this.events,
+			eventContent: (info) => {
+				const lines = notificationLines(info.event.extendedProps)
+				if(!lines.length)
+					return true // the default rendering
+				const box = document.createElement("div")
+				box.style.cssText = "height:100%;overflow:hidden;font-size:11px;line-height:1.35" // a short window clips its lines: the tooltip has them all
+				const head = document.createElement("div")
+				head.style.fontWeight = "600"
+				head.textContent = `${info.timeText} ${info.event.title}`.trim()
+				box.appendChild(head)
+				for(const line of lines) {
+					const row = document.createElement("div")
+					row.title = line.tooltip
+					row.style.cssText = "display:flex;align-items:center;gap:4px;white-space:nowrap"
+					const dot = document.createElement("span")
+					dot.style.cssText = `flex:none;width:11px;height:11px;box-sizing:border-box;border-radius:50%;background:${line.color};border:2px solid #fff`
+					const text = document.createElement("span")
+					text.textContent = `🔔 ${line.text}`
+					row.append(dot, text)
+					box.appendChild(row)
+				}
+				return { domNodes: [box] }
+			},
+			eventDidMount: (info) => { // a short window hides its lines: they are all in the tooltip
+				const lines = notificationLines(info.event.extendedProps)
+				if(lines.length)
+					info.el.title = [info.event.title, ...lines.map((l) => `🔔 ${l.text} (${l.tooltip})`)].join("\n")
+			},
 		})
 		this.calendar.render()
 	}
@@ -310,7 +402,8 @@ export class Content extends SectionContent {
 				`user_id=${encodeURIComponent(userId)}`
 			)
 			this.participant = result as MonitoredParticipant
-			this.participantEvents = this.events(study, this.participant.days ?? [], true)
+			const nowLocal = Date.now() - (this.participant.tz?.offsetMin ?? 0) * MINUTE // the calendar runs on the participant's wall clock
+			this.participantEvents = this.events(study, this.participant.days ?? [], true, nowLocal)
 		}
 		finally {
 			this.participantLoading = false
@@ -321,7 +414,7 @@ export class Content extends SectionContent {
 	// ── events ──────────────────────────────────────────────────────────────────────────────────────
 
 	/** Calendar events: each window from when it opens to when it closes, and the night between bedtime and wake-up shaded. */
-	private events(study: Study, days: CalendarDay[], monitor: boolean): EventInput[] {
+	private events(study: Study, days: CalendarDay[], monitor: boolean, nowLocal = Date.now()): EventInput[] {
 		const events: EventInput[] = []
 		days.forEach((day, k) => {
 			const nextWake = days[k + 1]?.wake
@@ -330,7 +423,7 @@ export class Content extends SectionContent {
 			for(const w of day.windows) {
 				const title = this.questionnaireTitle(study, w.qid)
 				const details: string[] = []
-				if(w.prompt != null)
+				if(w.prompt != null && !w.pushes) // with the push log, each notification is drawn on its own below
 					details.push(`🔔 ${clock(w.prompt)}${w.reminders.length ? ` (+${w.reminders.length})` : ""}`)
 				if(monitor && w.state)
 					details.push(Lang.get(STATE_LABELS[w.state]) + (w.completedAt ? ` ${clock(w.completedAt)}` : ""))
@@ -339,10 +432,24 @@ export class Content extends SectionContent {
 					start: w.open,
 					end: Math.max(w.close, w.open + 15 * MINUTE),
 					color: monitor && w.state ? STATE_COLORS[w.state] : this.colors[w.qid],
+					extendedProps: w.pushes ? { notifications: w.pushes.map((n) => this.notificationLine(n, nowLocal)) } : {},
 				})
 			}
 		})
 		return events
+	}
+
+	/** One planned notification as a line in its window: due time and how far it got, coloured, with the whole chain on hover. */
+	private notificationLine(n: NotificationRecord, nowLocal: number): NotificationLine {
+		const status = pushStatus(n, nowLocal)
+		const reached = status === "opened" ? n.clicked : status === "received" ? n.received : status === "sent" ? n.sent : status === "failed" ? n.failed : null
+		const step = (label: LangKey, t: number | null) => t == null ? null : `${Lang.get(label)} ${clockSeconds(t)}`
+		return {
+			text: `${clock(n.at)} ${Lang.get(PUSH_LABELS[status])}${reached != null ? ` ${clock(reached)}` : ""}`,
+			color: PUSH_COLORS[status],
+			tooltip: [`${Lang.get("calendar_push_due")} ${clockSeconds(n.at)}`, step("calendar_push_sent", n.sent), step("calendar_push_failed", n.failed),
+				step("calendar_push_received", n.received), step("calendar_push_opened", n.clicked)].filter((x) => x != null).join(" · "),
+		}
 	}
 
 	// ── views ───────────────────────────────────────────────────────────────────────────────────────
@@ -397,6 +504,10 @@ export class Content extends SectionContent {
 				? STATES.map((s) => swatch(STATE_COLORS[s], Lang.get(STATE_LABELS[s])))
 				: qids.map((qid) => swatch(this.colors[qid] ?? "#888", this.questionnaireTitle(study, qid)))}
 			{swatch("#90a4ae66", Lang.get("calendar_night"))}
+			{monitor && <span class="horizontal vAlignCenter" style="gap:12px;flex-wrap:wrap">
+				<strong>🔔 {Lang.get("calendar_push_title")}</strong>
+				{PUSH_STATUSES.map((s) => swatch(PUSH_COLORS[s], Lang.get(PUSH_LABELS[s])))}
+			</span>}
 		</div>
 	}
 
@@ -461,6 +572,7 @@ export class Content extends SectionContent {
 			</div>
 			{!p.tz && <p class="smallText highlight">{Lang.get("calendar_tz_unknown_info")}</p>}
 			{this.legend(study, true)}
+			<p class="smallText">{Lang.get("calendar_push_info")}</p>
 			{m(CalendarView, { events: this.participantEvents, initialDate: today })}
 		</div>
 	}

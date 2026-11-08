@@ -23,6 +23,7 @@ abstract class BaseDataFolderTestSetup extends BaseTestSetup {
 			mkdir(TEST_DATA_FOLDER);
 		$initializer = new ESMiraInitializerFS();
 		$initializer->create($accountName, $password);
+		\backend\sqlite\CollectedDataDb::reset(); // the folder is new: a cached connection would still write into the old, deleted database
 	}
 	
 	static function setUpBeforeClass(): void {
@@ -37,6 +38,29 @@ abstract class BaseDataFolderTestSetup extends BaseTestSetup {
 		Configs::resetAll();
 	}
 	
+	/**
+	 * What the researcher gets for one file ("events", "web_access" or a questionnaire id): the CSV text built from the database, header
+	 * first. The server keeps no response files, so this is how a test sees what was stored.
+	 */
+	protected function exportedCsv($studyId, string $identifier): string {
+		ob_start();
+		try {
+			\backend\sqlite\ResponsesExport::outputWithoutFile((int) $studyId, $identifier, ';');
+			return (string) ob_get_contents();
+		}
+		finally {
+			ob_end_clean();
+		}
+	}
+	/** @return array<int, array<string, string>> the stored rows of a file as column name => value, in the order of the export */
+	protected function exportedRows($studyId, string $identifier): array {
+		$lines = array_values(array_filter(explode("\n", $this->exportedCsv($studyId, $identifier)), fn($l) => $l !== ''));
+		if(empty($lines))
+			return [];
+		$header = str_getcsv(array_shift($lines), ';', '"', '');
+		return array_map(fn($l) => array_combine($header, array_pad(str_getcsv($l, ';', '"', ''), count($header), '')), $lines);
+	}
+
 	protected function createEmptyStudy($studyId) {
 		$this->createStudy((object) ['id' => $studyId]);
 	}

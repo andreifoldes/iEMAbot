@@ -59,6 +59,13 @@ export class Content extends SectionContent {
 	}
 
 	private addCheckin(schedule: StudySchedule): void {
+		const alwaysOpen = schedule.getOnlyAlwaysOpen()
+		if(alwaysOpen && confirm(Lang.get("confirm_replace_always_open_checkin"))) {
+			const questionnaireId = alwaysOpen.questionnaireId.get()
+			schedule.checkins.remove(0)
+			schedule.checkins.push({ questionnaireId, startSegment: 0, endSegment: 1 })
+			return
+		}
 		const k = schedule.checkins.get().length
 		schedule.checkins.push({ startSegment: k, endSegment: k + 1 })
 	}

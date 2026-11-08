@@ -1,5 +1,6 @@
 import { StatisticsCollection } from "../data/statistics/StatisticsCollection";
 import { ChartData } from "../data/study/ChartData";
+import { sanitizeHtml } from "./sanitizeHtml";
 import {
 	Chart,
 	ArcElement,
@@ -158,7 +159,7 @@ export class ChartJsBox {
 		}
 		if (chart.chartDescription.get().length) {
 			const descView = document.createElement("p")
-			descView.innerHTML = chart.chartDescription.get()
+			descView.innerHTML = sanitizeHtml(chart.chartDescription.get())
 			parentView.appendChild(descView)
 		}
 

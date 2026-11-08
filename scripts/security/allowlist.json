@@ -3,6 +3,11 @@
   "entries": [
     {
       "rule": "personal-email",
+      "path": "^src/backend/composer\\.lock$",
+      "reason": "Package authors' addresses from each dependency's public Packagist metadata, copied in by Composer; not people of this project."
+    },
+    {
+      "rule": "personal-email",
       "path": "^\\.github/workflows/update_parent\\.yml$",
       "reason": "Upstream's bot git identity (file inherited from KL-Psychological-Methodology/ESMira-web, 2023); not a person of this fork."
     },
@@ -10,6 +15,51 @@
       "rule": "personal-email",
       "path": "^src/backend/php/libs/phplot/phplot\\.php$",
       "reason": "Third-party library copyright header (phplot), public by design."
+    },
+    {
+      "rule": "personal-email",
+      "path": "^test/backend/notifications/PushEndpointTest\\.php$",
+      "reason": "Deliberate SSRF/URL-parser test inputs (user@host userinfo tricks against the push endpoint allowlist); not real addresses."
+    },
+    {
+      "rule": "private-ipv4",
+      "path": "^test/backend/notifications/PushEndpointTest\\.php$",
+      "reason": "Private-range literal used as a test input that the push endpoint check must reject; not a real host."
+    },
+    {
+      "rule": "private-ipv4",
+      "path": "^web-pwa/src/lib/(?:joinLink|serverRoot)\\.test\\.mts$",
+      "reason": "Private-range literals used as test inputs for the join-link and server-root checks (including the Android emulator host alias); not real hosts."
+    },
+    {
+      "rule": "private-ipv4",
+      "path": "^web-pwa/src/lib/serverRoot\\.ts$",
+      "reason": "The Android emulator alias for the host machine, allowed for plain http on purpose."
+    },
+    {
+      "rule": "personal-email",
+      "path": "^\\.github/workflows/promote\\.yml$",
+      "reason": "The standard git SSH remote user, not a person. Staging-only: promote.yml is excluded from the public snapshot."
+    },
+    {
+      "rule": "unix-home-path",
+      "path": "^\\.github/workflows/(?:deploy|live-study)\\.yml$",
+      "reason": "Compose directory on the deploy host. Staging-only: both workflows are excluded from the public snapshot by promote.yml."
+    },
+    {
+      "rule": "personal-email",
+      "path": "^test/backend/HtmlSanitizerTest\\.php$",
+      "reason": "Placeholder mailto: addresses used as sanitizer test inputs (an earlier revision used a different placeholder domain, still visible in history)."
+    },
+    {
+      "rule": "personal-email",
+      "path": "^test/backend/bugReports/GithubIssueReportsTest\\.php$",
+      "reason": "Fake reporter addresses used as test inputs; not real people."
+    },
+    {
+      "rule": "private-ipv4",
+      "path": "^test/backend/bugReports/GithubIssueReportsTest\\.php$",
+      "reason": "Private-range literal used as a test input; not a real host."
     },
     {
       "rule": "unix-home-path",

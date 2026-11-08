@@ -85,6 +85,9 @@ Common patterns:
 | Once, at onboarding | as above with `limit: once`, `autoStart: true` |
 | Weekly, from week 2 | `dayFrom: 7`, `everyDays: 7` |
 
+In the dashboard, a study's first questionnaire starts with a check-in open any time, so that it works straight away. When that is
+the study's only check-in, **Add check-in** offers to replace it, because a timed check-in next to it would not limit anything.
+
 ### Boundaries {/* #boundaries */}
 
 Each end of a range is
@@ -116,7 +119,7 @@ Split points always use the planned bedtime.
 ### Event prompts {/* #event-prompts */}
 
 `prompt: event` prompts when a wearable reports an event (`eventProvider`, `eventKind`, e.g. Withings `bed_out` or
-Fitbit `sleep`), the first of the day between `eventFrom` and `eventUntil` (-1 = the whole range), after a delay of
+Google Health `sleep`), the first of the day between `eventFrom` and `eventUntil` (-1 = the whole range), after a delay of
 `eventDelayMin` (or a stable random delay up to `eventDelayMaxMin`). Without an event by the fallback time, it prompts
 at the fallback: `fallback: fixed` at `fallbackTime`; `variable` at the participant's answer to `fallbackVariable` plus
 `fallbackOffsetMin` (else `fallbackTime` if `fallbackDefault`); `none` never. Until then the window is not open (with
@@ -174,10 +177,23 @@ The server learns completions from uploads (`ParticipantVariableStore`, `@comple
   was answered outside this window), **missed**, **open now** or **upcoming**; windows after a participant left the
   study are greyed out.
 
+  Under each window the calendar lists its notifications (the prompt and its reminders) with what the push log holds
+  for each: **sent** (the server handed it to the push service), **failed**, **delivered** (the device reported it)
+  and **opened** (the participant tapped it), with the times; hover a line for every step down to the second. A
+  notification nothing was logged for, once it was due, reads **No push logged**; one still to come reads **Planned**.
+  Only the single participant's calendar reads the push log (`ScheduleCalendar::participant`), not the overview.
+
 Compliance counts each closed window of a check-in answerable once per window, and each study day of a check-in
 answerable once per day, against the ones completed; check-ins answerable any number of times or once in the study
 are shown but not counted. Completions are read from the study's response files (every uploaded questionnaire, so the
-whole history, also from before the schedule existed), wearable events from the participant's event store. The time
+whole history, also from before the schedule existed), wearable events from the participant's event store.
+The push log (`push_events` in the database, see [Web push](channels/web-push.md)) does not say which notification an
+event belongs to, so `PushTimeline` matches by time: a `sent` or `failed` belongs to the planned notification at or
+just before it (within 15 minutes, the sender runs once a minute); a `received` to the latest planned one, or to the
+last push the server sent if it arrives long after (a phone that was offline); a tap to the notification on the phone,
+the last one pushed or reported before it (a new push replaces the previous one). Android shows its notifications
+itself and reports no `sent`, so its lines show delivered and opened. A participant reached another way (Telegram) or
+with notifications off has no push log either. The time
 zone is the one saved with the participant's latest response (`timezone`, else `timezoneOffset`, sent by the web and
 Android app since 3.7.1), else their Telegram binding, else their push subscription; without any the calendar shows UTC.
 

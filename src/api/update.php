@@ -5,6 +5,7 @@ use backend\exceptions\CriticalException;
 use backend\dataClasses\Message;
 use backend\JsonOutput;
 use backend\Main;
+use backend\SecretCompare;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -74,7 +75,7 @@ foreach($data as $studyId => $entry) {
 		
 		//accessKey:
 		$accessKeys = $metadata->getAccessKeys();
-		if(!empty($accessKeys) && !in_array(trim(strtolower($entry->accessKey ?? '')), $accessKeys))
+		if(!empty($accessKeys) && !SecretCompare::inList($accessKeys, trim(strtolower($entry->accessKey ?? ''))))
 			$line['errorCode'] = 'wrongAccessKey';
 		
 		//studies (only if accessKey is correct):

@@ -9,6 +9,7 @@
 
 import { Watch, Check, RefreshCw, Link as LinkIcon, Unlink, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { t } from '../lib/i18n';
 import type { WearableStatus } from '../types';
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -37,12 +38,11 @@ export function WearablesPanel({ providers, status, busy, onConnect, onDisconnec
   return (
     <div className="p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
       <p className="text-sm text-on-surface-variant leading-relaxed">
-        Connect a wearable to share its health data with this study. You'll be taken to the
-        provider's site to sign in and approve. You can disconnect at any time.
+        {t('pwa_wearables_intro')}
       </p>
 
       {providers.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">No wearables are available for this study.</p>
+        <p className="text-sm text-on-surface-variant">{t('pwa_wearables_none')}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {providers.map((provider) => {
@@ -65,25 +65,25 @@ export function WearablesPanel({ providers, status, busy, onConnect, onDisconnec
                   <p className="font-semibold text-sm text-on-surface">{providerLabel(provider)}</p>
                   <p className="text-xs text-on-surface-variant">
                     {needsReconnect
-                      ? 'Connection expired · please reconnect so your data keeps syncing'
+                      ? t('pwa_wearables_expired')
                       : connected
                       ? connected.lastSync
-                        ? `Connected · last sync ${new Date(connected.lastSync).toLocaleDateString()}`
-                        : 'Connected · no data yet'
-                      : 'Not connected'}
+                        ? t('pwa_wearables_last_sync', new Date(connected.lastSync).toLocaleDateString())
+                        : t('pwa_wearables_no_data')
+                      : t('pwa_wearables_not_connected')}
                   </p>
                 </div>
                 {connected && !needsReconnect ? (
                   <button onClick={() => onDisconnect(provider)} disabled={isBusy} aria-busy={isBusy}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-60 shrink-0">
                     {isBusy ? <RefreshCw size={15} className="animate-spin" aria-hidden="true" /> : <Unlink size={15} aria-hidden="true" />}
-                    Disconnect
+                    {t('pwa_wearables_disconnect')}
                   </button>
                 ) : (
                   <button onClick={() => onConnect(provider)} disabled={isBusy} aria-busy={isBusy}
                     className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-full bg-primary text-on-primary active:scale-95 hover:brightness-110 transition-all disabled:opacity-60 shrink-0">
                     {isBusy ? <RefreshCw size={15} className="animate-spin" aria-hidden="true" /> : <LinkIcon size={15} aria-hidden="true" />}
-                    Connect
+                    {t('pwa_wearables_connect')}
                   </button>
                 )}
               </div>
@@ -93,9 +93,7 @@ export function WearablesPanel({ providers, status, busy, onConnect, onDisconnec
       )}
 
       <p className="text-xs text-on-surface-variant">
-        Your data is collected periodically by the research server while your wearable stays connected.
-        The server also keeps a record of when your provider reports new data (for example a new sleep
-        session), whether or not it leads to a questionnaire. Disconnecting removes what was collected.
+        {t('pwa_wearables_footer')}
       </p>
     </div>
   );

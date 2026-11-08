@@ -30,7 +30,7 @@ class Permission
 			throw new PageFlowException("Please wait for $blockTime seconds.");
 
 		if (!$accountStore->checkAccountLogin($accountName, $password)) {
-			usleep(rand(0, 1000000)); //to prevent Timing Leaks
+			usleep(random_int(0, 1000000)); //to prevent Timing Leaks
 
 			//block next login for a while because of failed attempt:
 			$accountStore->createBlocking($accountName);
@@ -83,7 +83,7 @@ class Permission
 		if (!isset($_COOKIE['account']) || !isset($_COOKIE['tokenId']) || !isset($_COOKIE['token']))
 			return false;
 
-		usleep(rand(0, 1000000)); //to prevent Timing Leaks
+		usleep(random_int(0, 1000000)); //to prevent Timing Leaks
 
 		$accountName = $_COOKIE['account'];
 		$tokenId = $_COOKIE['tokenId'];
@@ -94,7 +94,7 @@ class Permission
 		if (!$loginTokenStore->loginTokenExists($accountName, $tokenId)) { //can happen when a login was removed; also the tokenId cookie is not critical
 			self::setLoggedOut();
 			return false;
-		} else if (self::getHashedToken($token) !== $loginTokenStore->getLoginToken($accountName, $tokenId)) {
+		} else if (!SecretCompare::equals($loginTokenStore->getLoginToken($accountName, $tokenId), self::getHashedToken($token))) {
 			// This either happens when somebody stole the token cookie
 			// Or when a browser has cached the session and tries to restore it. This seems to happen mainly on mobile browsers and it seems they
 			// just save the request and resend it - which is has an outdated token because the token cookie has changed
@@ -217,8 +217,8 @@ class Permission
 
 		//save cookies:
 		$expire = time() + 31536000; //60*60*24*365
-		Main::setCookie('account', $accountName, $expire);
-		Main::setCookie('tokenId', $tokenId, $expire);
-		Main::setCookie('token', $token, $expire);
+		Main::setCookie('account', $accountName, $expire, true);
+		Main::setCookie('tokenId', $tokenId, $expire, true);
+		Main::setCookie('token', $token, $expire, true);
 	}
 }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace backend\schedule;
 
+use backend\sqlite\CollectedDataDb;
 use backend\channels\ChannelStudies;
 use backend\channels\store\ChannelBindingStore;
 use backend\Configs;
@@ -86,11 +87,15 @@ class ScheduleCalendar {
 	/** One participant's calendar: their days from enrolment (at most MAX_DAYS_BACK) to DAYS_AHEAD after today. */
 	public static function participant(array $study, int $studyId, string $userId, int $nowMs): array {
 		$responses = self::responses($study, $studyId, $userId);
-		return self::participantFrom($study, $studyId, $userId, $nowMs, $responses[$userId] ?? null);
+		return self::participantFrom($study, $studyId, $userId, $nowMs, $responses[$userId] ?? null, true);
 	}
 
-	/** @param ?array $responses {completions: [{qid, t}], tz: ?array} from responses() */
-	private static function participantFrom(array $study, int $studyId, string $userId, int $nowMs, ?array $responses): array {
+	/**
+	 * @param ?array $responses {completions: [{qid, t}], tz: ?array} from responses()
+	 * @param bool $withPushes also tie the participant's logged push events to each prompt and reminder (one participant
+	 *        only: the overview skips it, it would be one more query per participant)
+	 */
+	private static function participantFrom(array $study, int $studyId, string $userId, int $nowMs, ?array $responses, bool $withPushes = false): array {
 		$completions = $responses['completions'] ?? [];
 		$tz = self::timezone($studyId, $userId, $nowMs, $responses['tz'] ?? null);
 		$offsetMin = $tz['offsetMin'] ?? 0;
@@ -120,35 +125,59 @@ class ScheduleCalendar {
 		];
 		$days = Schedule::days($study, $studyId, $userId, $inputs, $joined, $nowMs, $offsetMin, $fromDay, self::DAYS_AHEAD, true);
 		$result['day'] = $today;
-		$result['days'] = self::shape($study, $days, $offsetMin, ['now' => $nowMs, 'completions' => $completions, 'withdrawnAt' => $withdrawnAt]);
+		$pushEvents = $withPushes ? CollectedDataDb::pushEventsSince($studyId, $userId, $nowMs + $fromDay * self::ONE_DAY - self::ONE_DAY) : null;
+		$result['days'] = self::shape($study, $days, $offsetMin, ['now' => $nowMs, 'completions' => $completions, 'withdrawnAt' => $withdrawnAt, 'pushEvents' => $pushEvents]);
 		$result['summary'] = self::summary($study, $days, $nowMs, $withdrawnAt);
 		return $result;
 	}
 
+	/** The prompt and then the reminders of a window, in real ms: what the sender is due to push. Empty without a prompt. */
+	private static function notificationTimes(array $study, array $schedule, array $w): array {
+		if(!$w['notify'])
+			return [];
+		[, , $count, $delay] = Schedule::notification($study, $schedule, $w);
+		$times = [$w['prompt']];
+		for($k = 1; $k <= $count; $k++) {
+			$rt = $w['prompt'] + $k * $delay;
+			if($rt < $w['close'])
+				$times[] = $rt;
+		}
+		return $times;
+	}
+
 	/**
 	 * Days of Schedule::days() for the calendar, in participant-local ms. With $monitor (now, completions,
-	 * withdrawnAt), each window gets its state.
+	 * withdrawnAt), each window gets its state; with its `pushEvents` too (the participant's delivery log, or null
+	 * when unknown), each prompt and reminder gets what became of it: `pushes`, one entry per notification in the
+	 * order prompt, reminders, with the local time it was due (`at`) and when it was sent, failed, received and
+	 * tapped (null = no such event logged).
 	 */
 	private static function shape(array $study, array $days, int $offsetMin, ?array $monitor): array {
 		$schedule = Schedule::config($study);
 		$local = fn(?int $t) => $t === null ? null : $t - $offsetMin * self::MINUTE;
+		$matched = null;
+		if(($monitor['pushEvents'] ?? null) !== null) {
+			$slots = [];
+			foreach($days as $day) {
+				foreach($day['windows'] as $w)
+					array_push($slots, ...self::notificationTimes($study, $schedule, $w));
+			}
+			$matched = PushTimeline::match($slots, $monitor['pushEvents']);
+		}
 		$out = [];
 		foreach($days as $day) {
 			$windows = [];
 			foreach($day['windows'] as $w) {
 				$c = $schedule['checkins'][$w['checkin']];
-				[, , $count, $delay] = Schedule::notification($study, $schedule, $w);
-				$reminders = [];
-				for($k = 1; $w['notify'] && $k <= $count; $k++) {
-					$rt = $w['prompt'] + $k * $delay;
-					if($rt < $w['close'])
-						$reminders[] = $local($rt);
-				}
+				$times = self::notificationTimes($study, $schedule, $w);
 				$entry = [
 					'checkin' => $w['checkin'], 'qid' => $w['qid'], 'limit' => $c['limit'],
 					'open' => $local($w['open']), 'close' => $local($w['close']),
-					'prompt' => $w['notify'] ? $local($w['prompt']) : null, 'reminders' => $reminders,
+					'prompt' => $times ? $local($times[0]) : null, 'reminders' => array_map($local, array_slice($times, 1)),
 				];
+				if($matched !== null) {
+					$entry['pushes'] = array_map(fn(int $t) => ['at' => $local($t)] + array_map($local, $matched[$t]), $times);
+				}
 				if($monitor !== null) {
 					[$entry['state'], $completedAt] = self::state($c, $w, $monitor);
 					$entry['completedAt'] = $local($completedAt);
@@ -233,53 +262,37 @@ class ScheduleCalendar {
 	}
 
 	/**
-	 * Completions and the latest time zone per participant, from the response files of the questionnaires the schedule
+	 * Completions and the latest time zone per participant, from the stored responses of the questionnaires the schedule
 	 * has check-ins for.
 	 * @return array<string, array{completions: array<int, array{qid:int, t:int}>, tz: ?array{name:string, offsetMin:?int, t:int}}>
 	 */
 	public static function responses(array $study, int $studyId, ?string $onlyUserId = null): array {
-		$delimiter = Configs::get('csv_delimiter') ?: ';';
+		$qids = array_values(array_map('intval', Schedule::questionnaireIds($study)));
+		if(empty($qids) || !is_file(CollectedDataDb::path()))
+			return [];
+		$sql = 'SELECT questionnaire_id, user_id, response_time, json_extract(data, \'$.timezone\') AS zone, json_extract(data, \'$.timezoneOffset\') AS offset
+			FROM responses WHERE study_id = ? AND kind = ? AND questionnaire_id IN (' . implode(',', $qids) . ')';
+		$params = [$studyId, CollectedDataDb::KIND_QUESTIONNAIRE];
+		if($onlyUserId !== null) {
+			$sql .= ' AND user_id = ?';
+			$params[] = $onlyUserId;
+		}
+		$stmt = CollectedDataDb::connection()->prepare($sql . ' ORDER BY response_time, id');
+		$stmt->execute($params);
 		$out = [];
-		foreach(Schedule::questionnaireIds($study) as $qid) {
-			$file = PathsFS::fileResponses($studyId, (string) $qid);
-			$fp = @fopen($file, 'r');
-			if($fp === false)
+		while($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
+			$userId = (string) $row['user_id'];
+			$t = (int) $row['response_time'];
+			if($userId === '' || $t <= 0)
 				continue;
-			try {
-				$header = fgets($fp);
-				if($header === false)
-					continue;
-				$columns = array_flip(str_getcsv(trim($header), $delimiter, '"', ''));
-				if(!isset($columns['userId'], $columns['responseTime']))
-					continue;
-				while(($line = fgets($fp)) !== false) {
-					$line = trim($line);
-					if($line === '')
-						continue;
-					// Cheap filter before parsing the whole row.
-					if($onlyUserId !== null && strpos($line, '"' . $onlyUserId . '"') === false)
-						continue;
-					$row = str_getcsv($line, $delimiter, '"', '');
-					$userId = (string) ($row[$columns['userId']] ?? '');
-					$t = (int) ($row[$columns['responseTime']] ?? 0);
-					if($userId === '' || $t <= 0 || ($onlyUserId !== null && $userId !== $onlyUserId))
-						continue;
-					$out[$userId]['completions'][] = ['qid' => $qid, 't' => $t];
-					$name = isset($columns['timezone']) ? trim((string) ($row[$columns['timezone']] ?? '')) : '';
-					$offset = isset($columns['timezoneOffset']) ? trim((string) ($row[$columns['timezoneOffset']] ?? '')) : '';
-					if(($name !== '' || is_numeric($offset)) && $t >= (int) ($out[$userId]['tz']['t'] ?? 0))
-						$out[$userId]['tz'] = ['name' => $name, 'offsetMin' => is_numeric($offset) ? (int) $offset : null, 't' => $t];
-				}
-			}
-			finally {
-				fclose($fp);
-			}
+			$out[$userId]['completions'][] = ['qid' => (int) $row['questionnaire_id'], 't' => $t];
+			$name = trim((string) $row['zone']);
+			$offset = trim((string) $row['offset']);
+			if(($name !== '' || is_numeric($offset)) && $t >= (int) ($out[$userId]['tz']['t'] ?? 0))
+				$out[$userId]['tz'] = ['name' => $name, 'offsetMin' => is_numeric($offset) ? (int) $offset : null, 't' => $t];
 		}
-		foreach($out as $userId => $entry) {
-			$list = $entry['completions'] ?? [];
-			usort($list, fn($a, $b) => $a['t'] <=> $b['t']);
-			$out[$userId] = ['completions' => $list, 'tz' => $entry['tz'] ?? null];
-		}
+		foreach($out as $userId => $entry)
+			$out[$userId] = ['completions' => $entry['completions'] ?? [], 'tz' => $entry['tz'] ?? null];
 		return $out;
 	}
 

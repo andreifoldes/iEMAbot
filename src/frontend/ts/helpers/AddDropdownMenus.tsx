@@ -93,7 +93,8 @@ export class AddDropdownMenus {
 				this.addQuestionnaireView(async (studyData) => {
 					close()
 					const questionnaire = await loaderState.showLoader(studyLoader.addQuestionnaire(study, studyData))
-					
+					studyLoader.openIfFirstCheckin(study, questionnaire)
+
 					if(this.sectionContent.sectionData.sectionName == "qEdit")
 						this.sectionContent.newSection(`qEdit,q:${questionnaire.internalId.get()}`, this.sectionContent.sectionData.depth - 1)
 					else

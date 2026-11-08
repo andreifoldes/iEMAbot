@@ -206,7 +206,7 @@ class QuestionnaireSaver {
         $output = '<form class="questionnaireBox coloredLines" method="post">';
         
         if (isset($page->header))
-            $output .= "<div class=\"line horizontalPadding verticalPadding\">$page->header</div>";
+            $output .= '<div class="line horizontalPadding verticalPadding">' . HtmlSanitizer::clean($page->header) . '</div>';
 
         $anyRequiredInputs = false;
         foreach ($inputs as $input) {
@@ -219,10 +219,10 @@ class QuestionnaireSaver {
         }
         
         if (isset($page->footer))
-            $output .= "<div class=\"line horizontalPadding verticalPadding\">$page->footer</div>";
+            $output .= '<div class="line horizontalPadding verticalPadding">' . HtmlSanitizer::clean($page->footer) . '</div>';
         
         $output .= '<div class="flexBlock horizontal">
-			<input type="hidden" name="participant" value="' .$this->participant .'"/>
+			<input type="hidden" name="participant" value="' .HtmlSanitizer::escape($this->participant) .'"/>
 			<input type="hidden" name="informed_consent" value="1"/>'
             .($anyRequiredInputs ? '<p class="smallText spacingTop">'.Lang::get('info_required').'</p>' : '')
             .(
@@ -249,7 +249,7 @@ class QuestionnaireSaver {
         if ($this->isSkipped($responseType))
             return '';
         
-        $name = 'responses['.$input->name.']';
+        $name = HtmlSanitizer::escape('responses['.$input->name.']'); //only used in HTML attributes
         $value = $this->getCache($input->name) ?? ($input->defaultValue ?? '');
         $required = $input->required ?? false;
         
@@ -257,7 +257,7 @@ class QuestionnaireSaver {
             $output = $this->error($input);
         else $output = $this->{$responseType}($input, $required, $name, $value, $this->study->id, $this->questionnaire->internalId);
         
-        return "<div class=\"line horizontalPadding verticalPadding\" id=\"item-$input->name\">$output</div>";
+        return '<div class="line horizontalPadding verticalPadding" id="item-' .HtmlSanitizer::escape($input->name) .'">' .$output .'</div>';
     }
     
     function isSkipped($responseType): bool {
@@ -396,12 +396,12 @@ class QuestionnaireSaver {
     
     function error(stdClass $input): string {
         $responseType = $input->responseType ?? 'Error';
-        return "<div class=\"highlight center\">Broken Input ($responseType)</div>";
+        return '<div class="highlight center">Broken Input (' .HtmlSanitizer::escape($responseType) .')</div>';
     }
     
     function text(stdClass $input, bool $required, string $name, string $value): string {
         $text = $input->text ?? '';
-        $output = $text;
+        $output = HtmlSanitizer::clean($text);
         if ($required && strlen($text))
             $output .= '*';
         $output .= '<br/>';
@@ -411,13 +411,13 @@ class QuestionnaireSaver {
         // text serialises as "<p></p>" etc.).
         $description = $input->description ?? '';
         if (strlen(trim(strip_tags($description))))
-            $output .= "<div class=\"smallText\">$description</div>";
+            $output .= '<div class="smallText">' .HtmlSanitizer::clean($description) .'</div>';
         return $output;
     }
     
     function binary(stdClass $input, bool $required, string $name, string $value): string {
-        $leftSideLabel = $input->leftSideLabel ?? '';
-        $rightSideLabel = $input->rightSideLabel ?? '';
+        $leftSideLabel = HtmlSanitizer::escape($input->leftSideLabel ?? ''); //plain-text fields in the editor
+        $rightSideLabel = HtmlSanitizer::escape($input->rightSideLabel ?? '');
         if ($value == '0') {
             $leftChecked = 'checked="checked"';
             $rightChecked = '';
@@ -448,7 +448,7 @@ class QuestionnaireSaver {
     function date(stdClass $input, bool $required, string $name, string $value): string {
         $requiredMarker = $required ? 'required="required"' : '';
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><input name=\"$name\" value=\"$value\" type=\"date\" $requiredMarker/></div>";
+            ."<div class=\"center\"><input name=\"$name\" value=\"" .HtmlSanitizer::escape($value) ."\" type=\"date\" $requiredMarker/></div>";
     }
     
     function dynamic_input(stdClass $input, bool $required, string $name, string $value, int $studyId, int $questionnaireId): string {
@@ -502,20 +502,20 @@ class QuestionnaireSaver {
         return $this->text($input, $required, $name, $value)
             .'<div>
 				<div>'. $this->drawInput($element, $studyId, $questionnaireId) .'</div>
-				<input type="hidden" name="responses['.$input->name."~index]" .'" value="'.($dynamicI + 1).'"/>
+				<input type="hidden" name="responses['.HtmlSanitizer::escape($input->name)."~index]" .'" value="'.($dynamicI + 1).'"/>
 			</div>';
     }
     
     function image(stdClass $input, bool $required, string $name, string $value): string {
-        $url = $input->url ?? '';
+        $url = HtmlSanitizer::escape(HtmlSanitizer::safeUrl($input->url ?? '', ['http', 'https'], true));
         $alt = htmlspecialchars($input->imageAlt ?? '', ENT_QUOTES);
         return $this->text($input, $required, $name, $value)
             ."<div class=\"center\"><img alt=\"$alt\" src=\"$url\" class=\"questionnaireInputImage\"/><input type=\"hidden\" name=\"$name\" value=\"1\"/></div>";
     }
     
     function likert(stdClass $input, bool $required, string $name, string $value): string {
-        $leftSideLabel = $input->leftSideLabel ?? '';
-        $rightSideLabel = $input->rightSideLabel ?? '';
+        $leftSideLabel = HtmlSanitizer::escape($input->leftSideLabel ?? ''); //plain-text fields in the editor
+        $rightSideLabel = HtmlSanitizer::escape($input->rightSideLabel ?? '');
         $requiredMarker = $required ? 'required="required"' : '';
         
         $radioBoxes = '';
@@ -539,7 +539,7 @@ class QuestionnaireSaver {
     function list_multiple(stdClass $input, bool $required, string $name, string $value): string {
         $radioBoxes = '';
         foreach ($input->listChoices ?? [] as $v) {
-            $radioBoxes .= '<label class="noTitle noDesc"><input type="checkbox" name="'.$name.'[]" value="'.$v.'" ' .(strpos($value, $v) !== false ? 'checked="checked"' : '') .'/><span>'.$v.'</span></label>';
+            $radioBoxes .= '<label class="noTitle noDesc"><input type="checkbox" name="'.$name.'[]" value="'.HtmlSanitizer::escape($v).'" ' .(strpos($value, $v) !== false ? 'checked="checked"' : '') .'/><span>'.HtmlSanitizer::escape($v).'</span></label>';
         }
         return $this->text($input, $required, $name, $value)
             ."<div class=\"center\">
@@ -556,8 +556,8 @@ class QuestionnaireSaver {
         if (isset($input->asDropDown) && !$input->asDropDown) {
             $output .= '<div class="center"><div class="vertical hAlignStart">';
             foreach ($input->listChoices as $choiceValue) {
-                $output .= "<label class=\"noDesc noTitle\"><input type=\"radio\" name=\"$name\" value=\"$choiceValue\" ".($choiceValue == $value ? 'checked="checked"' : '') ."$requiredMarker/>
-					<span>$choiceValue</span>
+                $output .= "<label class=\"noDesc noTitle\"><input type=\"radio\" name=\"$name\" value=\"" .HtmlSanitizer::escape($choiceValue) ."\" ".($choiceValue == $value ? 'checked="checked"' : '') ."$requiredMarker/>
+					<span>" .HtmlSanitizer::escape($choiceValue) ."</span>
 					</label>";
             }
             $output .= '</div></div>';
@@ -566,7 +566,7 @@ class QuestionnaireSaver {
             
             $output .= "<div class=\"center\"><select name=\"$name\" $requiredMarker\"><option value=\"\">" .Lang::get('please_select') .'</option>';
             foreach ($input->listChoices ?? [] as $v) {
-                $output .= '<option' .($value == $v ? ' selected="selected"' : '') .">$v</option>";
+                $output .= '<option' .($value == $v ? ' selected="selected"' : '') .'>' .HtmlSanitizer::escape($v) .'</option>';
             }
             $output .= '<optgroup label=""></optgroup></select></div>';
         }
@@ -578,27 +578,27 @@ class QuestionnaireSaver {
         $requiredMarker = $required ? 'required="required"' : '';
         
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><input name=\"$name\" value=\"$value\" type=\"number\" step=\"$step\" style=\"width: 100px;\" $requiredMarker/></div>";
+            ."<div class=\"center\"><input name=\"$name\" value=\"" .HtmlSanitizer::escape($value) ."\" type=\"number\" step=\"$step\" style=\"width: 100px;\" $requiredMarker/></div>";
     }
     
     function text_input(stdClass $input, bool $required, string $name, string $value): string {
         $requiredMarker = $required ? 'required="required"' : '';
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><textarea name=\"$name\" $requiredMarker>$value</textarea></div>";
+            ."<div class=\"center\"><textarea name=\"$name\" $requiredMarker>" .HtmlSanitizer::escape($value) ."</textarea></div>";
     }
     
     function time(stdClass $input, bool $required, string $name, string $value): string {
         $requiredMarker = $required ? 'required="required"' : '';
         return $this->text($input, $required, $name, $value)
-            ."<div class=\"center\"><input name=\"$name\" value=\"$value\" type=\"time\" $requiredMarker/></div>";
+            ."<div class=\"center\"><input name=\"$name\" value=\"" .HtmlSanitizer::escape($value) ."\" type=\"time\" $requiredMarker/></div>";
     }
     
     function va_scale(stdClass $input, bool $required, string $name, string $value): string {
-        $leftSideLabel = $input->leftSideLabel ?? '';
-        $rightSideLabel = $input->rightSideLabel ?? '';
+        $leftSideLabel = HtmlSanitizer::escape($input->leftSideLabel ?? ''); //plain-text fields in the editor
+        $rightSideLabel = HtmlSanitizer::escape($input->rightSideLabel ?? '');
         $requiredMarker = $required ? 'required="required"' : '';
         $noValue = $value == "";
-        $maxValue = (isset($input->maxValue) && $input->maxValue > 1) ? $input->maxValue : 100;
+        $maxValue = (isset($input->maxValue) && $input->maxValue > 1) ? (int) $input->maxValue : 100;
         return $this->text($input, $required, $name, $value)
             ."<div class=\"horizontal flexBlock\">&nbsp;
 			<div class=\"smallText\">$leftSideLabel</div>
@@ -607,12 +607,12 @@ class QuestionnaireSaver {
 		</div>
 		<div class=\"center\">
 			<div></div>
-			<input " .($noValue ? 'no-value="1"' : '') ." name=\"$name\" value=\"" .($noValue ? ($maxValue / 2) : $value) ."\" type=\"range\" min=\"1\" max=\"$maxValue\" $requiredMarker/>
+			<input " .($noValue ? 'no-value="1"' : '') ." name=\"$name\" value=\"" .HtmlSanitizer::escape($noValue ? ($maxValue / 2) : $value) ."\" type=\"range\" min=\"1\" max=\"$maxValue\" $requiredMarker/>
 		</div>";
     }
     
     function video(stdClass $input, bool $required, string $name, string $value): string {
-        $url = $input->url ?? '';
+        $url = HtmlSanitizer::escape(HtmlSanitizer::safeUrl($input->url ?? '', ['http', 'https']));
         return $this->text($input, $required, $name, $value)
             ."<div class=\"center\"><iframe src=\"$url\"></iframe></div><input type=\"hidden\" name=\"$name\" value=\"1\"/>";
     }

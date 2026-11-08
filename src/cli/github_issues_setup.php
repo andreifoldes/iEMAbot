@@ -30,11 +30,16 @@ try {
 				throw new Exception('No token given on stdin.');
 			GithubIssueReports::configure($repo, $token);
 			$error = GithubIssueReports::check();
+			if(strpos($error, GithubIssueReports::NOT_PRIVATE) === 0) {
+				GithubIssueReports::configure('', ''); // never leave participants' notes pointed at a public repository
+				fwrite(STDERR, "Not enabled: $error\n");
+				exit(1);
+			}
 			if($error !== '') {
 				fwrite(STDERR, "Saved, but the check failed: $error\n");
 				exit(1);
 			}
-			fwrite(STDOUT, "Error reports will be filed as issues in $repo.\n");
+			fwrite(STDOUT, "Error reports will be filed as issues in $repo (a private repository).\n");
 			break;
 		case 'off':
 			GithubIssueReports::configure('', '');

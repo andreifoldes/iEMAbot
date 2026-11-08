@@ -1,8 +1,9 @@
 import { Search } from 'lucide-react';
 import type { HintOS } from '../lib/pwaInstall';
+import { t } from '../lib/i18n';
+import { rich } from './richText';
 
 const APP_NAME = 'iEMAbot';
-const OPEN_FROM_THERE = 'Open it from there to continue.';
 
 /**
  * "Can't see the app after adding it?" help. The icon is placed in the first
@@ -16,27 +17,18 @@ export function FindAppHint({ os }: { os: HintOS }) {
       <Search size={14} className="shrink-0 mt-0.5" aria-hidden="true" />
       {os === 'ios' ? (
         <span>
-          <strong className="text-on-surface">Can&apos;t see the app after adding it?</strong>{' '}
-          iOS puts the icon in the first free spot on your Home Screen. If your first page is
-          full, it goes on a later page, so swipe left to find{' '}
-          <strong className="text-on-surface">{APP_NAME}</strong>. You can also swipe all the way
-          left to the App Library, or pull down on the Home Screen and search for
-          &ldquo;{APP_NAME}&rdquo;. {OPEN_FROM_THERE}
+          <strong className="text-on-surface">{t('pwa_install_find_ios_q')}</strong>{' '}
+          {rich(t('pwa_install_find_ios', APP_NAME, APP_NAME), { strongClass: 'text-on-surface' })}
         </span>
       ) : os === 'android' ? (
         <span>
-          <strong className="text-on-surface">Can&apos;t see the app after installing?</strong>{' '}
-          If your first Home Screen page is full, Android may put the icon on another page, so
-          swipe left to look through your pages. You can also swipe up to open your app list and
-          find <strong className="text-on-surface">{APP_NAME}</strong> there. {OPEN_FROM_THERE}
+          <strong className="text-on-surface">{t('pwa_install_find_android_q')}</strong>{' '}
+          {rich(t('pwa_install_find_android', APP_NAME), { strongClass: 'text-on-surface' })}
         </span>
       ) : (
         <span>
-          <strong className="text-on-surface">Can&apos;t see the app after adding it?</strong>{' '}
-          If your first Home Screen page is full, the icon may be on a later page, so swipe left
-          to look through your pages. You can also search for{' '}
-          <strong className="text-on-surface">{APP_NAME}</strong>: pull down on the Home Screen on
-          iPhone, or swipe up to open the app list on Android. {OPEN_FROM_THERE}
+          <strong className="text-on-surface">{t('pwa_install_find_ios_q')}</strong>{' '}
+          {rich(t('pwa_install_find_generic', APP_NAME), { strongClass: 'text-on-surface' })}
         </span>
       )}
     </p>

@@ -17,6 +17,10 @@ import uuid
 from playwright.sync_api import sync_playwright
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080").rstrip("/")
+# Where the dashboard and API live, when not at the site's root (the self-host kit serves them under /esmira).
+ADMIN_BASE = os.environ.get("UI_SMOKE_ADMIN_BASE", BASE).rstrip("/")
+# Accept a private certificate, for testing HTTPS on "localhost".
+IGNORE_HTTPS = os.environ.get("UI_SMOKE_IGNORE_HTTPS") == "1"
 USER = os.environ.get("DEMO_ADMIN", "admin")
 PASSWORD = os.environ.get("DEMO_PASS")
 MARKER = f"ui-smoke-{uuid.uuid4().hex[:8]}"
@@ -48,20 +52,17 @@ def watch(page, sink):
 
 
 def participant_flow(browser):
-    ctx = browser.new_context(viewport={"width": 390, "height": 844})
+    ctx = browser.new_context(viewport={"width": 390, "height": 844}, ignore_https_errors=IGNORE_HTTPS)
     ctx.add_init_script(STANDALONE)
     page, errors = ctx.new_page(), []
     watch(page, errors)
     page.goto(f"{BASE}/pwa/")
     page.get_by_label("Study invite code").fill("demo")
-    page.get_by_role("button", name="Continue").click()
+    page.get_by_role("button", name="Continue", exact=True).click()
     page.get_by_role("button", name="I consent").click(timeout=15000)
-    bar = page.get_by_role("textbox", name="Type a response")
-    page.wait_for_function("el => !el.disabled", arg=bar.element_handle(), timeout=15000)
-    bar.fill("UI Smoke")
-    page.get_by_role("button", name="Send").click()
     page.get_by_role("button", name="Daily check-in").click(timeout=15000)
     page.get_by_role("button", name="4", exact=True).click(timeout=15000)
+    bar = page.get_by_role("textbox", name="Type a response")
     page.wait_for_function("el => !el.disabled", arg=bar.element_handle(), timeout=15000)
     bar.fill(MARKER)
     # The PWA is offline-first: "recorded" only means saved on the device. The upload to datasets.php happens
@@ -92,10 +93,10 @@ def participant_flow(browser):
 
 
 def researcher_flow(browser):
-    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900}, ignore_https_errors=IGNORE_HTTPS)
     page, errors = ctx.new_page(), []
     watch(page, errors)
-    page.goto(f"{BASE}/#admin")
+    page.goto(f"{ADMIN_BASE}/#admin")
     # The SPA re-renders the form once its initial GetPermissions call returns; filling earlier loses the input.
     page.wait_for_load_state("networkidle")
     page.get_by_role("textbox", name="Username").wait_for(timeout=15000)
@@ -106,20 +107,25 @@ def researcher_flow(browser):
     page.get_by_role("link", name="Show data / statistics").wait_for(timeout=15000)
     check("Admin: login shows researcher dashboard", True)
 
-    page.goto(f"{BASE}/#admin/allStudies:data")
+    page.goto(f"{ADMIN_BASE}/#admin/allStudies:data")
     page.get_by_role("link", name="ESMira demo study").first.wait_for(timeout=15000)
     check("Admin: demo study listed", True)
 
+    # Telegram is optional: nothing about it shows on a server without a bot.
+    page.goto(f"{ADMIN_BASE}/#admin/allStudies:edit/studyEdit,id:{STUDY_ID}")
+    page.get_by_role("link", name="Study settings").first.wait_for(timeout=15000)
+    check("Admin: no Telegram panel without a bot", page.get_by_role("link", name="Telegram").count() == 0)
+
     # "Data table" is a download page: one CSV link per questionnaire. Check it is listed, then fetch the very
     # CSV that link points at (same session cookies) and look for the answer the participant just submitted.
-    page.goto(f"{BASE}/#admin/allStudies:data/dataStatistics,id:{STUDY_ID}/dataList")
+    page.goto(f"{ADMIN_BASE}/#admin/allStudies:data/dataStatistics,id:{STUDY_ID}/dataList")
     try:
         page.get_by_text("Daily check-in").first.wait_for(timeout=20000)
         listed = True
     except Exception:
         listed = False
     check("Admin: data page lists the questionnaire", listed, page.inner_text("body")[-200:])
-    csv = page.context.request.get(f"{BASE}/api/admin.php?type=GetData&study_id={STUDY_ID}&q_id={QUESTIONNAIRE_ID}")
+    csv = page.context.request.get(f"{ADMIN_BASE}/api/admin.php?type=GetData&study_id={STUDY_ID}&q_id={QUESTIONNAIRE_ID}")
     check("Admin: response CSV contains the participant's answer", csv.ok and MARKER in csv.text(), f"HTTP {csv.status}")
     check("Admin: no console errors", not errors, "; ".join(errors)[:300])
     ctx.close()
@@ -129,7 +135,8 @@ if not PASSWORD:
     sys.exit("Set DEMO_PASS to the admin password")
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
+    # The context option above does not reach the service worker's own script download.
+    browser = p.chromium.launch(headless=True, args=["--ignore-certificate-errors"] if IGNORE_HTTPS else [])
     for flow in (participant_flow, researcher_flow):
         try:
             flow(browser)

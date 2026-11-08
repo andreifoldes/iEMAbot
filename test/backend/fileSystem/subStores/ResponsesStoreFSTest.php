@@ -10,6 +10,7 @@ use backend\fileSystem\PathsFS;
 use backend\FileUploader;
 use backend\Main;
 use backend\Paths;
+use backend\sqlite\CollectedDataDb;
 use backend\ResponsesIndex;
 use PHPUnit\Framework\ExpectationFailedException;
 use testConfigs\BaseDataFolderTestSetup;
@@ -24,6 +25,7 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 	}
 	protected function setUp(): void {
 		self::setUpBeforeClass();
+		CollectedDataDb::reset(); // the data folder is recreated for every test; a cached connection would still see the old database
 	}
 	
 	
@@ -50,12 +52,9 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 			$userAgent
 		);
 		
-		$path = PathsFS::fileResponses($studyId, PathsFS::FILENAME_WEB_ACCESS);
-		$this->assertEquals(
-			Main::arrayToCSV(KEYS_WEB_ACCESS, Configs::get('csv_delimiter'))
-			."\n" .Main::arrayToCSV([$responseTime, $pageName, $referer, $userAgent], Configs::get('csv_delimiter')),
-			file_get_contents($path)
-		);
+		$rows = CollectedDataDb::connection()->query('SELECT accessed_at, page, referer, user_agent FROM web_access WHERE study_id = ' . $studyId)->fetchAll(\PDO::FETCH_NUM);
+		$this->assertEquals([[$responseTime, $pageName, $referer, $userAgent]], $rows);
+		$this->assertFileDoesNotExist(PathsFS::fileResponses($studyId, PathsFS::FILENAME_WEB_ACCESS), 'the server keeps no response files');
 	}
 	
 	function test_saveDataSetCache_with_statistics() {
@@ -117,20 +116,17 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		]);
 		$cache = new DataSetCache();
 		
-		$expectedContent = [
-			123451 => file_get_contents(PathsFS::fileResponses($studyId, 123451)),
-			123452 => file_get_contents(PathsFS::fileResponses($studyId, 123452))
-		];
-		$csvDelimiter = Configs::get('csv_delimiter');
-		foreach($source as $entry) {
+		foreach($source as $entry)
 			$cache->addToQuestionnaireCache($studyId, $entry['id'], 1111, $entry['data']);
-			
-			$expectedContent[$entry['id']] .= "\n" .Main::arrayToCSV($entry['data'], $csvDelimiter);
-		}
 		
 		$this->saveDataSetCache($cache);
-		$this->assertEquals($expectedContent[123451], file_get_contents(PathsFS::fileResponses($studyId, 123451)));
-		$this->assertEquals($expectedContent[123452], file_get_contents(PathsFS::fileResponses($studyId, 123452)));
+		$stored = function(int $id): array {
+			$stmt = CollectedDataDb::connection()->prepare("SELECT data FROM responses WHERE kind = 'questionnaire' AND questionnaire_id = ? ORDER BY id");
+			$stmt->execute([$id]);
+			return array_map(fn($json) => json_decode($json, true), $stmt->fetchAll(\PDO::FETCH_COLUMN));
+		};
+		$this->assertEquals([['key1' => 'var1'], ['key2' => 'var2']], $stored(123451));
+		$this->assertEquals([['key3' => 'var3']], $stored(123452));
 	}
 	function test_saveDataSetCache_with_events() {
 		$studyId = 123;
@@ -143,15 +139,12 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		$this->createEmptyStudy($studyId);
 		$cache = new DataSetCache();
 		
-		$expectedContent = file_get_contents(PathsFS::fileResponses($studyId, PathsFS::FILENAME_EVENTS));
-		$csvDelimiter = Configs::get('csv_delimiter');
-		foreach($source as $entry) {
+		foreach($source as $entry)
 			$cache->addToEventCache($studyId, 111, $entry['data']);
-			$expectedContent .= "\n" .Main::arrayToCSV($entry['data'], $csvDelimiter);
-		}
 		
 		$this->saveDataSetCache($cache);
-		$this->assertEquals($expectedContent, file_get_contents(PathsFS::fileResponses($studyId, PathsFS::FILENAME_EVENTS)));
+		$stmt = CollectedDataDb::connection()->query("SELECT data FROM responses WHERE kind = 'event' AND study_id = $studyId ORDER BY id");
+		$this->assertEquals(array_column($source, 'data'), array_map(fn($json) => json_decode($json, true), $stmt->fetchAll(\PDO::FETCH_COLUMN)));
 	}
 	function test_saveDataSetCache_with_files() {
 		$studyId = 123;
@@ -281,17 +274,18 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		$this->createEmptyStudy($studyId2);
 		$this->createEmptyStudy($studyId3);
 		
-		$timeStudy1 = filemtime(PathsFS::fileResponses($studyId1, PathsFS::FILENAME_EVENTS));
-		$timeStudy2 = filemtime(PathsFS::fileResponses($studyId2, PathsFS::FILENAME_EVENTS));
-		$timeStudy3 = filemtime(PathsFS::fileResponses($studyId3, PathsFS::FILENAME_EVENTS));
+		$timeStudy1 = filemtime(PathsFS::fileStudyMetadata($studyId1));
+		$timeStudy2 = filemtime(PathsFS::fileStudyMetadata($studyId2));
+		$timeStudy3 = filemtime(PathsFS::fileStudyMetadata($studyId3));
 		
 		$time = time();
 		$responsesStore = Configs::getDataStore()->getResponsesStore();
 		
-		$this->assertEquals(
-			[$studyId1 => $timeStudy1, $studyId2 => $timeStudy2, $studyId3 => $timeStudy3],
-			$responsesStore->getLastResponseTimestampOfStudies()
-		);
+		// Studies without uploads report when they were saved (the clocks of two files differ by milliseconds).
+		$idle = $responsesStore->getLastResponseTimestampOfStudies();
+		$this->assertSame([$studyId1, $studyId2, $studyId3], array_keys($idle));
+		foreach([$studyId1 => $timeStudy1, $studyId2 => $timeStudy2, $studyId3 => $timeStudy3] as $id => $expected)
+			$this->assertEqualsWithDelta($expected, $idle[$id], 1);
 		
 		sleep(1);
 		
@@ -299,15 +293,12 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		$cache->addToEventCache($studyId1, 111, []);
 		$this->saveDataSetCache($cache);
 		
-		// PHP caches the last stat(): without this, filemtime() can return the time from before the write.
-		clearstatcache();
-		$timeStudy1 = filemtime(PathsFS::fileResponses($studyId1, PathsFS::FILENAME_EVENTS));
-		
 		$responsesStore = Configs::getDataStore()->getResponsesStore();
-		$this->assertEquals(
-			[$studyId1 => $timeStudy1, $studyId2 => $timeStudy2, $studyId3 => $timeStudy3],
-			$responsesStore->getLastResponseTimestampOfStudies()
-		);
+		$active = $responsesStore->getLastResponseTimestampOfStudies();
+		$this->assertGreaterThan($idle[$studyId1], $active[$studyId1], 'the upload moved the study forward');
+		$this->assertEqualsWithDelta(time(), $active[$studyId1], 5, 'it is the time of the upload');
+		$this->assertSame($idle[$studyId2], $active[$studyId2], 'studies without uploads stay put');
+		$this->assertSame($idle[$studyId3], $active[$studyId3]);
 	}
 	
 	function test_createMediaZip() {
@@ -374,6 +365,19 @@ class ResponsesStoreFSTest extends BaseDataFolderTestSetup {
 		
 		$this->expectOutputString($content);
 		$responsesStore->outputImageFromResponses($studyId, 'userId', 111, 'key');
+	}
+	
+	function test_getResponseFilesList_includes_a_questionnaire_that_only_has_stored_responses_and_no_file() {
+		$studyId = 321;
+		\backend\sqlite\CollectedDataDb::reset();
+		$this->createEmptyStudy($studyId);
+		$this->assertSame([], Configs::getDataStore()->getResponsesStore()->getResponseFilesList($studyId));
+
+		\backend\sqlite\CollectedDataDb::addResponses($studyId, \backend\sqlite\CollectedDataDb::KIND_QUESTIONNAIRE, 555, [['userId' => 'u', 'entryId' => '1', 'responseTime' => '10']]);
+		// events are not a questionnaire and must not be listed as one
+		\backend\sqlite\CollectedDataDb::addResponses($studyId, \backend\sqlite\CollectedDataDb::KIND_EVENT, null, [['userId' => 'u', 'entryId' => '2', 'responseTime' => '11']]);
+
+		$this->assertSame(['555'], Configs::getDataStore()->getResponsesStore()->getResponseFilesList($studyId));
 	}
 	
 	function test_getResponseFilesList() {

@@ -30,7 +30,7 @@ class PushSenderTest extends TestCase {
 
 	public function test_study_end_message_replaces_the_last_reminder_silently() {
 		$p = PushSender::studyEndPayload(['title' => 'Sleep study']);
-		$this->assertSame(['Sleep study', NotificationSpec::STUDY_END_BODY, PushSender::REMINDER_TAG, true, false],
+		$this->assertSame(['Sleep study', NotificationSpec::studyEndBody(), PushSender::REMINDER_TAG, true, false],
 			[$p['title'], $p['body'], $p['tag'], $p['silent'], $p['renotify']]);
 		// no study/user id: no delivery receipts, it is not a reminder
 		$this->assertArrayNotHasKey('sid', $p);

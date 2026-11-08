@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { pwaLocales } from './vite-plugin-pwa-locales.ts';
 
 // In production the participant PWA is served at the short path /pwa/ (Caddy routes
 // /pwa/* to the ESMira container). The ESMira backend stays under /esmira/, so the API
@@ -32,6 +33,11 @@ return {
   plugins: [
     react(),
     tailwindcss(),
+    // Interface text: src/locales/pwa/<code>.json (the participant app's own strings).
+    pwaLocales(
+      path.resolve(__dirname, '..', 'src', 'locales', 'pwa'),
+      path.resolve(__dirname, '..', 'src', 'locales', 'meta', 'pwa-machine-translated.json'),
+    ),
     ...(native ? [] : [VitePWA({
       registerType: 'autoUpdate',
       // injectManifest: we own the service worker (src/sw.ts) so it can handle

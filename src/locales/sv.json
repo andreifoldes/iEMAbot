@@ -665,5 +665,6 @@
     "publish_info_fallback_link": "Dessutom kan du inkludera länken till infosidan på din reservserver och instruera deltagare att använda den om den första länken inte fungerar. ",
     "publish_info_flyer_based": "Om du vill rekrytera via flyers, affischer etc., använd QR-koden. ",
     "publish_info_difference_links": "Använd länken till studiens informationssida för deltagare i webbversionen av studien. Använd länken till appinstallationsinstruktionerna för deltagare som använder sina smartphones. ",
-    "publish_info_explanation_qr": "Om någon skannar QR-koden utan att ha ESMira installerat på sin smartphone kommer smartphonen att öppna infosidan i webbläsaren. Om de redan har ESMira installerat kommer smartphonen i stället att öppna ESMira och direkt föra dem in i registreringsprocessen för studien."
+    "publish_info_explanation_qr": "Om någon skannar QR-koden utan att ha ESMira installerat på sin smartphone kommer smartphonen att öppna infosidan i webbläsaren. Om de redan har ESMira installerat kommer smartphonen i stället att öppna ESMira och direkt föra dem in i registreringsprocessen för studien.",
+	"push_notifications": "Pushaviseringar"
 }

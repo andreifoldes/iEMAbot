@@ -10,6 +10,7 @@
  */
 
 import { isNativeApp } from './platform.ts';
+import { t } from './i18n.ts';
 
 /** `app/android.json` on the server, as `api/app_version.php` returns it. */
 export interface AndroidRelease {
@@ -46,7 +47,12 @@ export function updateFrom(release: unknown, installedCode: number, serverBase: 
   if (!Number.isFinite(code) || code <= installedCode || typeof r.apk !== 'string' || !r.apk) return null;
   let url: string;
   try {
-    url = new URL(r.apk, new URL(serverBase, globalThis.location?.href ?? 'https://localhost/')).href;
+    const base = new URL(serverBase, globalThis.location?.href ?? 'https://localhost/');
+    const resolved = new URL(r.apk, base);
+    // The download must come from the server the app talks to: an absolute address in the answer would otherwise
+    // send the participant to install an app from anywhere.
+    if (resolved.origin !== base.origin) return null;
+    url = resolved.href;
   } catch {
     return null;
   }
@@ -88,8 +94,8 @@ export async function notifyAppUpdate(update: AppUpdate): Promise<void> {
     if (!p) return;
     await p.schedule({ notifications: [{
       id: NOTIFICATION_ID,
-      title: 'Update iEMAbot',
-      body: 'A new version of the app is available. Open the app and tap Update.',
+      title: t('pwa_update_title'),
+      body: t('pwa_update_body'),
     }] });
     localStorage.setItem(NOTIFIED_KEY, String(update.versionCode));
   } catch { /* notifications off or unavailable: the banner still shows */ }

@@ -1,0 +1,15 @@
+# Another web server handles HTTPS and forwards everything here. It must pass on the Host header and
+# X-Forwarded-Proto: https, and send the HSTS header itself (see the self-hosting guide for nginx and Apache examples).
+{
+	auto_https off
+	admin off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+import routes.caddy
+
+:80 {
+	import iemabot_routes
+}

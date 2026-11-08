@@ -1,0 +1,58 @@
+# Keeps the pinned build inputs current (security audit, tracker item 6): GitHub Actions are pinned to commit SHAs with the tag
+# as a comment, the Dockerfiles pin base images by digest, and Composer / npm have lock files. Dependabot proposes the bumps as
+# pull requests, which go through the same CI as any change. Weekly, few at a time, so a review stays small.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      actions: { patterns: ["*"] }
+  # The PHP version is chosen on purpose (production runs 8.5, CI tests 8.5), so only patch updates of it are proposed. A move to
+  # another PHP minor or major is its own piece of work: update the Dockerfiles, test/Dockerfile and the CI php-version together.
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: php
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+  - package-ecosystem: docker
+    directory: /test
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: php
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+  - package-ecosystem: composer
+    directory: /src/backend
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+  # @types/node should match the Node version the build really runs on, so its majors are not proposed.
+  - package-ecosystem: npm
+    directory: /web-pwa
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      minor-and-patch: { update-types: [minor, patch] }
+  # The admin editor's rich-text editor (tiptap), JSON editor (vanilla-jsoneditor) and calendar (fullcalendar) have major versions that
+  # need code changes; a single package of the tiptap or fullcalendar family cannot move alone. Majors are done by hand, as a planned migration.
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "@tiptap/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vanilla-jsoneditor
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@fullcalendar/*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      tiptap: { patterns: ["@tiptap/*"] }
+      fullcalendar: { patterns: ["@fullcalendar/*"] }
+      minor-and-patch: { update-types: [minor, patch] }

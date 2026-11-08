@@ -5,6 +5,7 @@ use backend\exceptions\CriticalException;
 use backend\JsonOutput;
 use backend\Main;
 use backend\Permission;
+use backend\SecretCompare;
 
 require_once dirname(__FILE__, 2) .'/backend/autoload.php';
 
@@ -25,7 +26,7 @@ try {
 	$metadata = Configs::getDataStore()->getStudyMetadataStore($studyId);
 	$accessKeys = $metadata->getAccessKeys();
 	if(sizeof($accessKeys)) {
-		if(!isset($_GET['access_key']) || !in_array(strtolower(trim($_GET['access_key'])), $accessKeys)) {
+		if(!isset($_GET['access_key']) || !SecretCompare::inList($accessKeys, strtolower(trim($_GET['access_key'])))) {
 			echo JsonOutput::error("Wrong accessKey: $_GET[access_key]");
 			return;
 		}

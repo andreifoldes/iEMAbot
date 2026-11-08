@@ -1,0 +1,70 @@
+name: Self-host kit test
+
+# Builds the image and goes through what a lab goes through with deploy/selfhost/: install with `curl | bash`, a study
+# and a response in a browser, running the installer again, backup and restore, update, running behind another web server,
+# and moving to a new server from a backup. See scripts/demo/selfhost-e2e.sh. Fully self-contained: no server or secrets.
+#
+# GitHub-hosted only: never put a self-hosted runner on a pull_request trigger.
+on:
+  pull_request:
+    paths:
+      - deploy/selfhost/**
+      - Dockerfile
+      - docker-entrypoint.sh
+      - scripts/demo/selfhost-e2e.sh
+      - scripts/demo/bootstrap.sh
+      - scripts/demo/lab-journey.py
+      - scripts/demo/lab-journey-browser.py
+      - scripts/demo/all-types-browser.py
+      - scripts/demo/upload-failsafe-browser.py
+      - web-pwa/src/lib/uploadQueue.ts
+      - web-pwa/src/lib/audioUploads.ts
+      - web-pwa/src/lib/keystrokeUploads.ts
+      - demo/demo-study.json
+      - web-pwa/src/lib/esmiraAdapter.ts
+      - web-pwa/src/lib/uploadRetry.ts
+      - web-pwa/src/lib/esmiraApi.ts
+      - src/frontend/ts/sections/publish.tsx
+      - src/frontend/ts/loader/StudyLoader.ts
+      - src/backend/SelfHost.php
+      - src/cli/selfhost.php
+      - .github/workflows/selfhost-smoke.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selfhost-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Lint the kit's scripts
+        run: shellcheck -x -S warning deploy/selfhost/*.sh scripts/demo/selfhost-e2e.sh
+      - run: npm ci --ignore-scripts
+      - run: npm run build:all
+      - name: Build the image
+        run: |
+          set -euo pipefail
+          mkdir -p image-context/deploy
+          cp -R dist Dockerfile docker-entrypoint.sh image-context/
+          cp -R deploy/selfhost image-context/deploy/selfhost
+          docker build -t iemabot-local:e2e image-context
+      - name: Install the browser test's dependencies
+        run: |
+          python3 -m pip install --user playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Run the kit end to end
+        env:
+          REQUIRE_UI: '1'
+        run: scripts/demo/selfhost-e2e.sh iemabot-local:e2e

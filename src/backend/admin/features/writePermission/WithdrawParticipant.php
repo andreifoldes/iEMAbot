@@ -14,6 +14,8 @@ use backend\notifications\ParticipantWithdrawals;
  * out, or who asked the research team to stop. A `joined` event (re-enrolment) lifts it again.
  */
 class WithdrawParticipant extends HasWritePermission {
+	// TODO: DECISION NEEDED (owner / ethics approval): there is no per-participant erase routine; withdrawing only stops notifications.
+	// Needs a stated retention period and erasure rule (tracker item 10), then a delete across SQLite, CSV, media and the error folder.
 	function exec(): array {
 		$userId = trim((string) ($_POST['user_id'] ?? $_GET['user_id'] ?? ''));
 		if($userId === '' || !Main::strictCheckInput($userId))

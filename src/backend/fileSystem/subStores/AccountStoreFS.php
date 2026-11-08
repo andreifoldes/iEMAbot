@@ -264,6 +264,7 @@ class AccountStoreFS implements AccountStore
 		$password = Permission::getHashedPass($password);
 
 		file_put_contents($pathLogins, "$accountName:$password\n", FILE_APPEND | LOCK_EX);
+		FileSystemBasics::restrictToOwner($pathLogins, FileSystemBasics::SECRET_FILE_MODE);
 	}
 
 	public function changeAccountName(string $oldAccountName, string $newAccountName)
@@ -296,6 +297,7 @@ class AccountStoreFS implements AccountStore
 
 		$this->removeAccount($oldAccountName);
 		file_put_contents($pathLogins, "$newAccountName:$password\n", FILE_APPEND | LOCK_EX);
+		FileSystemBasics::restrictToOwner($pathLogins, FileSystemBasics::SECRET_FILE_MODE);
 
 		$this->movePermissions($oldAccountName, $newAccountName);
 	}
@@ -337,7 +339,7 @@ class AccountStoreFS implements AccountStore
 		if (empty($export))
 			unlink($path);
 		else
-			FileSystemBasics::writeFile($path, $export);
+			FileSystemBasics::writeSecretFile($path, $export);
 	}
 
 	private function isAccountNameValid($accountName): bool

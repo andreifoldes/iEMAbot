@@ -17,7 +17,7 @@
  */
 
 import { getApiRoot } from './serverRoot';
-import { MAX_REJECTIONS, checkUploadReply, rejectionCost } from './uploadRetry';
+import { alreadyStored, checkUploadReply, dueForRetry, rejectionCost } from './uploadRetry';
 
 const DB_NAME = 'esmira_audio';
 const STORE = 'recordings';
@@ -31,6 +31,8 @@ export interface AudioRecord {
   /** 'awaiting_dataset' until its dataset reaches the server, then 'ready' to upload. */
   status: 'awaiting_dataset' | 'ready';
   attempts: number;
+  /** When the last attempt ended in a refusal or error. */
+  lastTry?: number;
   createdAt: number;
 }
 
@@ -72,6 +74,27 @@ async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => I
 
 function getAll(): Promise<AudioRecord[]> {
   return tx<AudioRecord[]>('readonly', (s) => s.getAll() as IDBRequest<AudioRecord[]>);
+}
+
+/**
+ * Deletes every queued recording (sign-out / reset device / leaving a study). They belong to the identity that is being
+ * removed from this device and must not wait there for a later enrolment to upload them. Resolves when the browser has
+ * deleted the database, or after a few seconds if another tab still holds it open (the deletion then finishes by itself).
+ */
+// Checked live 2026-11-06 (tracker V7): after "Sign out and reset device" the stores hold no recordings. The databases themselves come back
+// empty after the reload, because the upload queues are flushed (and so opened) on load.
+export function clearAudioQueue(): Promise<void> {
+  return new Promise((resolve) => {
+    const giveUp = setTimeout(resolve, 3000);
+    const done = () => { clearTimeout(giveUp); resolve(); };
+    try {
+      const req = indexedDB.deleteDatabase(DB_NAME);
+      req.onsuccess = done;
+      req.onerror = done;
+    } catch {
+      done();
+    }
+  });
 }
 
 /** Persist a freshly captured recording (before the dataset is submitted). */
@@ -126,7 +149,7 @@ let flushing = false;
 
 /**
  * Upload every 'ready' recording. On success the local copy is dropped; a recording
- * the server keeps refusing is abandoned after MAX_REJECTIONS (being offline never counts).
+ * the server keeps refusing is kept and tried once a day (being offline never counts).
  * Guarded so concurrent triggers (submit + online + visibility) don't overlap.
  */
 export async function flushAudioQueue(): Promise<void> {
@@ -136,15 +159,13 @@ export async function flushAudioQueue(): Promise<void> {
     const all = await getAll();
     for (const rec of all) {
       if (rec.status !== 'ready') continue;
-      if (rec.attempts >= MAX_REJECTIONS) {
-        await tx('readwrite', (s) => s.delete(rec.identifier)); // give up — avoid an unbounded queue
-        continue;
-      }
+      if (!dueForRetry(rec.attempts, rec.lastTry, Date.now())) continue; // Kept, and tried once a day: it exists nowhere else.
       try {
         await uploadOne(rec);
         await tx('readwrite', (s) => s.delete(rec.identifier));
       } catch (err) {
-        await tx('readwrite', (s) => s.put({ ...rec, attempts: rec.attempts + rejectionCost(err) } satisfies AudioRecord));
+        if (alreadyStored(err)) await tx('readwrite', (s) => s.delete(rec.identifier));
+        else await tx('readwrite', (s) => s.put({ ...rec, lastTry: Date.now(), attempts: rec.attempts + rejectionCost(err) } satisfies AudioRecord));
       }
     }
   } catch {

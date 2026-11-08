@@ -18,8 +18,8 @@
     "accessKeys": [
       "demo"
     ],
-    "title": "ESMira demo study",
-    "studyDescription": "A two-question demo study that ships with the Docker demo setup.",
+    "title": "iEMAbot demo study",
+    "studyDescription": "A demo study: a short daily check-in, and one questionnaire with every question type iEMAbot has. Not for real data.",
     "informedConsentForm": "This is a demo study. No real data is collected.",
     "questionnaires": [
       {
@@ -50,8 +50,455 @@
         "actionTriggers": [],
         "sumScores": [],
         "virtualInputs": []
+      },
+      {
+        "internalId": 424202,
+        "title": "All question types",
+        "publishedWeb": true,
+        "completableOnce": false,
+        "actionTriggers": [],
+        "sumScores": [],
+        "virtualInputs": [],
+        "pages": [
+          {
+            "header": "<p><b>1 · Display items</b></p>",
+            "inputs": [
+              {
+                "name": "d_text",
+                "responseType": "text",
+                "text": "<p>This questionnaire shows every question type once. <b>Bold</b> and <i>italic</i> text should render.</p>"
+              },
+              {
+                "name": "d_image",
+                "responseType": "image",
+                "url": "/pwa/pwa-512x512.png",
+                "text": "<p>An image item.</p>",
+                "description": "<p><i>In the web app:</i> the image inline</p>"
+              },
+              {
+                "name": "d_video",
+                "responseType": "video",
+                "url": "/pwa/",
+                "text": "<p>A video item (points to a page here, no real video).</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "d_share",
+                "responseType": "share",
+                "url": "/pwa/",
+                "text": "<p>A share item.</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>2 · Buttons and scales</b></p>",
+            "inputs": [
+              {
+                "name": "b_likert",
+                "responseType": "likert",
+                "likertSteps": 5,
+                "required": true,
+                "text": "<p>Likert: how is your mood?</p>",
+                "leftSideLabel": "very bad",
+                "rightSideLabel": "very good",
+                "description": "<p><i>In the web app:</i> 5 points, stored 1 to 5</p>"
+              },
+              {
+                "name": "b_binary",
+                "responseType": "binary",
+                "required": true,
+                "text": "<p>Binary: are you alone right now?</p>",
+                "leftSideLabel": "No",
+                "rightSideLabel": "Yes",
+                "description": "<p><i>In the web app:</i> two buttons, stored 0 or 1</p>"
+              },
+              {
+                "name": "b_multi",
+                "responseType": "list_multiple",
+                "relevance": "b_binary == 0",
+                "text": "<p>Multiple choice (only shown when not alone): who are you with?</p>",
+                "listChoices": [
+                  "Partner",
+                  "Family",
+                  "Friends",
+                  "Colleagues"
+                ],
+                "description": "<p><i>In the web app:</i> checkboxes, stored as b_multi~1 to 4</p>"
+              },
+              {
+                "name": "b_single",
+                "responseType": "list_single",
+                "required": true,
+                "other": true,
+                "text": "<p>Single choice: where are you?</p>",
+                "listChoices": [
+                  "Home",
+                  "Work",
+                  "Outside",
+                  "Somewhere else"
+                ],
+                "description": "<p><i>In the web app:</i> \"Somewhere else\" asks for text, stored as b_single~other</p>"
+              },
+              {
+                "name": "b_vas",
+                "responseType": "va_scale",
+                "maxValue": 100,
+                "text": "<p>Visual analogue scale: how alert do you feel?</p>",
+                "leftSideLabel": "not at all",
+                "rightSideLabel": "very",
+                "description": "<p><i>In the web app:</i> slider from 0 to 100</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>3 · Typed answers</b></p>",
+            "inputs": [
+              {
+                "name": "t_text",
+                "responseType": "text_input",
+                "maxLength": 200,
+                "text": "<p>Free text: anything on your mind?</p>",
+                "description": "<p><i>In the web app:</i> text box</p>"
+              },
+              {
+                "name": "t_default",
+                "text": "<p>Free text saved the way the dashboard saves it, without a type: what did you have for breakfast?</p>",
+                "description": "<p><i>In the web app:</i> text box</p>"
+              },
+              {
+                "name": "t_int",
+                "responseType": "number",
+                "text": "<p>Whole number: cups of coffee today?</p>",
+                "description": "<p><i>In the web app:</i> number field</p>"
+              },
+              {
+                "name": "t_dec",
+                "responseType": "number",
+                "numberHasDecimal": true,
+                "text": "<p>Decimal number: your body temperature?</p>",
+                "description": "<p><i>In the web app:</i> number field</p>"
+              },
+              {
+                "name": "t_time",
+                "responseType": "time",
+                "text": "<p>Time: when did you go to bed last night?</p>",
+                "description": "<p><i>In the web app:</i> hour and minute picker, stored as HH:MM</p>"
+              },
+              {
+                "name": "t_duration",
+                "responseType": "duration",
+                "text": "<p>Duration: how long did you sleep?</p>",
+                "description": "<p><i>In the web app:</i> hours and minutes, stored as minutes</p>"
+              },
+              {
+                "name": "t_date",
+                "responseType": "date",
+                "text": "<p>Date: which day are you reporting on?</p>",
+                "description": "<p><i>In the web app:</i> date picker, stored as YYYY-MM-DD</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>4 · Special items</b></p>",
+            "inputs": [
+              {
+                "name": "s_dynamic",
+                "responseType": "dynamic_input",
+                "text": "<p>Dynamic input (a different sub-question each time):</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>",
+                "subInputs": [
+                  {
+                    "responseType": "likert",
+                    "likertSteps": 5,
+                    "text": "<p>How stressed are you?</p>",
+                    "leftSideLabel": "not at all",
+                    "rightSideLabel": "very"
+                  },
+                  {
+                    "responseType": "likert",
+                    "likertSteps": 5,
+                    "text": "<p>How energetic are you?</p>",
+                    "leftSideLabel": "not at all",
+                    "rightSideLabel": "very"
+                  }
+                ]
+              },
+              {
+                "name": "s_countdown",
+                "responseType": "countdown",
+                "timeoutSec": 10,
+                "text": "<p>Countdown: close your eyes and breathe slowly.</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>5 · Media and device</b></p>",
+            "inputs": [
+              {
+                "name": "m_audio",
+                "responseType": "record_audio",
+                "text": "<p>Voice memo: tell us briefly about your day.</p>",
+                "description": "<p><i>In the web app:</i> recorder; Skip opens the typed fallback</p>"
+              },
+              {
+                "name": "m_audio_typed",
+                "responseType": "record_keystrokes",
+                "minLength": 20,
+                "text": "",
+                "description": "<p><i>In the web app:</i> only after skipping the memo: a writing box with keystroke logging</p>"
+              },
+              {
+                "name": "m_keystrokes",
+                "responseType": "record_keystrokes",
+                "minLength": 20,
+                "text": "<p>Keystroke-logged writing: describe your morning in a few words.</p>",
+                "description": "<p><i>In the web app:</i> a writing box with keystroke logging</p>"
+              },
+              {
+                "name": "m_photo",
+                "responseType": "photo",
+                "text": "<p>Photo: take a picture of what is in front of you.</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "m_file",
+                "responseType": "file_upload",
+                "text": "<p>File upload: send any image file.</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "m_location",
+                "responseType": "location",
+                "text": "<p>Location: where are you, approximately?</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>6 · Cognitive task</b></p>",
+            "inputs": [
+              {
+                "name": "c_pvt",
+                "responseType": "webapp",
+                "url": "https://andreifoldes.github.io/m2c2-assessments/assessments/pvt-ba/index.html?show_results=true",
+                "text": "Reaction-time game",
+                "webappDescription": "A short reaction-time game (PVT-BA). Tap Start, then tap as soon as the counter appears.",
+                "description": "<p><i>In the web app:</i> the task in a full-screen frame; its trials go to Cognitive Trials</p>"
+              }
+            ]
+          },
+          {
+            "header": "<p><b>7 · Phone sensors</b> (Android app only)</p>",
+            "inputs": [
+              {
+                "name": "x_light",
+                "responseType": "ambient_light",
+                "text": "<p>Ambient light</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_apps",
+                "responseType": "app_usage",
+                "text": "<p>App usage</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_battery",
+                "responseType": "battery_level",
+                "text": "<p>Battery level</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_bluetooth",
+                "responseType": "bluetooth_devices",
+                "text": "<p>Bluetooth devices</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_compass",
+                "responseType": "compass",
+                "text": "<p>Compass</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_noise",
+                "responseType": "noise_level",
+                "text": "<p>Noise level</p>",
+                "description": "<p><i>In the web app:</i> not shown</p>"
+              },
+              {
+                "name": "x_end",
+                "responseType": "text",
+                "text": "<p>That was every question type. Thanks for testing!</p>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "internalId": 424203,
+        "title": "Cognitive Trials",
+        "publishedWeb": true,
+        "completableOnce": false,
+        "actionTriggers": [],
+        "sumScores": [],
+        "virtualInputs": [],
+        "pages": [
+          {
+            "inputs": [
+              {
+                "name": "cogAssessment",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogSource",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogInputName",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogSession",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogTrialIndex",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogRt",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogCorrect",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogResponse",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogStimulus",
+                "responseType": "text_input"
+              },
+              {
+                "name": "cogRaw",
+                "responseType": "text_input"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "internalId": 424204,
+        "title": "Set a test reminder",
+        "publishedWeb": true,
+        "completableOnce": false,
+        "pages": [
+          {
+            "header": "Test a reminder",
+            "inputs": [
+              {
+                "name": "test_reminder_time",
+                "responseType": "time",
+                "required": true,
+                "text": "<p>When should your test reminder arrive? Choose a time at least 2 minutes from now.</p>",
+                "description": "<p>Allow notifications first. You can test once a day, and you can close the app while you wait.</p>"
+              }
+            ]
+          }
+        ],
+        "actionTriggers": [],
+        "sumScores": [],
+        "virtualInputs": []
+      },
+      {
+        "internalId": 424205,
+        "title": "Test reminder",
+        "publishedWeb": true,
+        "completableOnce": false,
+        "pages": [
+          {
+            "header": "Test reminder",
+            "inputs": [
+              {
+                "name": "test_reminder_arrived",
+                "responseType": "list_single",
+                "required": true,
+                "text": "<p>Did this reminder arrive at the time you chose?</p>",
+                "listChoices": [
+                  "Yes",
+                  "No, it was late"
+                ]
+              }
+            ]
+          }
+        ],
+        "actionTriggers": [],
+        "sumScores": [],
+        "virtualInputs": []
       }
     ],
+    "schedule": {
+      "checkins": [
+        {
+          "questionnaireId": 424201,
+          "parallel": true,
+          "startType": "fixed",
+          "startTime": 0,
+          "endType": "fixed",
+          "endTime": 0,
+          "endNextDay": true,
+          "prompt": "none",
+          "available": "range",
+          "limit": "none"
+        },
+        {
+          "questionnaireId": 424202,
+          "parallel": true,
+          "startType": "fixed",
+          "startTime": 0,
+          "endType": "fixed",
+          "endTime": 0,
+          "endNextDay": true,
+          "prompt": "none",
+          "available": "range",
+          "limit": "none"
+        },
+        {
+          "questionnaireId": 424204,
+          "parallel": true,
+          "startType": "fixed",
+          "startTime": 0,
+          "endType": "fixed",
+          "endTime": 0,
+          "endNextDay": true,
+          "prompt": "none",
+          "available": "range",
+          "limit": "none"
+        },
+        {
+          "questionnaireId": 424205,
+          "parallel": true,
+          "startType": "fixed",
+          "startTime": 0,
+          "endType": "fixed",
+          "endTime": 0,
+          "endNextDay": true,
+          "prompt": "event",
+          "fallback": "variable",
+          "fallbackVariable": "test_reminder_time",
+          "fallbackDefault": false,
+          "available": "day",
+          "limit": "window",
+          "title": "Test reminder",
+          "text": "Tap to confirm that this reminder arrived."
+        }
+      ]
+    },
     "publicStatistics": {
       "charts": []
     },

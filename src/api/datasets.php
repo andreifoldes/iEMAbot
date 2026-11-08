@@ -31,6 +31,12 @@ try {
         'states' => $dataSet->output,
         'tokens' => $dataSet->userDataStore->getNewStudyTokens() ?: new stdClass() //stdClass makes sure it stays an object even when its empty
     ]);
+} catch (\backend\exceptions\StorageUnavailableException $e) {
+    $dataSet->close();
+    Main::setStatus(503); // nothing was stored: the apps keep the data and send it again
+    Main::report('An upload could not be stored (database and spool both failed): ' . $e->getMessage());
+    echo JsonOutput::error('The server cannot store data right now. Please try again later.');
+    return;
 } catch (CriticalException $e) {
     $dataSet->close();
     echo JsonOutput::error($e->getMessage());

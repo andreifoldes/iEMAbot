@@ -4,6 +4,7 @@ namespace backend\noJs\pages;
 
 use backend\Configs;
 use backend\CreateDataSet;
+use backend\HtmlSanitizer;
 use backend\exceptions\CriticalException;
 use backend\exceptions\PageFlowException;
 use Exception;
@@ -37,6 +38,8 @@ class AppInstall implements Page {
      */
     public function __construct() {
         if (isset($_GET['fromUrl'])) {
+            if (!\backend\fileSystem\PathsFS::isEncodedUrl($_GET['fromUrl']))
+                throw new PageFlowException('Faulty data');
             $studyData = $this->setupFallback($_GET['fromUrl']);
         } else {
             $studyData = $this->setupPrimary();
@@ -105,21 +108,21 @@ class AppInstall implements Page {
         if ($this->study->studyOver ?? false) {
             $output .= '<div class="dashRow"><div class="dashEl small highlight stretched">' . Lang::get('study_over_message') . '</div></div>';
             if (isset($this->study->postStudyNote)) {
-                $output .= '<p>' . $this->study->postStudyNote . '<p>';
+                $output .= '<p>' . HtmlSanitizer::clean($this->study->postStudyNote) . '<p>';
             }
         }
 
         if (isset($this->study->webInstallInstructions) && ($this->study->publishedWeb ?? true))
-            $output .= '<div>' . $this->study->webInstallInstructions . '</div>';
+            $output .= '<div>' . HtmlSanitizer::clean($this->study->webInstallInstructions) . '</div>';
         $output .= '<div class="titleRow">' . Lang::get('about_study') . '</div>';
 
         if (isset($this->study->studyDescription))
-            $output .= '<p>' . $this->study->studyDescription . '</p>';
+            $output .= '<p>' . HtmlSanitizer::clean($this->study->studyDescription) . '</p>';
 
         $output .= '<br/><div class="horizontal">';
 
         if (isset($this->study->contactEmail))
-            $output .= '<a href="mailto:' . $this->study->contactEmail . '">' . Lang::get('contactEmail') . '</a>';
+            $output .= '<a href="mailto:' . HtmlSanitizer::escape($this->study->contactEmail) . '">' . Lang::get('contactEmail') . '</a>';
 		$output .= '<div class="fillFlexSpace"></div>';
         if (isset($this->study->informedConsentForm))
             $output .= '<a js-action="internalUrl" href="#informedConsent">' . Lang::get('informed_consent') . '</a>';
@@ -225,7 +228,7 @@ class AppInstall implements Page {
 
             if (isset($this->study->informedConsentForm))
                 $output .= '<div class="titleRow" js-action="hidden"><a id="informedConsent"></a>' . Lang::get('informed_consent') . '</div>
-				<p class="justify" js-action="hidden">' . $this->study->informedConsentForm . '</p>';
+				<p class="justify" js-action="hidden">' . HtmlSanitizer::escape($this->study->informedConsentForm) . '</p>';
         }
 
         return $output;
