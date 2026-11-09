@@ -2,7 +2,7 @@ import React from 'react';
 import {MAINTAINERS} from '../data/maintainers';
 
 /** The maintainer list for the home page (data in ../data/maintainers.ts). */
-export function Maintainers(): JSX.Element {
+export function Maintainers(): React.JSX.Element {
   return (
     <ul>
       {MAINTAINERS.map((m) => (
