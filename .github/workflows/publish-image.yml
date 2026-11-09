@@ -1,14 +1,21 @@
 name: Publish image
 
-# Publishes the image the self-host kit (deploy/selfhost/) runs, for amd64 and arm64, as ghcr.io/<owner>/iemabot:<version>.
-# Runs when a release is published on the public repository; run it by hand only from a release's tag.
-# The release's tag must be v<package.json version>, or labs could not tell what they run, and the dashboard could not
-# tell them about the release. :latest moves only for the repository's latest release, so a pre-release or a release from
-# an older tag never moves labs. The first time, make the package public (see website/docs/deployment/ci-and-release.md).
+# Publishes the image the self-host kit (deploy/selfhost/) runs, for amd64 and arm64, as ghcr.io/<owner>/iemabot:<version>,
+# where <version> is package.json's version of the release's source. Runs when a release is published on the public
+# repository. A release is labelled with a tag like v0.3.0, which need not equal package.json's version: the image is named
+# after the version it contains, so labs can tell what they run. :latest moves only for the repository's latest release,
+# so a pre-release or a release from an older tag never moves labs. To publish the image of a release that was made
+# before this worked, run it by hand from the default branch and give the release's tag; the source built is that tag's.
+# The first time, make the package public (see website/docs/deployment/ci-and-release.md).
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, for example v0.3.0. Leave empty to publish from the tag this run was started from."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -22,6 +29,8 @@ jobs:
   test:
     if: ${{ !github.event.repository.private }}
     uses: ./.github/workflows/selfhost-smoke.yml
+    with:
+      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
 
   publish:
     needs: test
@@ -34,6 +43,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -43,17 +54,30 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
           GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "::error::Publish from a release tagged v$version (package.json's version), not from $GITHUB_REF_NAME."
+          if [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            echo "::error::Publish from a release's tag, or give the release's tag (for example v0.3.0) when running this by hand."
+            exit 1
+          fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::A release's tag looks like v1.2.3, not $tag."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse "refs/tags/$tag^{commit}")" ]; then
+            echo "::error::The source being built is not the commit $tag points at."
             exit 1
           fi
           image="ghcr.io/$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')/iemabot"
           tags="$image:$version"
           latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
-          [ "$latest" != "$GITHUB_REF_NAME" ] || tags="$tags,$image:latest"
+          [ "$latest" != "$tag" ] || tags="$tags,$image:latest"
           {
             echo "tags=$tags"
             echo "version=$version"

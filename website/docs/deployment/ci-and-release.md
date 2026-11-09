@@ -114,10 +114,20 @@ Labs running the [self-host kit](./self-hosting.md) install and update from `ghc
 a release on the public repository builds it for amd64 and arm64 from that release's source, after the kit's end-to-end
 test passes, and tags it with the `package.json` version and, unless it is a pre-release, `latest`.
 
-So a new version reaches labs in three steps: merge to staging, run *Promote to public repo*, publish a release there
-**tagged `v<package.json version>`**, for example `v3.7.35`. The workflow refuses any other tag: the version must say what
-labs run, and the dashboard's update notice compares it with theirs. `latest` moves only for the repository's latest
-release, so a pre-release or a release from an older tag never moves labs.
+So a new version reaches labs in three steps: merge to staging, run *Promote to public repo*, publish a release there.
+The release's tag is its label, a plain `vMAJOR.MINOR.PATCH` such as `v0.3.0`, and it need not equal `package.json`'s version
+(the project's labels are below 1.0, its `package.json` versions are 3.x). The image is named after the version it contains,
+so release `v0.3.0` built from `package.json` 3.7.45 is published as `iemabot:3.7.45`, and labs can pin it. A pre-release
+tag such as `v0.3.0-rc1` is refused. `latest` moves only for the repository's latest release, so a pre-release or a release
+from an older tag never moves labs.
+
+To publish the image of a release that already exists, run *Publish image* by hand from the default branch and give the
+release's tag; the source it tests and builds is that tag's, and it stops if the checked-out commit is not the one the tag
+points at.
+
+The dashboard's update notice compares the installed `package.json` version with release tags, so a release labelled below
+the installed version does not trigger it. Labs that follow `latest` get the new image on their next `./update.sh`
+regardless.
 
 The kit's scripts ship inside the image (`/opt/iemabot-kit`), and `update.sh` takes them from there, so a lab's scripts and
 image always belong together. Only a first install reads the kit from the public `main` branch.
