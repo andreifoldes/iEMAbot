@@ -14,7 +14,7 @@
 # npm run prod
 
 # php:8.5.11-apache
-FROM php:8.5.11-apache@sha256:47e6d8849049375e0d19e81f1b391ed88828d4653e0d1b00822185b66b564e8b
+FROM php:8.5.12-apache@sha256:08af36df144462d84c7f16190557eec06cb9f656882685610b712a15eec54d46
 # mlocati/docker-php-extension-installer 2.13.2 (the checksum is of the release asset install-php-extensions)
 ADD --chmod=0755 --checksum=sha256:27fa8d80bd4e22feb9ddcadff1ca40c8f3e8ea942eb2dd8f446ed1afd2f2f0ab https://github.com/mlocati/docker-php-extension-installer/releases/download/2.13.2/install-php-extensions /usr/local/bin/
 # gmp + mbstring + curl are required by minishlink/web-push (VAPID signing,
