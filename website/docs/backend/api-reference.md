@@ -49,7 +49,7 @@ that passes `Main::strictCheckInput`. They are designed for pseudonymous partici
 credentials. Treat user IDs as secrets, and see [Data and privacy](./data-and-privacy.md).
 :::
 
-### Who may join {#who-may-join}
+### Who may join
 
 A study is **open** (`pidMode: "open"`, the default: anyone with an access key may join, with any participant id) or
 **restricted to a list** (`pidMode: "list"`: only ids the researcher listed). The list is kept in its own file in the
@@ -65,7 +65,7 @@ spelling, so one participant never ends up with two spellings. Telegram invitati
 `phone_sensing.php` already refuses ids the study has not seen. Participant ids still work like passwords: whoever
 knows or guesses a listed id can use it.
 
-### One device at a time {#one-device-at-a-time}
+### One device at a time
 
 A study can let a participant id be active on any number of devices (`pidDevices: "multi"`, the default) or on one at a time
 (`"single"`). With `single`, the first device whose token the server sees for an id holds it. The app sends its device token
