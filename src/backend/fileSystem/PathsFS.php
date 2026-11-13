@@ -157,6 +157,17 @@ class PathsFS {
 	static function fileWithdrawn(int $studyId, string $userId): string {
 		return self::folderWithdrawn($studyId) . Paths::makeUrlFriendly($userId);
 	}
+	/** Which device holds a participant id when the study lets an id be active on one device only (one small file per id). */
+	static function folderDeviceLocks(int $studyId): string {
+		return self::folderStudies() . "$studyId/.device_locks/";
+	}
+	static function fileDeviceLock(int $studyId, string $userId): string {
+		return self::folderDeviceLocks($studyId) . Paths::makeUrlFriendly($userId);
+	}
+	/** The participant IDs a researcher allows into the study (one JSON file; only used when the study's pidMode is "list"). */
+	static function fileAllowedPids(int $studyId): string {
+		return self::folderStudies() . "$studyId/.allowed_pids.json";
+	}
 
 	/** Append-only JSONL of push funnel events (sent/failed/received/clicked) for a study. */
 	static function filePushEvents(int $studyId): string {

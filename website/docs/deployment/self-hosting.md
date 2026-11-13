@@ -49,6 +49,7 @@ nightly backup, and tests the result. At the end it prints:
 ```text
 Participant app:       https://ema.your-lab.org/pwa/
 Researcher dashboard:  https://ema.your-lab.org/esmira/#admin
+Demo study:            https://ema.your-lab.org/pwa/?key=demo
 
 Admin account:  admin
 Password:       (shown only this once)
@@ -56,9 +57,19 @@ Password:       (shown only this once)
 
 Everything lives in `~/iemabot`. Running the installer again is safe: it keeps your settings, data, accounts and version.
 
+The server starts with a **demo study**: a short check-in, a questionnaire with every question type, and a test reminder.
+Open its link on your phone to see what participants see. Its access key (`demo`) is public, so delete the study in the
+dashboard before you recruit. A study deleted this way does not come back when you run the installer again. `--no-demo` leaves it out.
+
 :::tip[Unattended]
 `install.sh --help` lists the options. For example:
 `install.sh --yes --domain ema.your-lab.org --email you@example.org --admin alex`
+:::
+
+:::tip[Try it on your own computer]
+With Docker Desktop, `--domain localhost` installs a copy on your own computer to try out, without DNS or ports to open.
+[Getting started: for researchers](../getting-started/for-researchers.md#try-it-on-your-own-computer-first) explains what works
+there and what doesn't. Never collect real data with it.
 :::
 
 ## Your first study

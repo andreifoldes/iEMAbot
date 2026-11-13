@@ -56,6 +56,14 @@ export class Study extends DataStructure implements TranslatableRootInterface {
 	// tablets get an invite page with a QR code to continue on a phone instead
 	// (see web-pwa/src/lib/phoneGate.ts). A convenience check in the browser, not a security measure.
 	public webPhoneOnly = this.primitive<boolean>("webPhoneOnly", false)
+	// Who may join: "open" (anyone with an access key, any participant id) or "list" (only the ids on the list the researcher
+	// keeps under Participant IDs; the list itself is not part of the study, see backend/participants/ParticipantAllowList.php).
+	public pidMode = this.primitive<string>("pidMode", "open")
+	// With a list: whether a `pid` in the invite link is used (default), or the participant always types their id.
+	public pidFromUrl = this.primitive<boolean>("pidFromUrl", true)
+	// How many devices may be active under one participant id: "multi" (any number; the default) or "single" (one at a time: the
+	// server refuses the other devices until the participant transfers the id, see backend/participants/ParticipantDeviceLock.php).
+	public pidDevices = this.primitive<string>("pidDevices", "multi")
 	/** Language of the participant web app's interface ("" = automatic). See web-pwa/src/lib/i18nStore.ts. */
 	public webLanguage = this.primitive<string>("webLanguage", "")
 	// Names an end-of-questionnaire read-out of the participant's own answers in the PWA

@@ -6,9 +6,10 @@
  */
 
 import { isNativeApp } from './platform.ts';
+import { getOrCreateDeviceToken } from './deviceBinding.ts';
 
 interface ServerNudgesPlugin {
-  configure(opts: { server: string; studyId: number; userId: string; joinedAt?: number; lang?: string }): Promise<void>;
+  configure(opts: { server: string; studyId: number; userId: string; deviceToken: string; joinedAt?: number; lang?: string }): Promise<void>;
   cancel(): Promise<void>;
   pollNow(): Promise<void>;
 }
@@ -24,7 +25,8 @@ export async function configureServerNudges(server: string, studyId: number, use
   if (!p) return false;
   try {
     // lang: the study language the app shows, so server-sent texts match the ones planned on the device.
-    await p.configure({ server, studyId, userId, ...(joinedAt ? { joinedAt } : {}), ...(lang ? { lang } : {}) });
+    // deviceToken: the background poll runs without the page, so it needs this device's identity handed over (a study that allows an id on one device only asks for it).
+    await p.configure({ server, studyId, userId, deviceToken: getOrCreateDeviceToken(), ...(joinedAt ? { joinedAt } : {}), ...(lang ? { lang } : {}) });
     return true;
   } catch {
     return false; // never let this break the questionnaire flow

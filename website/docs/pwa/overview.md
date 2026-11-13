@@ -29,7 +29,7 @@ flowchart LR
 - **Adapter:** `esmiraAdapter.ts` maps ESMira study JSON to the internal survey engine; `surveyEngine.ts`
   runs it. Pages become chat sections (the page header is the divider); `randomized` pages are shuffled per
   session.
-- **User ID:** URL parameter (`pid`, `uid`, `user_id` or `userId`) → stored value → random UUID.
+- **User ID:** URL parameter (`pid`, `uid`, `user_id` or `userId`) → stored value → random UUID. A study restricted to a list of IDs never makes one up: it uses the link's or the stored ID, else asks, and the server must accept it first ([details](./participant-flow.md#studies-restricted-to-a-list-of-participant-ids)).
 
 ## Build and serving
 

@@ -116,7 +116,7 @@ A task with no manifest anywhere simply stays online-only. Check the result with
 Chromium, relaunches the app **offline** for each task and fails on any task that does not render from the cache.
 
 :::note[What still needs a connection]
-Signing up (the first study fetch), push and wearable set-up, the participant-ID device lock, and the Listen button on devices without offline
+Signing up (the first study fetch), push and wearable set-up, the participant-ID device lock (one-device studies), and the Listen button on devices without offline
 speech voices. Answers, voice memos and keystroke logs are queued on the device and upload when the connection returns.
 :::
 

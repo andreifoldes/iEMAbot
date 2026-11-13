@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\JsonOutput;
 use backend\Main;
@@ -36,6 +37,10 @@ $event   = (string) $json->event;
 
 if(!Main::strictCheckInput($userId)) {
 	echo JsonOutput::error('User is faulty');
+	return;
+}
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
 	return;
 }
 // Client-reportable funnel events. 'received'/'clicked' come from the service worker;

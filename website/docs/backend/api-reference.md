@@ -24,6 +24,8 @@ clients keep working.
 | `save_message.php` | POST | Participant contact message / error report. | upstream |
 | `push_subscribe.php` | POST | Store or delete a Web Push subscription with `tzOffset`. Refused (`errorCode` 410) for a participant who has left the study. | **fork** |
 | `push_test.php` | POST | Send a welcome/test push to the caller's own subscription. | **fork** |
+| `check_pid.php` | POST | Asked by the app before it stores anything for a participant id: `{studyId, userId, accessKey, serverVersion}` -> `{allowed, userId}`, where `userId` is the id as the study spells it. Only restricted studies (see [Who may join](#who-may-join)) ever answer no. | **fork** |
+| `pid_lock.php` | POST | A device takes a participant id, for studies that allow one device per id: `{studyId, userId, deviceToken, accessKey, serverVersion, force?, release?}` -> `{status}` (`claimed`, `already_yours`, `conflict`, or `released`). `force` transfers the id to this device; `release` gives it up (sign-out). See [One device at a time](#one-device-at-a-time). | **fork** |
 | `push_status.php` | GET | Next reminder and schedule anchor for the caller, plus `withdrawn: true` once they have left the study (the app then resets itself). | **fork** |
 | `schedule.php` | GET | What the app needs to compute the study's schedule itself (`?studyId&userId`): the caller's answers the schedule reads (usual sleep times) and the wearable events it reacts to. The app caches it and computes the windows with its own completions. | **fork** |
 | `native_pending.php` | POST | Android app's background poll for server-driven nudges; `active: false` stops the poll (also when the study's Android notifications are off or the participant switched theirs off, `notificationsOff: true`) and `withdrawn: true` stops it for good. | **fork** |
@@ -47,6 +49,38 @@ that passes `Main::strictCheckInput`. They are designed for pseudonymous partici
 credentials. Treat user IDs as secrets, and see [Data and privacy](./data-and-privacy.md).
 :::
 
+### Who may join {#who-may-join}
+
+A study is **open** (`pidMode: "open"`, the default: anyone with an access key may join, with any participant id) or
+**restricted to a list** (`pidMode: "list"`: only ids the researcher listed). The list is kept in its own file in the
+study folder, never in the study that every participant downloads. In a restricted study the server refuses every
+participant request for an id that is not on the list, with `errorCode` 403 (uploads: the dataset's error line says
+"This participant ID is not allowed in this study"), except for ids it already knows. An id is known once its first
+upload has created the study's record for it, so participants who joined while the study was still open keep working
+when it is switched to a list, and keep working if their id is later taken off the list. To remove someone, use
+`WithdrawParticipant`.
+
+Ids are compared exactly. `check_pid.php` additionally matches a typed id in any letter case and returns the listed
+spelling, so one participant never ends up with two spellings. Telegram invitations must name a listed id.
+`phone_sensing.php` already refuses ids the study has not seen. Participant ids still work like passwords: whoever
+knows or guesses a listed id can use it.
+
+### One device at a time {#one-device-at-a-time}
+
+A study can let a participant id be active on any number of devices (`pidDevices: "multi"`, the default) or on one at a time
+(`"single"`). With `single`, the first device whose token the server sees for an id holds it. The app sends its device token
+(`deviceToken`: a field of the JSON body, the query string or the form) with its requests, and a request from another device is
+refused with `errorCode` 409 ("This participant ID is active on another device"). An upload from another device is refused as a
+whole, never as a per-dataset error: the apps take a per-dataset error for "sent" and would drop answers they should keep. The
+person who holds the id can transfer it to a new device (`pid_lock.php` with `force`); the old device is then refused. The Android
+app's background requests (`native_pending.php`, `phone_sensing.php`) get a plain answer instead: `otherDevice: true` /
+`status: "other_device"`, which makes them stop.
+
+A request **without** a token is let through: apps from before this feature do not send one, and cutting them off would be
+worse than leaving them unrestricted until they update. A token is a UUID or the app's fallback `dt-...`, made on the device
+and kept in its browser storage; clearing storage makes the device a new one. An id remains a shared secret: whoever knows it can
+transfer it to their device. A lock that cannot be written never stops an upload.
+
 ## Admin endpoints
 
 All go through `admin.php?type=<Name>`, grouped by required permission.
@@ -58,7 +92,7 @@ All go through `admin.php?type=<Name>`, grouped by required permission.
 | message | list/send/delete messages, `ListParticipants` |
 | read | `ListData`, `GetData` (CSV), `CreateMediaZip`, `GetMedia`, Merlin logs, **`GetWearableDataZip`**, **`GetWearableInfo`** |
 | reward | reward-code management |
-| write | `SaveStudy`, `DeleteStudy`, `FreezeStudy`, `EmptyData`, `BackupStudy`, **`GetPushInfo`**, **`GetPushStats`**, **`SendTestPush`**, **`SendTestPushToParticipant`**, **`WithdrawParticipant`**, **`DeleteParticipantData`** |
+| write | `SaveStudy`, `DeleteStudy`, `FreezeStudy`, `EmptyData`, `BackupStudy`, **`GetPushInfo`**, **`GetPushStats`**, **`SendTestPush`**, **`SendTestPushToParticipant`**, **`WithdrawParticipant`**, **`DeleteParticipantData`**, **`GetAllowedPids`**, **`SetAllowedPids`** |
 | create | `CreateStudy` |
 | admin | accounts, server config (`GetServerConfig` now also returns `webOnlyMode`), error reports, plugins, snapshots, updates, `RebuildStudyIndex` |
 

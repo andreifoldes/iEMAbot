@@ -47,6 +47,7 @@ public class NudgeWorker extends Worker {
         String userId = prefs.getString("userId", null);
         long studyId = prefs.getLong("studyId", 0);
         if (server == null || userId == null || studyId <= 0) return Result.success();
+        long armedAt = prefs.getLong("armedAt", 0);
 
         try {
             JSONObject body = new JSONObject();
@@ -59,10 +60,22 @@ public class NudgeWorker extends Worker {
             if (joinedAt > 0) body.put("joinedAt", joinedAt);
             String lang = prefs.getString("lang", null);
             if (lang != null) body.put("lang", lang);
+            String deviceToken = prefs.getString("deviceToken", null);
+            if (deviceToken != null) body.put("deviceToken", deviceToken);
 
             JSONObject res = post(server + "api/native_pending.php", body);
             if (!res.optBoolean("success", false)) return Result.success(); // e.g. study locked: try again next period
             JSONObject data = res.getJSONObject("dataset");
+
+            if (data.optBoolean("otherDevice", false)) {
+                // The study allows this participant id on one device only, and another device holds it now. Nothing
+                // here is cleared (the participant may take the id back from this device): the poll just stops. The
+                // app starts it again the next time it is opened (ServerNudgesPlugin.configure).
+                // Unless the app re-armed the poll while this request was on its way (the participant took the id back
+                // meanwhile): that newer poll must not be cancelled by an answer to an older question.
+                if (prefs.getLong("armedAt", 0) == armedAt) WorkManager.getInstance(ctx).cancelUniqueWork(WORK_NAME);
+                return Result.success();
+            }
 
             if (data.optBoolean("withdrawn", false)) {
                 // The participant left the study (signed out on another device, or withdrawn by the research
@@ -79,7 +92,7 @@ public class NudgeWorker extends Worker {
             JSONArray items = data.optJSONArray("items");
             for (int i = 0; items != null && i < items.length(); i++) {
                 JSONObject item = items.getJSONObject(i);
-                if (show(ctx, item)) reportEvent(server, studyId, userId, "received", item.optString("key"));
+                if (show(ctx, item)) reportEvent(server, studyId, userId, prefs.getString("deviceToken", null), "received", item.optString("key"));
             }
 
             if (!data.optBoolean("active", true)) {
@@ -114,13 +127,14 @@ public class NudgeWorker extends Worker {
     }
 
     /** Funnel receipt for the researcher's notification panel (api/push_event.php). Best effort, blocking. */
-    static void reportEvent(String server, long studyId, String userId, String event, String key) {
+    static void reportEvent(String server, long studyId, String userId, String deviceToken, String event, String key) {
         try {
             JSONObject body = new JSONObject();
             body.put("studyId", studyId);
             body.put("userId", userId);
             body.put("event", event);
             body.put("channel", "android");
+            if (deviceToken != null) body.put("deviceToken", deviceToken);
             if (key != null && !key.isEmpty()) body.put("key", key);
             post(server + "api/push_event.php", body);
         } catch (Exception ignored) {

@@ -13,6 +13,7 @@ import type { EsmiraStudy, WearableStatus } from '../types';
 import { flushAudioQueue, markAudioReady } from './audioUploads';
 import { flushKeystrokeQueue, markKeystrokesReady } from './keystrokeUploads';
 import { getApiRoot } from './serverRoot';
+import { deviceContext, deviceField, deviceQuery, isWrongDevice, noteRefusal, scopeKey } from './deviceBinding.ts';
 import { t } from './i18n.ts';
 import { pushSubscribePayload } from './pushSubscribePayload.ts';
 import { clientAppType } from './platform';
@@ -69,13 +70,15 @@ export async function subscribeToPush(args: {
   subscription: PushSubscriptionJSON;
 }): Promise<boolean> {
   if (localOnly) return false;
+  const device = deviceContext(args.study.id, args.userId);
   const resp = await fetch(`${getApiRoot()}api/push_subscribe.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(pushSubscribePayload(args)),
+    body: JSON.stringify({ ...pushSubscribePayload(args), ...deviceField() }),
   });
   if (!resp.ok) throw new Error(`push_subscribe.php returned ${resp.status}`);
   const env = await resp.json();
+  noteRefusal(env, device);
   if (!env.success) throw new Error(env.error || 'Push subscription rejected');
   return true;
 }
@@ -101,6 +104,7 @@ export async function unsubscribeFromPush(args: {
         studyId: args.study.id,
         serverVersion: args.serverVersion,
         unsubscribe: true,
+        ...deviceField(),
       }),
     });
     if (!resp.ok) return false;
@@ -140,7 +144,7 @@ export async function submitQuit(args: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       keepalive: true,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, ...deviceField() }),
     });
     if (!resp.ok) return false;
     const env = await resp.json();
@@ -171,6 +175,7 @@ export async function sendWelcomePush(args: {
         userId: args.userId,
         studyId: args.study.id,
         serverVersion: args.serverVersion,
+        ...deviceField(),
       }),
     });
     if (!resp.ok) return 0;
@@ -201,7 +206,7 @@ export async function reportClientInfo(studyId: number, userId: string): Promise
     await fetch(`${getApiRoot()}api/client_info.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studyId, userId, installed, device }),
+      body: JSON.stringify({ studyId, userId, installed, device, ...deviceField() }),
     });
   } catch {
     /* best-effort — telemetry must not affect the participant */
@@ -233,6 +238,7 @@ export async function reportPushEvent(args: {
         studyId: args.studyId, userId: args.userId, event: args.event,
         ...(args.channel ? { channel: args.channel } : {}),
         ...(args.count && args.count > 1 ? { count: args.count } : {}),
+        ...deviceField(),
       }),
     });
   } catch {
@@ -266,14 +272,16 @@ export async function setNotificationPreference(args: {
   channel: 'web' | 'android';
 }): Promise<boolean> {
   if (localOnly) return true;
+  const device = deviceContext(args.study.id, args.userId);
   try {
     const resp = await fetch(`${getApiRoot()}api/notification_prefs.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studyId: args.study.id, userId: args.userId, serverVersion: args.serverVersion, off: args.off, channel: args.channel }),
+      body: JSON.stringify({ studyId: args.study.id, userId: args.userId, serverVersion: args.serverVersion, off: args.off, channel: args.channel, ...deviceField() }),
     });
     if (!resp.ok) return false;
     const env = await resp.json();
+    noteRefusal(env, device);
     return env?.success === true;
   } catch {
     return false;
@@ -286,13 +294,15 @@ export async function setNotificationPreference(args: {
  * timeline isn't shifted by a client-side backfill. Best-effort: never throws.
  */
 export async function fetchNextNotification(studyId: number, userId: string): Promise<PushStatus> {
+  const device = deviceContext(studyId, userId);
   try {
     const resp = await fetch(
-      `${getApiRoot()}api/push_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      `${getApiRoot()}api/push_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}${deviceQuery()}`,
       { headers: { Accept: 'application/json' } },
     );
     if (!resp.ok) return { next: null, joinedAt: null, withdrawn: false, notificationsOff: null };
     const env = await resp.json();
+    noteRefusal(env, device);
     if (!env?.success) return { next: null, joinedAt: null, withdrawn: false, notificationsOff: null };
     const off = env.dataset?.notificationsOff;
     return {
@@ -313,13 +323,15 @@ export async function fetchNextNotification(studyId: number, userId: string): Pr
  */
 export async function fetchScheduleInputs(studyId: number, userId: string): Promise<ServerInputs | null> {
   if (localOnly) return null;
+  const device = deviceContext(studyId, userId);
   try {
     const resp = await fetch(
-      `${getApiRoot()}api/schedule.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      `${getApiRoot()}api/schedule.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}${deviceQuery()}`,
       { headers: { Accept: 'application/json' }, cache: 'no-store' },
     );
     if (!resp.ok) return null;
     const env = await resp.json();
+    noteRefusal(env, device);
     if (!env?.success || typeof env.dataset !== 'object') return null;
     const d = env.dataset;
     return {
@@ -374,7 +386,7 @@ export async function logEvent(args: {
     await fetch(`${getApiRoot()}api/datasets.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, ...deviceField() }),
     });
   } catch {
     /* best-effort — tutorial telemetry must not block onboarding */
@@ -393,6 +405,7 @@ export async function startWearableConnect(args: {
   provider: string;
 }): Promise<string> {
   if (localOnly) throw new Error(t('pwa_api_no_data'));
+  const device = deviceContext(args.study.id, args.userId);
   const resp = await fetch(`${getApiRoot()}api/wearables_connect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -401,10 +414,12 @@ export async function startWearableConnect(args: {
       studyId: args.study.id,
       serverVersion: args.serverVersion,
       provider: args.provider,
+      ...deviceField(),
     }),
   });
   if (!resp.ok) throw new Error(`wearables_connect.php returned ${resp.status}`);
   const env = await resp.json();
+  noteRefusal(env, device);
   if (!env.success || !env.dataset?.authUrl) throw new Error(env.error || t('pwa_api_connect_failed'));
   return env.dataset.authUrl as string;
 }
@@ -414,13 +429,15 @@ export async function startWearableConnect(args: {
  * an empty list and never throws (purely informational for the Settings/Details panels).
  */
 export async function fetchWearableStatus(studyId: number, userId: string): Promise<WearableStatus[]> {
+  const device = deviceContext(studyId, userId);
   try {
     const resp = await fetch(
-      `${getApiRoot()}api/wearables_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}`,
+      `${getApiRoot()}api/wearables_status.php?studyId=${studyId}&userId=${encodeURIComponent(userId)}${deviceQuery()}`,
       { headers: { Accept: 'application/json' } },
     );
     if (!resp.ok) return [];
     const env = await resp.json();
+    noteRefusal(env, device);
     return env?.success ? (env.dataset?.providers ?? []) : [];
   } catch {
     return [];
@@ -435,6 +452,7 @@ export async function disconnectWearable(args: {
   provider: string;
 }): Promise<boolean> {
   if (localOnly) return false;
+  const device = deviceContext(args.study.id, args.userId);
   const resp = await fetch(`${getApiRoot()}api/wearables_disconnect.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -443,10 +461,12 @@ export async function disconnectWearable(args: {
       studyId: args.study.id,
       serverVersion: args.serverVersion,
       provider: args.provider,
+      ...deviceField(),
     }),
   });
   if (!resp.ok) throw new Error(`wearables_disconnect.php returned ${resp.status}`);
   const env = await resp.json();
+  noteRefusal(env, device);
   if (!env.success) throw new Error(env.error || t('pwa_api_disconnect_failed'));
   return true;
 }
@@ -727,17 +747,23 @@ async function saveThenSend(item: Omit<QueuedSubmit, 'id' | 'attempts'>): Promis
   return true;
 }
 
+/** The participant id a queued dataset belongs to. */
+function datasetScope(payload: DatasetPayload): string {
+  return scopeKey(payload.dataset[0]?.studyId ?? 0, payload.userId);
+}
+
 async function postDataset(payload: DatasetPayload): Promise<void> {
   if (localOnly) return;
   for (let attempt = 1; ; attempt++) {
+    const device = deviceContext(payload.dataset[0]?.studyId ?? 0, payload.userId);
     const resp = await fetch(`${getApiRoot()}api/datasets.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, ...deviceField() }),
       signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
     try {
-      await checkUploadReply(resp, 'datasets.php');
+      await checkUploadReply(resp, 'datasets.php', device);
       return;
     } catch (err) {
       // It clears within a second (say, right after a task's own upload): not worth telling the participant they are offline.
@@ -856,6 +882,7 @@ export async function sendParticipantMessage(args: {
   userId: string;
   content: string;
 }): Promise<boolean> {
+  const device = deviceContext(args.study.id, args.userId);
   const resp = await fetch(`${getApiRoot()}api/save_message.php`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -864,10 +891,12 @@ export async function sendParticipantMessage(args: {
       studyId: args.study.id,
       content: args.content,
       serverVersion: args.serverVersion,
+      ...deviceField(),
     }),
   });
   if (!resp.ok) throw new Error(`save_message.php returned ${resp.status}`);
   const env = await resp.json();
+  noteRefusal(env, device);
   if (!env.success) throw new Error(env.error || 'Message rejected');
   return true;
 }
@@ -934,7 +963,8 @@ export const flushSubmitQueue = oneAtATime(async (): Promise<number> => {
     skip: (item) => {
       const now = Date.now();
       return (item.sendingSince !== undefined && now - item.sendingSince < SENDING_EXPIRES_MS) // by another tab, or just now
-        || !dueForRetry(item.attempts, item.lastTry, now);
+        || !dueForRetry(item.attempts, item.lastTry, now)
+        || isWrongDevice(datasetScope(item.payload)); // another device holds this id: waits for the participant's transfer
     },
     claim: (item) => ({ ...item, lastTry: Date.now(), sendingSince: Date.now() }),
     send: (item) => postDataset(item.payload),
@@ -1024,68 +1054,81 @@ export function installErrorLogger(): () => void {
   };
 }
 
-// ── PID device-lock (prevents a pre-assigned invite link from being used on
-//    multiple devices simultaneously). Calls the iema-bot API, which is on the
-//    same origin as the ESMira PWA so no CORS issues arise.
-//    Result: 'claimed' | 'already_yours' | 'conflict' | 'error' (network fault)
+// ── Device token (deviceBinding.ts) ─────────────────────────────
 
-const PID_LOCK_API = '/api/v1/esmira/pid-lock';
+export { DEVICE_TOKEN_KEY, getOrCreateDeviceToken } from './deviceBinding.ts';
 
-/** localStorage key for the stable per-browser device token (separate from userId). */
-export const DEVICE_TOKEN_KEY = 'esmira_device_token';
+export type PidCheckResult =
+  /** The study lets this id in; `userId` is the id as the study spells it (a typed "p001" may be the listed "P001"). */
+  | { status: 'allowed'; userId: string }
+  | { status: 'denied' }
+  /** The server could not be asked (offline, wrong code, old server). In a restricted study the participant retries. */
+  | { status: 'error' };
 
-/** Return or create a stable per-browser device identity token. */
-export function getOrCreateDeviceToken(): string {
-  const stored = localStorage.getItem(DEVICE_TOKEN_KEY);
-  if (stored) return stored;
-  const c = typeof crypto !== 'undefined' ? crypto : undefined;
-  const token = c?.randomUUID?.() ?? `dt-${Date.now().toString(36)}`;
-  localStorage.setItem(DEVICE_TOKEN_KEY, token);
-  return token;
+/**
+ * Ask whether a restricted study lets this participant id in (api/check_pid.php), before anything is stored or
+ * sent for it. Only asked for studies with a list; an open study never calls this.
+ */
+export async function checkPid(studyId: number, userId: string, accessKey: string, serverVersion: number): Promise<PidCheckResult> {
+  try {
+    const resp = await fetch(`${getApiRoot()}api/check_pid.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studyId, userId, accessKey, serverVersion }),
+    });
+    if (!resp.ok) return { status: 'error' };
+    const env = await resp.json();
+    if (!env?.success || typeof env.dataset?.allowed !== 'boolean') return { status: 'error' };
+    if (!env.dataset.allowed) return { status: 'denied' };
+    const canonical = typeof env.dataset.userId === 'string' && env.dataset.userId.trim() ? env.dataset.userId.trim() : userId;
+    return { status: 'allowed', userId: canonical };
+  } catch {
+    return { status: 'error' };
+  }
 }
 
 export type PidLockStatus = 'claimed' | 'already_yours' | 'conflict' | 'error';
 
+interface LockArgs {
+  studyId: number;
+  userId: string;
+  accessKey: string;
+  serverVersion: number;
+}
+
 /**
- * Attempt to claim a pre-assigned PID for this device.
- * Pass force=true to transfer the lock from another device (e.g. after user confirms).
- * Returns 'error' on network failure — callers should fail open and let the user through.
+ * Ask the server to give this participant id to this device (api/pid_lock.php), for a study that allows an id on one
+ * device only. 'claimed' / 'already_yours': this device holds it. 'conflict': another device does, and the participant
+ * may take it over with `force`. 'error' (offline, old server): callers let the participant through, because the server
+ * refuses the other device's requests on its own anyway.
  */
-export async function claimPidLock(
-  studyId: string,
-  pid: string,
-  deviceToken: string,
-  force = false,
-): Promise<PidLockStatus> {
+export async function claimPidLock(args: LockArgs & { force?: boolean }): Promise<PidLockStatus> {
   if (localOnly) return 'claimed';
   try {
-    const resp = await fetch(PID_LOCK_API, {
+    const resp = await fetch(`${getApiRoot()}api/pid_lock.php`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ study_id: studyId, pid, device_token: deviceToken, force }),
+      body: JSON.stringify({ ...args, ...deviceField() }),
     });
     if (!resp.ok) return 'error';
     const env = await resp.json();
-    return (env?.status as PidLockStatus) ?? 'error';
+    const status = env?.success ? env.dataset?.status : null;
+    return status === 'claimed' || status === 'already_yours' || status === 'conflict' ? status : 'error';
   } catch {
     return 'error';
   }
 }
 
 /**
- * Release the PID lock for this device (call on sign-out). Best-effort — never throws.
+ * Let go of the participant id (call on sign-out), so another device can use it without a transfer. Best-effort: never throws.
  */
-export async function releasePidLock(
-  studyId: string,
-  pid: string,
-  deviceToken: string,
-): Promise<void> {
+export async function releasePidLock(args: LockArgs): Promise<void> {
   if (localOnly) return;
   try {
-    await fetch(PID_LOCK_API, {
-      method: 'DELETE',
+    await fetch(`${getApiRoot()}api/pid_lock.php`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ study_id: studyId, pid, device_token: deviceToken }),
+      body: JSON.stringify({ ...args, ...deviceField(), release: true }),
     });
   } catch {
     /* best-effort */

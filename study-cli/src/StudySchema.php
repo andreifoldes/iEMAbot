@@ -105,7 +105,7 @@ final class StudySchema {
 					'rewardVisibleAfterDays' => 0, 'defaultLang' => 'en', 'useFallback' => true, 'additionalDaysActive' => 0,
 					'legacyScheduling' => false, 'enableTutorialMode' => false, 'webPushEnabled' => false, 'webMicOnboarding' => true,
 					'notificationNudge' => true, 'androidNotificationsEnabled' => true, 'studyEndNotificationEnabled' => true,
-					'webPhoneOnly' => false, 'webLanguage' => '', 'webSnapshot' => '', 'webLocalOnly' => false, 'webTaskActions' => false,
+					'webPhoneOnly' => false, 'pidMode' => 'open', 'pidFromUrl' => true, 'pidDevices' => 'multi', 'webLanguage' => '', 'webSnapshot' => '', 'webLocalOnly' => false, 'webTaskActions' => false,
 					'messagePacingWpm' => 238, 'wearablesEnabled' => false, 'wearablesProviders' => [], 'wearablesDataTypes' => [],
 					'phoneSensingLight' => false, 'phoneSensingActivity' => false, 'phoneSensingAccelerometer' => false,
 					'phoneSensingAccelBeforeMin' => 10, 'phoneSensingAccelAfterMin' => 10, 'phoneSensingAccelHz' => 20,

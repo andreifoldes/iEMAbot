@@ -77,6 +77,11 @@ public class SensingUploadWorker extends Worker {
                 return Result.success(); // offline or server trouble: the next round tries again
             }
             if (status == null) return Result.success();
+            if ("other_device".equals(status)) {
+                // Another device holds this participant id (a study that allows one device per id). What was collected
+                // here is kept, not deleted: the batches go out in a later round once this device holds the id again.
+                return Result.success();
+            }
             if ("withdrawn".equals(status)) {
                 PhoneSensing.stopAll(ctx);
                 return Result.success();
@@ -116,6 +121,7 @@ public class SensingUploadWorker extends Worker {
         String body = "{\"studyId\":" + cfg.studyId
                 + ",\"userId\":" + JSONObject.quote(cfg.userId)
                 + ",\"accessKey\":" + JSONObject.quote(cfg.accessKey == null ? "" : cfg.accessKey)
+                + (cfg.deviceToken == null || cfg.deviceToken.isEmpty() ? "" : ",\"deviceToken\":" + JSONObject.quote(cfg.deviceToken))
                 + ",\"serverVersion\":" + PROTOCOL_VERSION
                 + ",\"stream\":" + JSONObject.quote(parts[0])
                 + ",\"batchId\":" + JSONObject.quote(parts[1])

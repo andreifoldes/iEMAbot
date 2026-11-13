@@ -1,7 +1,7 @@
 ---
 title: "Getting started: for researchers"
 sidebar_label: "For researchers"
-description: "How to get iEMAbot for your lab: what to ask your IT department for, what it costs, and an email you can send them."
+description: "How to get iEMAbot for your lab: try it on your own computer, then what to ask your IT department for, what it costs, and an email you can send them."
 ---
 
 # Getting started: for researchers
@@ -10,7 +10,90 @@ iEMAbot runs on a server your institution controls, so your participants' data s
 yourself. Your IT department provides a small server and installs it, which takes them about an hour, and you then run
 your studies from a password-protected website.
 
-This page gives you what you need to ask them.
+Before you ask them, we recommend trying it on your own computer. This page explains how, and then gives you what you need
+to ask IT.
+
+## Try it on your own computer first
+
+You can run iEMAbot on your own computer in about ten minutes, using the same installer IT will use later. It starts with
+a demo study, so you can try both sides straight away: the researcher dashboard, and a questionnaire as a participant
+sees it. Doing this first helps you decide whether iEMAbot suits your study before anyone sets up a server, and gives you
+a concrete idea of what you are asking IT for.
+
+**What you need:** Docker Desktop ([download](https://www.docker.com/products/docker-desktop/), free for academic use in
+most institutions), started and running. We have tested this on a Mac. On Windows, run the command below in a WSL
+terminal. If your institution manages your computer, you may need IT to install Docker Desktop for you.
+
+**Install.** Open a terminal (on a Mac: the Terminal app) and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andreifoldes/iEMAbot/main/deploy/selfhost/install.sh | bash -s -- \
+  --domain localhost --email you@example.org --no-backup-schedule
+```
+
+Use your own email address. After a minute or two it prints the addresses, the admin password and the demo study's link:
+
+```text
+Participant app:       https://localhost/pwa/
+Researcher dashboard:  https://localhost/esmira/#admin
+Demo study:            https://localhost/pwa/?key=demo
+```
+
+**Your browser will warn you** the first time, that the connection is not private. That is expected: the certificate comes
+from your own computer, not from a certificate authority. Accept it once. In Chrome: **Advanced**, then **Proceed to localhost**.
+
+**What to try:**
+
+1. Log in to the dashboard with the account and password it printed.
+2. Open the **demo study's link** in the same browser and answer the **Daily check-in**, or **All question types** to see
+   every kind of question.
+3. Back in the dashboard, open the demo study and look at the data page: your answers are there and can be downloaded.
+4. Create a study of your own: add a questionnaire, plan it under **Schedule**, and see the result under **Calendar**, which
+   shows when each check-in opens and when reminders would go out.
+
+**What does not work on your own computer:**
+
+- **Phones.** `localhost` only exists on your computer, so a phone cannot open it.
+- **Installing the app and reminders.** Browsers allow these only on a site with a trusted certificate, so they stay off here.
+  Try them on your phone with the demo study once IT has set up the real server.
+- **Real data.** Docker Desktop's shared folders can damage the database. This copy is for trying things out only:
+  never collect data from participants with it.
+
+**When you are done**, stop it and delete it:
+
+```bash
+cd ~/iemabot && docker compose down -v && cd ~ && rm -rf ~/iemabot
+```
+
+## Why it needs its own server
+
+IT will probably ask why you can't use something the institution already has. These are the usual reasons:
+
+- **Your data stays on your institution's infrastructure.** Commercial survey and EMA platforms hold your participants'
+  responses on the vendor's servers. Here, there is no vendor.
+- **It has to run all the time.** It sends participants reminders at set times and receives answers at any hour, which
+  a shared drive or a survey tool can't do.
+- **Participants need nothing from an app store.** They open a link on their phone. That link needs a web address with
+  HTTPS, which is why you need a server name and not only storage.
+- **It's free software.** There is no licence fee (AGPL-3.0). The only cost is the server.
+
+### Why not a computer that is always on?
+
+Once you have tried it on your own computer, it is tempting to leave a laptop or an office PC running for the study.
+Please don't. A study depends on things a personal computer can't promise:
+
+- **Reminders are sent by the server.** If the computer sleeps, closes its lid, restarts for an update or loses power,
+  reminders due in that time are not sent. Missed reminders mean missed check-ins, which you cannot recover afterwards.
+- **Phones must reach it from anywhere.** Participants answer on mobile data and on other networks. That needs a fixed
+  address on the internet and a trusted HTTPS certificate. A computer on an office or home network has neither, and
+  university networks usually block connections from outside.
+- **Participants' data needs protecting.** Laptops are carried around, lost and stolen. A server in your institution's data
+  centre has controlled access, backups kept elsewhere and someone responsible for security updates. Your ethics
+  approval and data protection assessment will usually say where data is stored, and IT can confirm it.
+- **The database needs a real server.** On Docker Desktop we have seen the database damaged under load. On a Linux server
+  it is reliable.
+
+A small server costs less than £30 a month (see [What to ask for](#what-to-ask-for)), which is little compared with losing a participant's data.
 
 ## What to ask for
 
@@ -35,18 +118,6 @@ study **plus time afterwards** to download and archive your data.
 at the same moment, as they might just after a reminder. All 200 were saved, typically within about a quarter of a second,
 using about half the memory. That was not a test with real phones or a real study. The minimum also leaves little room for the unexpected and for future versions, so choose the recommended size if the
 cost is not a problem, and always if participants record audio, since the minimum disk has no room for them.
-
-## Why it needs its own server
-
-IT will probably ask why you can't use something the institution already has. These are the usual reasons:
-
-- **Your data stays on your institution's infrastructure.** Commercial survey and EMA platforms hold your participants'
-  responses on the vendor's servers. Here, there is no vendor.
-- **It has to run all the time.** It sends participants reminders at set times and receives answers at any hour, which
-  a shared drive or a survey tool can't do.
-- **Participants need nothing from an app store.** They open a link on their phone. That link needs a web address with
-  HTTPS, which is why you need a server name and not only storage.
-- **It's free software.** There is no licence fee (AGPL-3.0). The only cost is the server.
 
 ## The email to send
 
@@ -143,8 +214,34 @@ IT will give you an address and an admin account. Then:
    keeps people who guess it out of your study.
 4. Send participants the **Link for participants** shown there, or print its QR code.
 
-Try the whole thing on your own phone, including receiving a reminder, before you recruit anyone. You can also ask IT to add the demo study
-(see [their guide](./for-it.md#hand-over)), which shows every question type, so you can see what participants would see. It also lets you test reminders: answer **Set a test reminder**, and one arrives at the time you chose.
+Try the whole thing on your own phone, including receiving a reminder, before you recruit anyone. The server starts with the
+demo study, which shows every question type: open `/pwa/?key=demo` on the server's address on your phone, add it to your Home
+Screen when asked, and answer **Set a test reminder**. A reminder arrives at the time you chose. **Delete the demo study before
+you recruit**, because its access key is public.
+
+### Who can join: open, or only IDs on your list
+
+By default anyone who has the access key can join, and the app gives each participant a random ID. If you give each participant an
+ID yourself, open **Participant IDs** in the study editor and choose **Only participants on my list can join**:
+
+- **Make the list.** Paste the IDs (one per line), upload a text or CSV file, or press **Make random IDs**. Random IDs cannot be
+  guessed; P001, P002 can, and an ID works like a password. Save the list with its own button.
+- **Personal links.** Download the CSV of personal links, one per listed ID, and send each participant theirs. With **Take the ID
+  from the invite link** on, the link carries the ID and the participant types nothing. Switch it off, or send the plain link,
+  and the app asks the participant to type their ID.
+- **What happens to an unlisted ID.** The app says the ID is not recognised and stores and sends nothing; the server also refuses
+  it. A participant who types the ID in another letter case (`p001` for `P001`) is let in as `P001`.
+- **Joined or not.** The page shows which listed IDs have joined. Participants who joined before you switched to a list keep
+  working, even if they are not on it; to remove someone, withdraw them from the study.
+
+### One device or several per ID
+
+Under **Devices per participant ID** on the same page you choose whether an ID may be used on several devices at once (the
+default) or on one at a time. With **One device at a time per ID**, the first device to use an ID holds it and the server refuses
+the others. A participant who changes phone opens the study on the new one and taps **Transfer to this device**, or signs out on
+the old one first. Answers waiting on a refused device are kept and sent once the ID is taken back. This works with open and
+list studies alike, and only for participants who have updated the app: older versions are not restricted. Clearing the browser's
+data makes that device a new one, which needs a transfer.
 
 ## Doing it without IT
 

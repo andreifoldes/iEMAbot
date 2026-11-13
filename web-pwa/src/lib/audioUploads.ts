@@ -17,6 +17,7 @@
  */
 
 import { getApiRoot } from './serverRoot';
+import { deviceContext, getOrCreateDeviceToken, isWrongDevice, scopeKey } from './deviceBinding.ts';
 import { alreadyStored, checkUploadReply, dueForRetry, rejectionCost } from './uploadRetry';
 
 const DB_NAME = 'esmira_audio';
@@ -136,13 +137,15 @@ async function uploadOne(rec: AudioRecord): Promise<void> {
   const form = new FormData();
   form.append('studyId', String(rec.studyId));
   form.append('userId', rec.userId);
+  form.append('deviceToken', getOrCreateDeviceToken());
   form.append('dataType', 'Audio');
   // The file's *name* is the integer identifier — file_uploads.php reads it as
   // `(int)$fileData['name']` to match the pending-upload marker.
   form.append('upload', rec.blob, String(rec.identifier));
 
+  const device = deviceContext(rec.studyId, rec.userId);
   const resp = await fetch(`${getApiRoot()}api/file_uploads.php`, { method: 'POST', body: form });
-  await checkUploadReply(resp, 'file_uploads.php');
+  await checkUploadReply(resp, 'file_uploads.php', device);
 }
 
 let flushing = false;
@@ -160,6 +163,7 @@ export async function flushAudioQueue(): Promise<void> {
     for (const rec of all) {
       if (rec.status !== 'ready') continue;
       if (!dueForRetry(rec.attempts, rec.lastTry, Date.now())) continue; // Kept, and tried once a day: it exists nowhere else.
+      if (isWrongDevice(scopeKey(rec.studyId, rec.userId))) continue; // another device holds this id: kept until the participant takes it over
       try {
         await uploadOne(rec);
         await tx('readwrite', (s) => s.delete(rec.identifier));

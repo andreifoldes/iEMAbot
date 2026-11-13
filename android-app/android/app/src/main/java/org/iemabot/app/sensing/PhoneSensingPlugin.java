@@ -68,6 +68,7 @@ public class PhoneSensingPlugin extends Plugin {
                 .putString("userId", userId)
                 .putLong("studyId", studyId)
                 .putString("accessKey", call.getString("accessKey", ""))
+                .putString("deviceToken", call.getString("deviceToken", ""))
                 .putBoolean("light", Boolean.TRUE.equals(call.getBoolean("light", false)))
                 .putBoolean("activity", Boolean.TRUE.equals(call.getBoolean("activity", false)))
                 .putBoolean("accelerometer", Boolean.TRUE.equals(call.getBoolean("accelerometer", false)))

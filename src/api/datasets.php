@@ -39,7 +39,7 @@ try {
     return;
 } catch (CriticalException $e) {
     $dataSet->close();
-    echo JsonOutput::error($e->getMessage());
+    echo JsonOutput::error($e->getMessage(), (int) $e->getCode()); // some refusals have their own code, e.g. 409: the id is active on another device
     return;
 } catch (Throwable $e) {
     $dataSet->close();

@@ -1,6 +1,6 @@
 /**
- * Tests for the live cognitive battery: a page of only cognitive tasks shows LIVE_BATTERY_SIZE of
- * them in a live run, all of them in a practice run, and the same ones after a resume. Randomized pages also keep
+ * Tests for the cognitive battery: a page of only cognitive tasks shows LIVE_BATTERY_SIZE of
+ * them in every run (practice included), and the same ones after a resume. Randomized pages also keep
  * their order after a resume.
  *
  * Run with `npm test`.
@@ -34,10 +34,6 @@ describe('cognitive battery subset', () => {
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) ids(battery).forEach((x) => seen.add(x));
     assert.equal(seen.size, NAMES.length);
-  });
-
-  it('keeps all tasks in a practice run', () => {
-    assert.deepEqual(ids(battery, { practice: true }), NAMES);
   });
 
   it('reuses an earlier draw when resuming', () => {

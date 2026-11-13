@@ -6,6 +6,7 @@ require_once dirname(__FILE__, 2) . '/backend/autoload.php';
 
 if(\backend\Cors::handleNativeAppRequest()) return;
 
+use backend\participants\ParticipantGate;
 use backend\exceptions\CriticalException;
 use backend\FileUploader;
 use backend\JsonOutput;
@@ -31,6 +32,14 @@ if(!isset($_POST['studyId']) || !isset($_POST['userId']) || !isset($_POST['dataT
 
 $studyId = (int)$_POST['studyId'];
 $userId = $_POST['userId'];
+if(!\backend\Main::strictCheckInput($userId)) {
+	echo JsonOutput::error('User is faulty');
+	return;
+}
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 $dataType = $_POST['dataType'];
 
 //get fileData:

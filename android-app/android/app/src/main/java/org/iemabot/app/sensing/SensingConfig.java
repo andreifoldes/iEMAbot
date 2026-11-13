@@ -21,6 +21,8 @@ final class SensingConfig {
     final long studyId;
     final String userId;
     final String accessKey;
+    /** Which device this is (handed over by the web layer); "" when unknown. Sent so a study that allows an id on one device only can tell. */
+    final String deviceToken;
     final boolean light;
     final boolean activity;
     final boolean accelerometer;
@@ -41,6 +43,7 @@ final class SensingConfig {
         studyId = p.getLong("studyId", 0);
         userId = p.getString("userId", null);
         accessKey = p.getString("accessKey", "");
+        deviceToken = p.getString("deviceToken", "");
         light = p.getBoolean("light", false);
         activity = p.getBoolean("activity", false);
         accelerometer = p.getBoolean("accelerometer", false);

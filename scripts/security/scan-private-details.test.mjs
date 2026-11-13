@@ -54,6 +54,18 @@ const CASES = {
     yes: [j('ghp_', 'a'.repeat(36)), j('AKIA', 'ABCDEFGHIJKLMNOP'), j('sk-ant-', 'x'.repeat(30))],
     no: ['ghp_short', 'sk-short'],
   },
+  'password-in-command': {
+    yes: [j('PGPASS', 'WORD=', 'hunter2x psql -h db'), j('sshpass -p ', 'S3cretPw ssh root', '@', 'host'), j('mysql -u root -p', 'S3cretPw db')],
+    no: ['PGPASSWORD=$DB_PASSWORD psql', 'PGPASSWORD="$PGPASS" psql', 'sshpass -p "$SSHPASS" ssh', 'mysql -u root -p'],
+  },
+  'credentials-in-url': {
+    yes: [j('postgres://app:', 'S3cretPw', '@', 'db.example.net/x'), j('https://bob:', 'hunter22', '@', 'api.example.net')],
+    no: [j('postgres://app:', '${DB_PASS}', '@', 'db/x'), j('https://user:pw', '@', 'fcm.googleapis.com/x'), 'https://example.org/path'],
+  },
+  'literal-bearer-token': {
+    yes: [j('Authorization: Bearer ', 'abcDEF0123456789abcDEF0123')],
+    no: ['Authorization: Bearer ${token}', 'Authorization: Bearer $TOKEN', 'Bearer <token>'],
+  },
 };
 
 for (const [id, {yes, no}] of Object.entries(CASES)) {

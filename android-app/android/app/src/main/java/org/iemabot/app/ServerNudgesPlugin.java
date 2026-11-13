@@ -41,11 +41,15 @@ public class ServerNudgesPlugin extends Plugin {
         SharedPreferences.Editor e = prefs.edit()
                 .putString("server", server)
                 .putString("userId", userId)
-                .putLong("studyId", studyId);
+                .putLong("studyId", studyId)
+                .putLong("armedAt", System.currentTimeMillis()); // lets a poll that is already running tell it was re-armed meanwhile (NudgeWorker)
         long joinedAt = call.getData().optLong("joinedAt", 0);
         if (joinedAt > 0) e.putLong("joinedAt", joinedAt);
         String lang = call.getString("lang");
         if (lang != null && !lang.isEmpty()) e.putString("lang", lang); else e.remove("lang");
+        // Which device this is: a study can allow a participant id on one device only, and the poll runs without the page.
+        String deviceToken = call.getString("deviceToken");
+        if (deviceToken != null && !deviceToken.isEmpty()) e.putString("deviceToken", deviceToken); else e.remove("deviceToken");
         // The server keeps what it already sent per participant (the schedule's ledger); nothing to reset here.
         e.remove("since").remove("localReminders"); // kept by older builds
         e.apply();

@@ -7,6 +7,9 @@
  * be sent. Kept free of extensionless imports so it can be unit-tested under plain node.
  */
 
+import { noteRefusal } from './deviceBinding.ts';
+import type { DeviceContext } from './deviceBinding.ts';
+
 /** Rejections from the server before a queued upload is only tried once a day. Nothing is ever given up on: a server that
  * refuses everything today (a misconfiguration, say) may be fixed tomorrow, and the answers exist nowhere else. */
 export const MAX_REJECTIONS = 20;
@@ -25,6 +28,10 @@ export function alreadyStored(err: unknown): boolean {
 /** The server answered and refused this upload (a 4xx other than 408/429, or `success: false`). */
 export class UploadRejected extends Error {}
 
+/** Another device holds the participant's id (study setting "one device at a time"). Nothing was stored; the upload waits for the
+ * participant to take the id over, and is never given up on. */
+export class UploadWrongDevice extends Error {}
+
 /** The server keeps at most one dataset per second from a participant, and refused this one for coming too soon. */
 export class UploadTooSoon extends Error {}
 
@@ -34,12 +41,13 @@ export const BETWEEN_UPLOADS_MS = 1100;
 export const TOO_SOON_RETRY_MS = 3000;
 
 /** Throw unless the server accepted the upload; UploadRejected only for a definite refusal. */
-export async function checkUploadReply(resp: Response, endpoint: string): Promise<void> {
+export async function checkUploadReply(resp: Response, endpoint: string, device: DeviceContext): Promise<void> {
   if (!resp.ok) {
     const transient = resp.status >= 500 || resp.status === 408 || resp.status === 429;
     throw new (transient ? Error : UploadRejected)(`${endpoint} returned ${resp.status}`);
   }
   const env = await resp.json(); // a non-JSON page (captive portal) throws here: transient
+  if (noteRefusal(env, device)) throw new UploadWrongDevice(env.error || `${endpoint}: another device holds this participant id`);
   if (!env.success) throw new UploadRejected(env.error || `${endpoint} rejected the upload`);
   // datasets.php answers success:true regardless, and says what became of each dataset here. Only "too soon" is known to
   // have stored nothing (it is decided before any write). Other refusals can come after the row was stored, and a resend
@@ -52,6 +60,6 @@ export async function checkUploadReply(resp: Response, endpoint: string): Promis
 }
 
 /** How much a failed attempt adds to an upload's rejection count. */
-export function rejectionCost(err: unknown): number {
+export function rejectionCost(err: unknown): number { // UploadWrongDevice costs nothing: the answers wait for the transfer
   return err instanceof UploadRejected ? 1 : 0;
 }

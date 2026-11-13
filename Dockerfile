@@ -97,6 +97,8 @@ VOLUME /etc/apache2/sites-enabled/
 ENV IEMABOT_CONTAINER_IMAGE=1
 # The self-host kit that goes with this image: update.sh takes its scripts from here, so the two never drift apart.
 COPY ./deploy/selfhost /opt/iemabot-kit
+# The demo study a new self-hosted server starts with (install.sh runs `cli/selfhost.php demo`), outside the web root.
+COPY ./demo/demo-study.json /opt/iemabot-demo/demo-study.json
 
 # Setup entry script:
 COPY ./docker-entrypoint.sh /

@@ -27,6 +27,8 @@ final class StudyValidator {
 	private const BOUNDARIES = ['fixed', 'wake', 'bed', 'split', 'usualWake'];
 	private const ENUMS = [
 		StudySchema::STUDY => [
+			'pidMode' => ['open', 'list'],
+			'pidDevices' => ['multi', 'single'],
 			'phoneSensingUsage' => ['', 'daily', 'events', 'both'],
 			'phoneSensingUploadNetwork' => ['any', 'wifi_preferred', 'wifi_only'],
 		],

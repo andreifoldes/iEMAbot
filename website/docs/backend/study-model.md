@@ -33,6 +33,9 @@ form, FAQ, contact email, reward instructions).
 | `webPushEnabled` | Turn on Web Push reminders | [Push panel](./channels/web-push.md) |
 | `schedule` | The study's one schedule: which questionnaires open when and when participants are prompted, on every channel (check-ins with days, ranges, prompts, limits and notifications; see [Scheduling](./scheduling.md)) | Schedule panel |
 | `webPhoneOnly` | Run the web app on smartphones only; other devices get an invite page with a QR code | Study settings, next to study availability |
+| `pidMode` | Who may join: `open` (anyone with an access key; the default) or `list` (only the participant IDs on the study's list; see [Who may join](./api-reference.md#who-may-join)). The list itself is not in the study | Participant IDs |
+| `pidFromUrl` | With a list: use the `pid` in the invite link (default), or always ask the participant to type their ID | Participant IDs |
+| `pidDevices` | How many devices may be active under one participant ID: `multi` (any number; the default) or `single` (one at a time; the server refuses the others until the ID is transferred, see [One device at a time](./api-reference.md#one-device-at-a-time)) | Participant IDs |
 | `webLocalOnly` | The web app sends nothing to the server: no answers, join or other events, telemetry, push or PID lock; answers stay on the device | **None**, source-edit only |
 | `webTaskActions` | A task card offers Start task, Skip task, Remind me later (pause on this device) and Skip check-in | **None**, source-edit only |
 | `messagePacingWpm` | Reading speed (words per minute, default 238) at which consecutive bot messages are paced in the PWA, the Android app and Telegram; 0 = off | Study settings |

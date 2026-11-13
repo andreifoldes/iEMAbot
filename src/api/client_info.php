@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\JsonOutput;
 use backend\Main;
@@ -35,6 +36,10 @@ if(!Main::strictCheckInput($userId)) {
 	return;
 }
 
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 $installed = !empty($json->installed);
 $device    = (string) ($json->device ?? 'unknown');
 if(!in_array($device, ['mobile', 'tablet', 'desktop', 'unknown'], true))

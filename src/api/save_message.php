@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\bugReports\GithubIssueReports;
 use backend\exceptions\CriticalException;
 use backend\Main;
@@ -35,6 +36,10 @@ if($json->serverVersion < Main::ACCEPTED_SERVER_VERSION) {
 $userId = $json->userId;
 $studyId = $json->studyId;
 $content = $json->content;
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 
 if($dataStore->getStudyStore()->isLocked($studyId)) {
 	echo JsonOutput::error("This study is locked");

@@ -8,6 +8,7 @@
  */
 
 import { isNativeApp } from './platform.ts';
+import { getOrCreateDeviceToken } from './deviceBinding.ts';
 import type { EsmiraStudy } from '../types';
 
 export type UsageMode = '' | 'daily' | 'events' | 'both';
@@ -151,6 +152,7 @@ export async function configurePhoneSensing(args: {
       studyId: args.study.id,
       userId: args.userId,
       accessKey: args.accessKey,
+      deviceToken: getOrCreateDeviceToken(),
       light: s?.light ?? false,
       activity: s?.activity ?? false,
       accelerometer: s?.accelerometer ?? false,

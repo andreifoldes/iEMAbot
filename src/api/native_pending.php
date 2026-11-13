@@ -1,5 +1,7 @@
 <?php
 
+use backend\participants\ParticipantDeviceLock;
+use backend\participants\ParticipantWithdrawals;
 use backend\Configs;
 use backend\FileSystemBasics;
 use backend\fileSystem\PathsFS;
@@ -55,6 +57,13 @@ try {
 	$studyStore = $dataStore->getStudyStore();
 	if($studyStore->isLocked($studyId)) {
 		echo JsonOutput::error('This study is locked');
+		return;
+	}
+	// Another device holds this participant id (a study that allows one device per id): nothing to nudge about here, so the
+	// app stops polling, as for a participant who has left. A participant who has left is told so whichever device asks (NativePending
+	// answers `withdrawn` below), and does not take the lock.
+	if(!ParticipantWithdrawals::isWithdrawn($studyId, $userId) && ParticipantDeviceLock::refusal($studyId, $userId, ParticipantDeviceLock::cleanToken($json->deviceToken ?? null)) !== null) {
+		echo JsonOutput::successObj(['now' => Main::getMilliseconds(), 'active' => false, 'withdrawn' => false, 'notificationsOff' => false, 'otherDevice' => true, 'items' => []]);
 		return;
 	}
 	$lang = (isset($json->lang) && is_string($json->lang) && preg_match('/^[a-zA-Z_-]{2,10}$/', $json->lang))

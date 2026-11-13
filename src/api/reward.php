@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\exceptions\NoRewardCodeException;
@@ -22,6 +23,10 @@ if(!($json = json_decode($jsonString)) || !isset($json->studyId) || !isset($json
 $studyId = (int) $json->studyId;
 $userId = $json->userId;
 
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 $dataStore = Configs::getDataStore();
 $studyStore = $dataStore->getStudyStore();
 $userDataStore = $dataStore->getUserDataStore($userId);

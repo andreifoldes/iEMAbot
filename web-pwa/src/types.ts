@@ -219,6 +219,14 @@ export interface EsmiraStudy {
   /** Interface language chosen by the researcher (locale code, e.g. "de"); empty = automatic. */
   webLanguage?: string;
   webPhoneOnly?: boolean;
+  /** Who may join: "open" (default, any participant id) or "list" (only ids the researcher listed;
+   *  the app asks the server before it uses an id, see lib/participantId.ts). */
+  pidMode?: 'open' | 'list';
+  /** With a list: whether a `pid` in the invite link is used (default) or the participant always types it. */
+  pidFromUrl?: boolean;
+  /** Whether one participant id may be active on several devices ("multi", default) or on one only ("single"):
+   *  the server then refuses every other device (see lib/deviceBinding.ts). */
+  pidDevices?: 'multi' | 'single';
   /** Names an end-of-questionnaire read-out of the participant's own answers (see
    *  lib/snapshot.ts). Source-edit only; empty/unknown = none. */
   webSnapshot?: string;

@@ -258,6 +258,20 @@ class StudyFactoryTest extends TestCase {
 		$this->assertStringContainsString('text: must be text, not a list', $problems);
 	}
 
+	function test_who_may_join_is_open_or_list_and_nothing_else() {
+		$list = $this->build(self::MINIMAL + ['pidMode' => 'list', 'pidFromUrl' => false])->main();
+		$this->assertSame('list', $list->pidMode);
+		$this->assertFalse($list->pidFromUrl);
+		$open = $this->build(self::MINIMAL + ['pidMode' => 'open', 'pidFromUrl' => true])->main();
+		$this->assertObjectNotHasProperty('pidMode', $open, 'the default is left out, as the editor does');
+		$this->assertObjectNotHasProperty('pidFromUrl', $open);
+		$this->assertRefused(self::MINIMAL + ['pidMode' => 'everyone'], 'pidMode');
+		$this->assertSame('single', $this->build(self::MINIMAL + ['pidDevices' => 'single'])->main()->pidDevices);
+		$this->assertObjectNotHasProperty('pidDevices', $this->build(self::MINIMAL + ['pidDevices' => 'multi'])->main());
+		$this->assertRefused(self::MINIMAL + ['pidDevices' => 'two'], 'pidDevices');
+		$this->assertRefused(self::MINIMAL + ['pidMode' => 'list', 'pidFromUrl' => 'no'], 'pidFromUrl: must be true or false');
+	}
+
 	function test_null_is_not_a_value() {
 		$this->assertRefused(self::MINIMAL + ['contactEmail' => null], 'contactEmail: must not be null');
 	}

@@ -14,6 +14,7 @@ use backend\Configs;
 use backend\CreateDataSet;
 use backend\fileSystem\PathsFS;
 use backend\Main;
+use backend\participants\ParticipantAllowList;
 use Throwable;
 
 /**
@@ -48,6 +49,11 @@ class EnrollmentFlow {
 		}
 		if(!ChannelStudies::isJoinable($invite['studyId'], $invite['accessKey'])) {
 			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('join_closed', $lang)));
+			return;
+		}
+		// Said before the consent form, not after the participant has gone through it. complete() checks again.
+		if(ParticipantAllowList::isEnforced($invite['studyId']) && !ParticipantAllowList::permits($invite['studyId'], $invite['pid'])) {
+			$this->say($ev->chatRef, HtmlToChatText::escape(ChatStrings::t('join_pid_not_allowed', $lang)));
 			return;
 		}
 
@@ -176,6 +182,11 @@ class EnrollmentFlow {
 		}
 		$pid = (string) ($enrol['pid'] ?? '');
 		$userId = ($pid !== '' && Main::strictCheckInput($pid)) ? $pid : self::uuid4();
+		// A study that only lets listed participants in needs an invitation that names one of them.
+		if(ParticipantAllowList::isEnforced($studyId) && !ParticipantAllowList::permits($studyId, $pid)) {
+			$this->say($chatRef, HtmlToChatText::escape(ChatStrings::t('join_pid_not_allowed', $lang)));
+			return;
+		}
 		$binding = [
 			'channel' => $this->channel->id(), 'chatRef' => $chatRef, 'studyId' => $studyId, 'userId' => $userId,
 			'accessKey' => (string) $enrol['accessKey'], 'lang' => $lang, 'tzName' => $tz['tzName'],

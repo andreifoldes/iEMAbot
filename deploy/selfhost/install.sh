@@ -24,6 +24,7 @@ To update, use ./update.sh, which backs up first.
   --restore FILE        Start from a backup made by backup.sh (moving from another server) instead of a new admin
   --skip-dns-check      Do not check that the domain points at this machine
   --no-backup-schedule  Do not schedule the nightly backup
+  --no-demo             Do not add the demo study (access key "demo") to a new server
   --yes                 Never ask: use the values above and the defaults
   --help                Show this
 
@@ -50,7 +51,7 @@ fi
 . "$KIT_SOURCE/lib.sh"
 [ -z "${IEMABOT_KIT_TMP:-}" ] || trap 'rm -rf "$IEMABOT_KIT_TMP"' EXIT
 
-DOMAIN=""; EMAIL=""; ADMIN=""; DIR="$HOME/iemabot"; BEHIND_PROXY=""; RESTORE=""; SKIP_DNS=""; SCHEDULE_BACKUP=1; YES=""
+DOMAIN=""; EMAIL=""; ADMIN=""; DIR="$HOME/iemabot"; BEHIND_PROXY=""; RESTORE=""; SKIP_DNS=""; SCHEDULE_BACKUP=1; YES=""; DEMO=1
 
 ask() { # ask "Question" default: the answer, or the default when nobody can answer
   local answer=""
@@ -77,6 +78,7 @@ parse_args() {
       --behind-proxy) BEHIND_PROXY=1; shift ;;
       --skip-dns-check) SKIP_DNS=1; shift ;;
       --no-backup-schedule) SCHEDULE_BACKUP=""; shift ;;
+      --no-demo) DEMO=""; shift ;;
       --yes) YES=1; shift ;;
       --help|-h) usage; exit 0 ;;
       *) usage >&2; die "Unknown option: $1" ;;
@@ -282,7 +284,7 @@ start_server() {
   docker compose up -d --wait --wait-timeout "$START_TIMEOUT" caddy
 }
 
-ADMIN_PASSWORD_SHOWN=""
+ADMIN_PASSWORD_SHOWN=""; DEMO_ADDED=""
 create_admin() {
   local password status=0
   ADMIN="$(env_get ADMIN_ACCOUNT)"
@@ -296,6 +298,10 @@ create_admin() {
         # Now, in case anything below fails.
         say "Admin account: $ADMIN  Password: $password  (save it; it is not stored anywhere)"
       fi
+      # Only with a new admin: a demo study that was deleted on purpose must not come back when this is run again.
+      if [ -n "$DEMO" ]; then
+        app_php cli/selfhost.php demo && DEMO_ADDED=1 || warn "Could not add the demo study; the server works without it."
+      fi
       ;;
     3) ADMIN="" ;;
     *) die "Could not create the admin account (see above)." ;;
@@ -308,6 +314,10 @@ summary() {
   step "Done"
   say "Participant app:       $url/pwa/"
   say "Researcher dashboard:  $url/esmira/#admin"
+  if [ -n "$DEMO_ADDED" ]; then
+    say "Demo study:            $url/pwa/?key=demo"
+    say "  Every question type and a test reminder. Its access key is public: delete it in the dashboard before you recruit."
+  fi
   if [ -n "$ADMIN_PASSWORD_SHOWN" ]; then
     say ""
     say "Admin account:  $ADMIN"

@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\JsonOutput;
 use backend\Main;
@@ -42,6 +43,10 @@ $off = (bool) $json->off;
 $channel = (isset($json->channel) && $json->channel === 'android') ? 'android' : 'web';
 
 try {
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 	if($dataStore->getStudyStore()->isLocked($studyId)) {
 		echo JsonOutput::error('This study is locked');
 		return;

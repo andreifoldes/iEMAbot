@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\FileSystemBasics;
@@ -53,6 +54,10 @@ if($dataStore->getStudyStore()->isLocked($studyId)) {
 }
 
 $unsubscribe = isset($json->unsubscribe) && $json->unsubscribe;
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 $file = PathsFS::filePushSubscription($studyId, $userId);
 
 try {

@@ -68,6 +68,8 @@ class StudyMetadataStoreFS implements StudyMetadataStore {
             'studyTag' => $study->studyTag ?? '',
             'useFallback' => $study->useFallback ?? true,
             'enableRewardSystem' => $study->enableRewardSystem ?? false,
+            'pidMode' => ($study->pidMode ?? 'open') === 'list' ? 'list' : 'open',
+            'pidDevices' => ($study->pidDevices ?? 'multi') === 'single' ? 'single' : 'multi',
         ];
         FileSystemBasics::writeFile(PathsFS::fileStudyMetadata($this->studyId), serialize($this->metadata));
 
@@ -142,5 +144,15 @@ class StudyMetadataStoreFS implements StudyMetadataStore {
     public function isUsingFallback(): bool {
         $this->loadMetadata();
         return $this->metadata['useFallback'] ?? true;
+    }
+
+    public function getPidMode(): string {
+        $this->loadMetadata();
+        return ($this->metadata['pidMode'] ?? 'open') === 'list' ? 'list' : 'open';
+    }
+
+    public function getPidDevices(): string {
+        $this->loadMetadata();
+        return ($this->metadata['pidDevices'] ?? 'multi') === 'single' ? 'single' : 'multi';
     }
 }

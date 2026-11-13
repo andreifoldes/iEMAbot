@@ -49,7 +49,22 @@
     {
       "id": "token-shape",
       "description": "Well-known API token shapes",
-      "regex": "\\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35})\\b"
+      "regex": "\\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|npm_[A-Za-z0-9]{36}|glpat-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|sbp_[a-f0-9]{40}|\\d{8,10}:AA[A-Za-z0-9_-]{33})\\b"
+    },
+    {
+      "id": "password-in-command",
+      "description": "Literal password passed to a CLI (PGPASSWORD=, MYSQL_PWD=, sshpass -p, mysql -p). Reference $VAR instead.",
+      "regex": "(?:\\b(?:PGPASSWORD|MYSQL_PWD|REDISCLI_AUTH)=|\\bsshpass\\s+-p\\s*|\\bmysql(?:dump|admin)?\\b[^\\n]*?\\s-p)(?![\"']?\\$)[\"']?[^\\s\"'$]{4,}"
+    },
+    {
+      "id": "credentials-in-url",
+      "description": "URL or connection string with a password embedded before the host",
+      "regex": "\\b[a-z][a-z0-9+.-]*://[^\\s/:@$\"'{}]+:(?![$%{<])[^\\s/@$\"'{}<>]{4,}@[A-Za-z0-9.-]+"
+    },
+    {
+      "id": "literal-bearer-token",
+      "description": "Authorization header carrying a literal token instead of a variable",
+      "regex": "(?i)\\b(?:bearer|token)\\s+(?![$<{])[A-Za-z0-9._~+/-]{24,}=*"
     }
   ],
   "forbiddenPathPatterns": [

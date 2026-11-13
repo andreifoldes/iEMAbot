@@ -5,6 +5,8 @@
 //                                         IEMABOT_CONTACT_EMAIL. Runs on every container start.
 //   php cli/selfhost.php init <account>   Create the first admin account (password on stdin) and the push keys.
 //                                         Exits with 3 when the server already has one.
+//   php cli/selfhost.php demo [file]      Add the demo study (access key "demo"), so a new server has something to try.
+//                                         Exits with 3 when it is already there.
 //   php cli/selfhost.php set-password <account>   Set an account's new password (on stdin), and lift a login lockout.
 //   php cli/selfhost.php db-check         Check the collected-data database for damage. Exits with 1 when it is damaged.
 //   php cli/selfhost.php status           Print the server's state as key=value lines, without any secrets.
@@ -16,13 +18,21 @@ if(php_sapi_name() !== 'cli') {
 
 require_once dirname(__FILE__, 2) . '/backend/autoload.php';
 
+use backend\admin\features\createPermission\CreateStudy;
 use backend\Configs;
+use backend\exceptions\CriticalException;
+use backend\exceptions\PageFlowException;
 use backend\fileSystem\PathsFS;
 use backend\FileSystemBasics;
+use backend\Main;
 use backend\Paths;
+use backend\Permission;
 use backend\SelfHost;
 use backend\sqlite\CollectedDataDb;
 use Minishlink\WebPush\VAPID;
+
+/** Where the image keeps the demo study (see the Dockerfile; the source is demo/demo-study.json). */
+const DEMO_STUDY_FILE = '/opt/iemabot-demo/demo-study.json';
 
 /** Applies the environment's values, writing the config file only when one of them changed. */
 function applyEnv(): int {
@@ -106,6 +116,59 @@ function init(array $args): int {
 	return 0;
 }
 
+/**
+ * Adds the demo study (a short check-in, every question type and a test reminder) through the admin editor's own CreateStudy
+ * request, made as the first admin account, as scripts/demo/bootstrap.sh does over HTTP. The versions are stamped in here,
+ * because the dashboard treats a study without them as a legacy study.
+ */
+function demo(array $args): int {
+	$file = $args[0] ?? DEMO_STUDY_FILE;
+	if(!hasAdmin()) {
+		fwrite(STDERR, "Create the admin account first (init).\n");
+		return 1;
+	}
+	$study = json_decode((string) @file_get_contents($file), true);
+	if(!is_array($study) || !isset($study['_']['id'])) {
+		fwrite(STDERR, "There is no demo study at $file.\n");
+		return 1;
+	}
+	$studyId = (int) $study['_']['id'];
+	$store = Configs::getDataStore();
+	if($store->getStudyStore()->studyExists($studyId)) {
+		fwrite(STDOUT, "The demo study is already there: nothing was changed.\n");
+		return 3;
+	}
+	$accounts = $store->getAccountStore();
+	$admin = null;
+	foreach($accounts->getAccountList() as $candidate) {
+		if(!empty($accounts->getPermissions($candidate)['admin'])) {
+			$admin = $candidate;
+			break;
+		}
+	}
+	if($admin === null) {
+		fwrite(STDERR, "There is no admin account to own the demo study.\n");
+		return 1;
+	}
+	$study['_']['serverVersion'] = Main::SERVER_VERSION;
+	$study['_']['packageVersion'] = trim((string) @file_get_contents(Paths::FILE_SERVER_VERSION));
+
+	// What the web server would read from the editor's request (Main::$defaultPostInput is honoured on the command line only).
+	Permission::setLoggedIn($admin);
+	$_GET = ['study_id' => (string) $studyId, 'lastChanged' => (string) time()];
+	Main::$defaultPostInput = json_encode($study);
+	try {
+		(new CreateStudy())->exec();
+	}
+	catch(PageFlowException|CriticalException $e) {
+		fwrite(STDERR, "Could not add the demo study: {$e->getMessage()}\n");
+		return 1;
+	}
+	$keys = implode(', ', $study['_']['accessKeys'] ?? []);
+	fwrite(STDOUT, "Added the demo study (access key: $keys).\n");
+	return 0;
+}
+
 /** There is no email reset, so this is how an operator gets back into the dashboard. */
 function setPassword(array $args): int {
 	$account = $args[0] ?? '';
@@ -167,6 +230,8 @@ switch(array_shift($args)) {
 		exit(applyEnv());
 	case 'init':
 		exit(init($args));
+	case 'demo':
+		exit(demo($args));
 	case 'set-password':
 		exit(setPassword($args));
 	case 'db-check':
@@ -174,6 +239,6 @@ switch(array_shift($args)) {
 	case 'status':
 		exit(status());
 	default:
-		fwrite(STDERR, "Usage: php cli/selfhost.php apply-env | init <account> | set-password <account> | db-check | status\n");
+		fwrite(STDERR, "Usage: php cli/selfhost.php apply-env | init <account> | demo [file] | set-password <account> | db-check | status\n");
 		exit(1);
 }

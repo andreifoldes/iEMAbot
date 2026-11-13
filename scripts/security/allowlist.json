@@ -2,6 +2,11 @@
   "$comment": "Accepted findings. Each entry needs rule, path (regex) and reason. 'pending: true' means a REAL disclosure that is tolerated only until a human decides (remove from tree, rewrite history, or accept); it is re-printed as a warning on every run.",
   "entries": [
     {
+      "rule": "token-shape",
+      "path": "^test/backend/admin/features/adminPermission/TelegramSettingsTest\\.php$",
+      "reason": "Fake bot token in an old test fixture (bot id 123456789, body adapted from Telegram's public docs example); never a live token. The current fixture uses an obviously fake value."
+    },
+    {
       "rule": "personal-email",
       "path": "^src/backend/composer\\.lock$",
       "reason": "Package authors' addresses from each dependency's public Packagist metadata, copied in by Composer; not people of this project."

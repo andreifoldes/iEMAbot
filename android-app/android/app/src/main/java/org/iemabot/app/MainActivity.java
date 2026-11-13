@@ -38,7 +38,8 @@ public class MainActivity extends BridgeActivity {
         String server = prefs.getString("server", null);
         String userId = prefs.getString("userId", null);
         long studyId = prefs.getLong("studyId", 0);
+        String deviceToken = prefs.getString("deviceToken", null);
         if (server == null || userId == null || studyId <= 0) return;
-        new Thread(() -> NudgeWorker.reportEvent(server, studyId, userId, "clicked", key)).start();
+        new Thread(() -> NudgeWorker.reportEvent(server, studyId, userId, deviceToken, "clicked", key)).start();
     }
 }

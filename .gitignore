@@ -13,9 +13,18 @@
 /*.png
 /tools/pvt/_pvt_cursor_shots/
 
-# Claude Code session logs & local tooling config (kept out of version control)
-/.claude/logs/
-/.claude/scheduled_tasks.lock
+# Claude Code session logs & local tooling config (kept out of version control).
+# settings.local.json stores every "don't ask again" command verbatim, including any
+# password or token typed into it, so it is ignored at every depth, not just the root.
+**/.claude/logs/
+**/.claude/settings.local.json
+**/.claude/scheduled_tasks.lock
+**/.claude/*.local.*
+# Other coding-agent transcripts and local state
+**/.specstory/
+**/.aider*
+**/.cursor/
+**/.gemini/
 /skills-lock.json
 /.mcp.json
 /DESIGN.md

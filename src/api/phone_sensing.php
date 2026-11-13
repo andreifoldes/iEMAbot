@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantDeviceLock;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\fileSystem\PathsFS;
@@ -83,8 +84,14 @@ try {
 		return;
 	}
 
+	// A participant who left the study is told so whichever device asks (before the device lock, which a device left behind
+	// would otherwise answer first: it would never learn that sensing has to stop).
 	if(file_exists(PathsFS::fileWithdrawn($studyId, $userId))) {
 		echo JsonOutput::successObj(['stored' => 0, 'status' => 'withdrawn']);
+		return;
+	}
+	if(ParticipantDeviceLock::refusal($studyId, $userId, ParticipantDeviceLock::cleanToken($json['deviceToken'] ?? null)) !== null) {
+		echo JsonOutput::successObj(['stored' => 0, 'status' => 'other_device']);
 		return;
 	}
 	// Only enrolled participants: the `joined` dataset creates this record. Until it arrives the app retries.

@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\fileSystem\loader\UserDataLoader;
 use backend\fileSystem\PathsFS;
@@ -20,6 +21,11 @@ $studyId = isset($_GET['studyId']) ? (int) $_GET['studyId'] : 0;
 $userId  = isset($_GET['userId']) ? (string) $_GET['userId'] : '';
 if($studyId <= 0 || $userId === '' || !Main::strictCheckInput($userId)) {
 	echo JsonOutput::error('Missing data');
+	return;
+}
+
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
 	return;
 }
 

@@ -6,6 +6,8 @@ namespace backend;
 use backend\dataClasses\StudyStatisticsEntry;
 use Throwable;
 use backend\notifications\ParticipantWithdrawals;
+use backend\participants\ParticipantAllowList;
+use backend\participants\ParticipantDeviceLock;
 use backend\exceptions\CriticalException;
 use backend\exceptions\DataSetException;
 use backend\notifications\ParticipantVariableStore;
@@ -403,6 +405,19 @@ class CreateDataSet {
 		
 		
 		//*****
+		//check participant id (before anything is stored for it):
+		//*****
+		
+		try {
+			if($metadata->getPidMode() === 'list' && !ParticipantAllowList::permits($studyId, $this->userId))
+				throw new DataSetException(ParticipantAllowList::ERROR_MESSAGE);
+		}
+		catch(CriticalException $e) {
+			throw new DataSetException($e->getMessage());
+		}
+		
+		
+		//*****
 		//check token:
 		//*****
 		try {
@@ -556,6 +571,24 @@ class CreateDataSet {
 	}
 	
 	/**
+	 * A study that allows one device per participant id refuses an upload from another device as a whole, with its own error
+	 * code. It is not a per-dataset error: the apps take those for "sent" and would drop answers they should keep.
+	 * @throws CriticalException
+	 */
+	private function refuseOtherDevice(stdClass $json): void {
+		$token = ParticipantDeviceLock::cleanToken($json->deviceToken ?? null);
+		if($token === '' || !is_array($json->dataset))
+			return;
+		$studyIds = [];
+		foreach($json->dataset as $dataSet)
+			if(isset($dataSet->studyId))
+				$studyIds[(int) $dataSet->studyId] = true;
+		foreach(array_keys($studyIds) as $studyId)
+			if(ParticipantDeviceLock::refusal($studyId, (string) $json->userId, $token) !== null)
+				throw new CriticalException(ParticipantDeviceLock::ERROR_MESSAGE, ParticipantDeviceLock::ERROR_CODE);
+	}
+	
+	/**
 	 * @throws CriticalException
 	 */
 	function prepare(stdClass $json) {
@@ -565,6 +598,8 @@ class CreateDataSet {
 			throw new CriticalException('This app is outdated. Aborting');
 		if(!Main::strictCheckInput($json->userId) || !Main::strictCheckInput($json->appType) || !Main::strictCheckInput($json->appVersion))
 			throw new CriticalException('Input data not valid');
+		
+		$this->refuseOtherDevice($json);
 		
 		$uploaded = (string) Main::getMilliseconds();
 		$this->userId = $json->userId;

@@ -260,9 +260,50 @@ providers (Withings, Google Health). Otherwise nothing wearable-related appears.
 Dark mode, contrast, reduce motion and text size are stored on the device, so they survive a reload. Until the participant changes them, they follow the phone's own settings.
 :::
 
-## Optional device lock
+## Studies restricted to a list of participant IDs
 
-If the URL carries a participant ID parameter, the app calls a same-origin `/api/v1/esmira/pid-lock`
-endpoint to keep one device per invite ID, offering *Transfer to this device* or *Use a different code*. That
-endpoint belongs to a separate service and **is not part of this repository**; the call fails open on error.
-Whether it is live in a given deployment is <span className="status status--tbc">TBC</span>.
+By default a study is open: anyone with an access key joins, and the app uses the ID from the link, else the one stored on
+the device, else makes a random one. A researcher can instead restrict a study to a list of IDs (`pidMode: "list"`, see
+[Who may join](../backend/api-reference.md#who-may-join)). The app then never makes an ID up. It decides in this order, right
+after the smartphone-only check and before consent:
+
+1. **The link's ID**, if the link carries one and the researcher has not switched that off (`pidFromUrl: false`).
+2. **The ID this device stored**, after the server accepted it. A participant who joined while the study was still open
+   keeps the ID they had; the server knows it, so it is accepted.
+3. **A prompt.** The participant types their ID on a screen of its own, titled with the study.
+
+Before an ID is used it is checked with `api/check_pid.php`. Nothing is stored in the browser, queued or sent to the
+server for an ID until the server has said yes, so a refused ID leaves nothing behind. The server answers with the ID as the
+study spells it, so a participant who types `p001` for the listed `P001` becomes `P001`. A link whose ID is not recognised
+leads to the prompt with a message saying so; a stored ID the study no longer knows is dropped quietly and asked for again.
+
+If the server cannot be reached the app **does not let the participant through**: it says the ID could not be checked and
+offers *Try again* (an open study keeps failing open, as before). Once the server has accepted an ID on a device the app does
+not ask again, so a returning participant is not held up. The server refuses unlisted IDs on its own as well; this screen is
+the friendly part, not the guard.
+
+## One device at a time
+
+A study can allow a participant ID on one device at a time (the researcher's **One device at a time per ID** choice on the
+Participant IDs page, `pidDevices: "single"`; the default lets an ID be used on any number of devices). In such a study the app
+asks the server (`api/pid_lock.php`) to give the ID to this device as soon as the ID is settled, whether it came from the link,
+was typed, was stored by an earlier visit or was made up. The device is told apart by a token the app makes once and keeps in
+the browser's storage; every request that names the participant carries it (`lib/deviceBinding.ts`).
+
+- **The second device.** The server answers that another device holds the ID. The app shows *Participant ID already in use* with
+  *Transfer to this device* and *Use a different code*. Transfer takes the ID over; if that cannot be done (no connection), the
+  app says so and the participant tries again.
+- **The first device meanwhile.** Its next request is refused (error 409). The app does not drop anything: answers waiting to be
+  sent, voice memos and keystroke logs stay on the device, none of it counts toward the attempts after which an upload is only
+  retried once a day, and the queues pause. The participant is offered the same two buttons (not in the middle of a
+  questionnaire: the app waits until it is done). Taking the ID back sends what was waiting.
+- **Signing out** lets go of the ID, so another device can use it without a transfer.
+- **Old versions of the app** send no token and are not restricted until the participant updates. The Android app's background
+  reminder and sensing requests carry the token from the version that adds it on. On a device that does not hold the ID, the
+  reminder poll stops until the app is opened again, and sensing batches wait on the device until it holds the ID again (using another
+  ID on that device removes them, as before).
+- **Clearing the browser's data** makes the device a new one, which then needs a transfer.
+- **The ID is still the credential.** Whoever knows it can transfer it to their device, as they could use it to take part.
+
+If the connection fails when the app asks, the participant is let through: the server refuses the other devices' requests on its
+own, so nothing depends on that question being answered.

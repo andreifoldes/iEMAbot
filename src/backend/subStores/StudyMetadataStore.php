@@ -54,4 +54,16 @@ interface StudyMetadataStore {
     public function getStudyTag(): string;
 
     public function isUsingFallback(): bool;
+
+    /**
+     * Who may join: 'open' (anyone with an access key, any participant id) or 'list' (only ids the researcher listed).
+     * @throws CriticalException
+     */
+    public function getPidMode(): string;
+
+    /**
+     * How many devices may be active under one participant id: 'multi' (any number, the default) or 'single' (one at a time).
+     * @throws CriticalException
+     */
+    public function getPidDevices(): string;
 }

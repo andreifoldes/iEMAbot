@@ -54,6 +54,7 @@ class ChatStrings {
 			'join_not_enabled'   => 'This study is not available in this app. Please use the link you received from the research team.',
 			'join_closed'        => 'This study is not accepting new participants.',
 			'join_pid_taken'     => 'This invitation has already been used. Please contact the research team.',
+			'join_pid_not_allowed' => 'This invitation does not include a participant ID that this study accepts. Please contact the research team.',
 			'join_already'       => 'You are already taking part in "%s".',
 			'join_other_study'   => 'You are currently taking part in "%s". Send /stop first if you want to leave it.',
 			'consent_yes'        => 'I consent',

@@ -29,8 +29,9 @@ import {
   setNotificationPreference,
   submitJoined, setLocalOnly,
   startWearableConnect, fetchWearableStatus, disconnectWearable,
-  claimPidLock, releasePidLock, getOrCreateDeviceToken,
+  claimPidLock, releasePidLock, checkPid,
 } from './lib/esmiraApi';
+import { clearWrongDevice, isWrongDevice, onWrongDevice, scopeKey, singleDevice } from './lib/deviceBinding';
 import type { UploadProtocolEntry } from './lib/esmiraApi';
 import { closeExpiredNotifications, ensurePushSubscription, isPushSupported, showLocalNotification } from './lib/push';
 import { summarize, ensureEnrollment, loadCompletions, recordCompletion } from './lib/availability';
@@ -66,6 +67,7 @@ import { channelEnabled, hasUnsyncedChoice, notificationsActive, participantOff,
 import { getApiRoot, getDefaultServer, getStoredServerBase, setServerBase } from './lib/serverRoot';
 import { handoffUrl, isPhoneGated, readPhoneOverride, setPhoneOverride } from './lib/phoneGate';
 import { enrollUrl, invitedParticipantId, signedOutUrl } from './lib/invite';
+import { acceptedPidKey, decidePid, participantIdKey, pidSettings, withoutPidParams } from './lib/participantId';
 import { funnelSteps } from './lib/installFunnel';
 import { pvtSummary, snapshotMessages } from './lib/snapshot';
 import { canResume, clearPaused, loadPaused, savePaused } from './lib/pausedCheckin';
@@ -82,7 +84,7 @@ import { clearAudioQueue, saveRecording } from './lib/audioUploads';
 import { clearKeystrokeQueue, saveKeystrokes } from './lib/keystrokeUploads';
 import type { CaptureMode } from './lib/keystrokeCapture';
 
-type Phase = 'loading' | 'error' | 'consent' | 'notifications' | 'microphone' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'pid-conflict' | 'phone-only';
+type Phase = 'loading' | 'error' | 'consent' | 'notifications' | 'microphone' | 'list' | 'done' | 'survey' | 'tutorial' | 'tutorialOffer' | 'enterKey' | 'enterPid' | 'pid-conflict' | 'phone-only';
 
 /** Whether the onboarding microphone step is still to come for this study (see continueAfterNotifications). */
 function micPending(s: EsmiraStudy): boolean {
@@ -158,8 +160,13 @@ const mkId = () => `m${++msgSeq}`;
  *   3. a freshly generated random id
  * The resolved id is persisted immediately so it survives reloads.
  */
-function resolveUserId(studyId: number, params: URLSearchParams): string {
-  const storeKey = `esmira_userid_${studyId}`;
+function resolveUserId(studyId: number, params: URLSearchParams, accepted?: string): string {
+  const storeKey = participantIdKey(studyId);
+  // A restricted study (see lib/participantId.ts) has already settled on an id the server let in.
+  if (accepted) {
+    localStorage.setItem(storeKey, accepted);
+    return accepted;
+  }
   const fromUrl = (
     params.get('pid') ?? params.get('uid') ?? params.get('user_id') ?? params.get('userId') ?? ''
   ).trim();
@@ -217,6 +224,10 @@ export default function App() {
   const [serverInput, setServerInput] = useState(() => getStoredServerBase() ?? getDefaultServer()); // native app: which ESMira server
   const [serverError, setServerError] = useState(false);
   const [pidInput, setPidInput] = useState(''); // optional participant-ID field on the same screen
+  // Restricted study: the id the participant types, whether the server said no or could not be asked, and a check in flight.
+  const [pidTyped, setPidTyped] = useState('');
+  const [pidProblem, setPidProblem] = useState<'none' | 'denied' | 'unreachable'>('none');
+  const [pidBusy, setPidBusy] = useState(false);
   // `standalone` is true when the app is running as an installed PWA (home-screen /
   // standalone) rather than a browser tab. The signup funnel (install → open → enter code)
   // keeps the invite-code field disabled in a plain browser tab so participants set up the
@@ -333,6 +344,10 @@ export default function App() {
   const awaitingOpenRef = useRef(false);
   // PID assigned via invite link that is already locked on another device.
   const [pidConflict, setPidConflict] = useState<string | null>(null);
+  // The server refused this device because another one holds the participant id (study setting "one device at a time"):
+  // see lib/deviceBinding.ts. Unsent answers wait; the participant is offered to take the id over (phase 'pid-conflict').
+  const [refusals, setRefusals] = useState(0);
+  const [transfer, setTransfer] = useState<'idle' | 'busy' | 'failed'>('idle');
   const [activeQTitle, setActiveQTitle] = useState('');
   const [contactOpen, setContactOpen] = useState(false);
   const [contactText, setContactText] = useState('');
@@ -376,6 +391,22 @@ export default function App() {
     const id = mkId();
     setMessages((prev) => [...prev, { id, sender: 'user', kind: 'text', content, qid }]);
   }, []);
+  // The message marks the id in bold for chat apps; this chat shows plain text.
+  const conflictText = (uid: string) => t('pwa_pid_conflict', uid).replace(/\*\*/g, '');
+  // The server refused a request because another device holds the participant id. Not in the middle of a questionnaire:
+  // that is finished first (its answers are saved and wait to be sent), then the participant is asked about the transfer.
+  // Only for the id this app is running with: the queues can hold answers of an id the participant has left, and those wait.
+  useEffect(() => onWrongDevice(() => setRefusals((n) => n + 1)), []);
+  useEffect(() => {
+    if (!study || autoStartId != null) return; // a questionnaire about to start is not interrupted
+    if (!['list', 'done', 'consent', 'notifications', 'microphone', 'tutorialOffer'].includes(phase)) return;
+    const uid = userIdRef.current;
+    if (!uid || !isWrongDevice(scopeKey(study.id, uid))) return;
+    setPidConflict(uid);
+    setTransfer('idle');
+    pushBot(conflictText(uid));
+    setPhase('pid-conflict');
+  }, [refusals, phase, study, autoStartId, pushBot]);
   const pushSection = useCallback((content: string) => {
     const id = mkId();
     const instant = instantRef.current;
@@ -703,25 +734,61 @@ export default function App() {
           setPhase('phone-only');
           return;
         }
+        // Restricted to a list of participant ids (lib/participantId.ts): the id is never made up here. It comes from the
+        // link, else from what the server accepted before, else the participant types it, and the server is asked before
+        // anything is stored or sent for it. Open studies skip all of this.
+        let acceptedPid = '';
+        const idRules = pidSettings(study);
+        if (idRules.mode === 'list') {
+          const decision = decidePid(
+            idRules,
+            invitedParticipantId(params),
+            localStorage.getItem(participantIdKey(study.id)) ?? '',
+            localStorage.getItem(acceptedPidKey(study.id)) ?? '',
+          );
+          if (decision.kind === 'prompt') {
+            setPidProblem('none');
+            setPhase('enterPid');
+            return;
+          }
+          if (decision.kind === 'use') {
+            if (decision.check) {
+              const answer = await checkPid(study.id, decision.pid, effectiveKey, serverVersion);
+              if (answer.status !== 'allowed') {
+                // A stored id the study no longer knows is dropped quietly; one from the link, or one that could not be
+                // checked, is shown to the participant.
+                if (answer.status === 'denied') {
+                  localStorage.removeItem(participantIdKey(study.id));
+                  localStorage.removeItem(acceptedPidKey(study.id));
+                }
+                setPidTyped(answer.status === 'denied' && decision.source === 'stored' ? '' : decision.pid);
+                setPidProblem(answer.status === 'denied' ? (decision.source === 'url' ? 'denied' : 'none') : 'unreachable');
+                setPhase('enterPid');
+                return;
+              }
+              acceptedPid = answer.userId;
+            }
+            else acceptedPid = decision.pid;
+            localStorage.setItem(acceptedPidKey(study.id), acceptedPid);
+          }
+        }
         // Assign/restore the stable user id (invite-link param > stored > random).
-        const uid = resolveUserId(study.id, params);
+        const uid = resolveUserId(study.id, params, acceptedPid);
         setUserId(uid);
         // The ref normally follows the state on the next render, but a returning participant can go straight on to
         // the list in this same tick (enterList reads the ref): without this the list ran for user '' and anchored
         // the schedule to a fresh enrollment on the first return visit.
         userIdRef.current = uid;
-        // If the PID was pre-assigned via an invite link, check whether another device
-        // has already claimed it. Fail open (network errors let the participant through).
-        const invitedPid = (
-          params.get('pid') ?? params.get('uid') ?? params.get('user_id') ?? params.get('userId') ?? ''
-        ).trim();
-        if (invitedPid) {
-          const deviceToken = getOrCreateDeviceToken();
-          const lockStatus = await claimPidLock(String(study.id), invitedPid, deviceToken);
+        // A study that allows the participant id on one device only: take the id for this device, whatever its source (link,
+        // typed, stored, or made up). If another device holds it, the participant may take it over. Network errors let
+        // the participant through: the server refuses the other device's requests on its own.
+        if (singleDevice(study) && uid) {
+          const lockStatus = await withTimeout(claimPidLock({ studyId: study.id, userId: uid, accessKey: effectiveKey, serverVersion }), 6000, 'error' as const);
+          if (lockStatus === 'claimed' || lockStatus === 'already_yours') clearWrongDevice(scopeKey(study.id, uid)); // a refusal from before is out of date
           if (lockStatus === 'conflict') {
-            setPidConflict(invitedPid);
+            setPidConflict(uid);
             pushBot(t('pwa_app_welcome', study.title));
-            pushBot(t('pwa_pid_conflict', invitedPid));
+            pushBot(conflictText(uid));
             setPhase('pid-conflict');
             return;
           }
@@ -892,15 +959,18 @@ export default function App() {
   const resetDevice = async (opts: { notifyServer: boolean; study?: EsmiraStudy | null; userId?: string }) => {
     const s = opts.study ?? study;
     const uid = opts.userId ?? userIdRef.current;
-    const sid = s ? String(s.id) : '';
-    const deviceToken = localStorage.getItem('esmira_device_token') || '';
     const effectiveKey = accessKey || localStorage.getItem(LAST_KEY_STORE) || '';
     if (opts.notifyServer && s && uid) {
       await withTimeout(unsubscribeFromPush({ study: s, serverVersion, userId: uid }), 6000, false);
       await withTimeout(submitQuit({ study: s, serverVersion, accessKey: effectiveKey, userId: uid }), 6000, false);
     }
-    // Free the PID lock server-side before wiping the identity it belongs to.
-    if (sid && uid && deviceToken) await withTimeout(releasePidLock(sid, uid, deviceToken), 6000, undefined);
+    // Native app: stop the background reminder poll and sensing uploads first. They send this device's token, and a request that
+    // reaches the server after the id is let go would take it again for a token that is about to be thrown away.
+    await cancelServerNudges();
+    await cancelPhoneSensing();
+    // Let go of the participant id (one-device studies) before wiping the identity it belongs to.
+    if (s && uid && singleDevice(s)) await withTimeout(releasePidLock({ studyId: s.id, userId: uid, accessKey: effectiveKey, serverVersion }), 6000, undefined);
+    clearWrongDevice();
     // Drop the push subscription (bound to the SW registration) so no stale endpoint lingers.
     // Not `serviceWorker.ready`: it never settles when no worker is registered (the native
     // Android app ships without one), which would hang sign-out here and never reach the reload.
@@ -915,8 +985,6 @@ export default function App() {
     } catch { /* best-effort */ }
     // Native app: cancel the on-device reminders too.
     await clearReminders();
-    await cancelServerNudges();
-    await cancelPhoneSensing();
     // Clear all web storage.
     try { localStorage.clear(); } catch { /* ignore */ }
     try { sessionStorage.clear(); } catch { /* ignore */ }
@@ -946,7 +1014,9 @@ export default function App() {
 
   // ── Sign out = leave the study on this device (and tell the server so). ──
   const signOut = () => {
-    if (!window.confirm(t('pwa_signout_confirm'))) return;
+    const unsent = pendingSubmitCount();
+    // Answers waiting to be sent (on a device another device has taken the id from, say) are deleted with the rest.
+    if (!window.confirm(unsent > 0 ? `${t('pwa_signout_confirm')}\n\n${t('pwa_signout_unsent', String(unsent))}` : t('pwa_signout_confirm'))) return;
     void resetDevice({ notifyServer: true });
   };
 
@@ -1653,7 +1723,7 @@ export default function App() {
     const saved = practice ? null : loadPaused(study.id, userId, internalId);
     let resume = saved && canResume(saved, questionnaireAvailability.get(internalId)) ? saved : null;
     const build = () => {
-      const s = adaptQuestionnaire(study.id, q, Date.now(), { practice, battery: resume?.cognitiveIds, order: resume?.order });
+      const s = adaptQuestionnaire(study.id, q, Date.now(), { battery: resume?.cognitiveIds, order: resume?.order });
       if (resume) {
         s.answered = resume.responses;
         s.current_question_index = resume.currentIndex;
@@ -2078,6 +2148,7 @@ export default function App() {
   const headerStatus = useMemo(() => {
     switch (phase) {
       case 'enterKey':
+      case 'enterPid':
       case 'phone-only':
       case 'pid-conflict': return t('pwa_app_status_sign_up');
       case 'consent': return t('pwa_app_status_consent');
@@ -2142,6 +2213,24 @@ export default function App() {
     // The native app ships once for every server, so the participant says which one.
     if (isNativeApp() && !setServerBase(serverInput)) { setServerError(true); return; }
     window.location.assign(enrollUrl(window.location.pathname, code, pidInput));
+  };
+
+  // Restricted study: the participant types their id. Only an id the server lets in is kept; the app then restarts, which
+  // runs the normal start with that id stored (the link's own id is taken off the address, or it would overrule the typed one).
+  const submitTypedPid = async () => {
+    const typed = pidTyped.trim();
+    if (!typed || !study || pidBusy) return;
+    setPidBusy(true);
+    const answer = await checkPid(study.id, typed, accessKey || localStorage.getItem(LAST_KEY_STORE) || '', serverVersion);
+    if (answer.status === 'allowed') {
+      localStorage.setItem(participantIdKey(study.id), answer.userId);
+      localStorage.setItem(acceptedPidKey(study.id), answer.userId);
+      window.history.replaceState(null, '', withoutPidParams(window.location.href));
+      window.location.reload();
+      return;
+    }
+    setPidBusy(false);
+    setPidProblem(answer.status === 'denied' ? 'denied' : 'unreachable');
   };
 
   // Quick-actions grid menu at the start of the chat row (shared by the plain input and the
@@ -2435,6 +2524,47 @@ export default function App() {
           <div className="self-center text-on-surface-variant text-sm">{t('pwa_app_loading_study')}</div>
         )}
 
+        {/* Study restricted to a list of participant ids: the participant types theirs (or the link's was not accepted) */}
+        {phase === 'enterPid' && study && (
+          <div className="self-center w-full max-w-sm mt-4 flex flex-col gap-4">
+            <form
+              className="bg-white dark:bg-surface-container-lowest border border-slate-200 dark:border-outline-variant/30 rounded-2xl shadow-sm message-shadow p-5 flex flex-col gap-3"
+              onSubmit={(e) => { e.preventDefault(); void submitTypedPid(); }}
+            >
+              <h2 className="text-lg font-bold text-on-surface leading-snug">{study.title}</h2>
+              <p className="text-sm text-on-surface-variant leading-relaxed">{t('pwa_pid_prompt_body')}</p>
+              <input
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+                maxLength={128}
+                value={pidTyped}
+                onChange={(e) => { setPidTyped(e.target.value); if (pidProblem !== 'none') setPidProblem('none'); }}
+                placeholder={t('pwa_pid_prompt_placeholder')}
+                aria-label={t('pwa_pid_prompt_label')}
+                aria-invalid={pidProblem === 'denied'}
+                aria-describedby={pidProblem !== 'none' ? 'pid-problem' : undefined}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-outline-variant bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {pidProblem !== 'none' && (
+                <p id="pid-problem" role="alert" className="text-sm text-red-600 dark:text-red-400 leading-relaxed">
+                  {pidProblem === 'denied' ? t('pwa_pid_not_allowed') : t('pwa_pid_check_failed')}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={!pidTyped.trim() || pidBusy}
+                className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-50 disabled:active:scale-100"
+              >
+                {pidProblem === 'unreachable' ? t('pwa_pid_retry') : t('pwa_onboard_continue')}
+              </button>
+            </form>
+          </div>
+        )}
+
         {/* Smartphone-only study opened on a computer/tablet: hand off to the phone via QR code */}
         {phase === 'phone-only' && study && (
           <div className="self-center w-full max-w-sm mt-4 flex flex-col gap-4">
@@ -2452,24 +2582,38 @@ export default function App() {
         {/* PID conflict — invite link already claimed on another device */}
         {phase === 'pid-conflict' && study && !pacing && (
           <div role="group" aria-label={t('pwa_pid_in_use')} className="self-start w-[85%] flex flex-col gap-3">
+            {transfer === 'failed' && (
+              <p role="alert" className="text-sm text-error">{t('pwa_pid_transfer_failed')}</p>
+            )}
             <button
+              disabled={transfer === 'busy'}
               onClick={async () => {
-                const deviceToken = getOrCreateDeviceToken();
-                const status = await claimPidLock(String(study.id), pidConflict!, deviceToken, true);
-                if (status === 'claimed') {
-                  pushUser(t('pwa_pid_transfer'));
-                  setPidConflict(null);
+                setTransfer('busy');
+                const status = await claimPidLock({
+                  studyId: study.id, userId: pidConflict!, accessKey: accessKey || localStorage.getItem(LAST_KEY_STORE) || '', serverVersion, force: true,
+                });
+                if (status !== 'claimed' && status !== 'already_yours') { setTransfer('failed'); return; }
+                setTransfer('idle');
+                // This device holds the id now: whatever was waiting to be sent goes out.
+                clearWrongDevice(scopeKey(study.id, pidConflict!));
+                void flushSubmitQueue();
+                // The background reminder poll stops itself while another device holds the id: start it again (the app does this at every start too).
+                if (isNativeApp() && enrolledAt != null && notificationsActive(study, pidConflict!, true)) {
+                  void configureServerNudges(getApiRoot(), study.id, pidConflict!, enrolledAt, study.lang);
+                }
+                pushUser(t('pwa_pid_transfer'));
+                setPidConflict(null);
+                const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
+                if (study.informedConsentForm && !consented) {
                   if (study.studyDescription) pushBot(study.studyDescription, true);
-                  const consented = localStorage.getItem(`esmira_consent_${study.id}`) === '1';
-                  if (study.informedConsentForm && !consented) {
-                    pushBot(study.informedConsentForm);
-                    setPhase('consent');
-                  } else {
-                    enterStudyGated(study);
-                  }
+                  pushBot(study.informedConsentForm);
+                  setPhase('consent');
+                } else {
+                  if (!consented && study.studyDescription) pushBot(study.studyDescription, true);
+                  enterStudyGated(study);
                 }
               }}
-              className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all"
+              className="w-full bg-primary text-on-primary font-bold py-3 rounded-full active:scale-95 hover:brightness-110 transition-all disabled:opacity-50 disabled:active:scale-100"
             >
               {t('pwa_pid_transfer')}
             </button>

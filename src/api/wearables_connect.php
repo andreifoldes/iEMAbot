@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\JsonOutput;
@@ -46,6 +47,10 @@ $provider = (string) $json->provider;
 
 if(!Main::strictCheckInput($userId)) {
 	echo JsonOutput::error('User is faulty');
+	return;
+}
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
 	return;
 }
 if($dataStore->getStudyStore()->isLocked($studyId)) {

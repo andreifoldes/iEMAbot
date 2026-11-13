@@ -284,12 +284,10 @@ function mapInput(input: EsmiraInput): PreloadedQuestion | null {
   }
 }
 
-/** Live runs show this many tasks of a page made up only of cognitive tasks; practice shows all. */
+/** A page made up only of cognitive tasks shows this many of them per run, practice runs included. */
 export const LIVE_BATTERY_SIZE = 2;
 
 export interface AdaptOptions {
-  /** Practice runs let the participant try every task, so no subset is drawn. */
-  practice?: boolean;
   /** Task ids drawn earlier for this run (a resumed check-in), so the same ones come back. */
   battery?: string[];
   /** Question ids in the order shown earlier (a resumed check-in): randomized pages keep that order, so the saved
@@ -300,12 +298,12 @@ export interface AdaptOptions {
 }
 
 /**
- * A "battery" is a page of more than LIVE_BATTERY_SIZE items that are all cognitive tasks. A live
- * run draws LIVE_BATTERY_SIZE of them at random (kept in authored order); a resumed run reuses the
- * earlier draw.
+ * A "battery" is a page of more than LIVE_BATTERY_SIZE items that are all cognitive tasks. Every
+ * run, practice included, draws LIVE_BATTERY_SIZE of them at random (kept in authored order); a
+ * resumed run reuses the earlier draw.
  */
 function drawBattery(items: PreloadedQuestion[], opts: AdaptOptions): PreloadedQuestion[] {
-  if (opts.practice || items.length <= LIVE_BATTERY_SIZE || !items.every((x) => x.type === 'cognitive')) return items;
+  if (items.length <= LIVE_BATTERY_SIZE || !items.every((x) => x.type === 'cognitive')) return items;
   const earlier = items.filter((x) => opts.battery?.includes(x.id));
   if (earlier.length === LIVE_BATTERY_SIZE) return earlier;
   const rand = opts.random ?? Math.random;

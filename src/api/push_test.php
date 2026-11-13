@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\JsonOutput;
 use backend\Main;
@@ -49,6 +50,10 @@ if(!Main::strictCheckInput($userId)) {
 	return;
 }
 
+if($refusal = ParticipantGate::refusal((int) $studyId, (string) $userId)) {
+	echo $refusal;
+	return;
+}
 $studyStore = $dataStore->getStudyStore();
 if($studyStore->isLocked($studyId)) {
 	echo JsonOutput::error('This study is locked');

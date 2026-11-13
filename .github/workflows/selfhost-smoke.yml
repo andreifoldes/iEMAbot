@@ -17,6 +17,13 @@ on:
       - scripts/demo/lab-journey-browser.py
       - scripts/demo/all-types-browser.py
       - scripts/demo/upload-failsafe-browser.py
+      - scripts/demo/restricted-ids-browser.py
+      - web-pwa/src/lib/participantId.ts
+      - web-pwa/src/lib/deviceBinding.ts
+      - src/frontend/ts/sections/participantIds.tsx
+      - src/backend/participants/**
+      - src/api/check_pid.php
+      - src/api/pid_lock.php
       - web-pwa/src/lib/uploadQueue.ts
       - web-pwa/src/lib/audioUploads.ts
       - web-pwa/src/lib/keystrokeUploads.ts
@@ -66,6 +73,7 @@ jobs:
           mkdir -p image-context/deploy
           cp -R dist Dockerfile docker-entrypoint.sh image-context/
           cp -R deploy/selfhost image-context/deploy/selfhost
+          cp -R demo image-context/demo
           docker build -t iemabot-local:e2e image-context
       - name: Install the browser test's dependencies
         run: |

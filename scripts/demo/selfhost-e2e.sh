@@ -139,6 +139,7 @@ done
 
 echo; echo "== A real study and response"
 export DEMO_ADMIN="$ADMIN" DEMO_PASS="$PASS" BOOTSTRAP_CURL_ARGS=-k
+check "the demo study is there from the start" study_listed "$BASE"
 check "log in and import a study" "$ROOT/scripts/demo/bootstrap.sh" "$BASE/esmira"
 check "study listed by access key" study_listed "$BASE"
 check "participant upload accepted" submit_response "$BASE" e2e-before-backup
@@ -174,6 +175,8 @@ if python3 -c 'import playwright' 2>/dev/null; then
     python3 "$ROOT/scripts/demo/all-types-browser.py" "$BASE" --user "$ADMIN" --password "$PASS" --insecure --skip-voice
   check "an answer survives the app being closed during its upload, and arrives once" \
     python3 "$ROOT/scripts/demo/upload-failsafe-browser.py" "$BASE" --user "$ADMIN" --password "$PASS" --insecure
+  check "a study restricted to a list of participant ids lets only those in, on the server and in the app" \
+    python3 "$ROOT/scripts/demo/restricted-ids-browser.py" "$BASE" --user "$ADMIN" --password "$PASS" --insecure
 elif [ "${REQUIRE_UI:-0}" = "1" ]; then
   check "Playwright is installed" false
 else

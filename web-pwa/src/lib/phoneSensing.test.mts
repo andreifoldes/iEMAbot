@@ -4,6 +4,7 @@ import {
   sensingSettings, missingPermissions, configurePhoneSensing, recordPromptEvent, cancelPhoneSensing,
   participantCanChooseNetwork, uploadNetworkFor, chooseUploadNetwork, type PhoneSensingStatus,
 } from './phoneSensing.ts';
+import { getOrCreateDeviceToken } from './deviceBinding.ts';
 import type { EsmiraStudy } from '../types';
 
 const study = (extra: Partial<EsmiraStudy> = {}): EsmiraStudy => ({ id: 7, questionnaires: [], ...extra } as EsmiraStudy);
@@ -59,7 +60,7 @@ test('native: configure passes the settings, prompt times only for the accelerom
   };
   await configurePhoneSensing({ server: 'https://x/', study: study({ phoneSensingLight: true }), userId: 'u', accessKey: 'k', promptTimes: [5] });
   assert.deepEqual(calls[0], {
-    server: 'https://x/', studyId: 7, userId: 'u', accessKey: 'k', light: true, activity: false, accelerometer: false,
+    server: 'https://x/', studyId: 7, userId: 'u', accessKey: 'k', deviceToken: getOrCreateDeviceToken(), light: true, activity: false, accelerometer: false,
     accelBeforeMin: 10, accelAfterMin: 10, accelHz: 20, usage: '', uploadNetwork: 'wifi_preferred', wifiFallbackHours: 24,
     promptTimes: [],
   });

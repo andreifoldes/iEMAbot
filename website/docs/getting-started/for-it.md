@@ -18,7 +18,7 @@ hour in total, including DNS and handover.
 
 | Container | Image | Role |
 | --- | --- | --- |
-| `app` | `ghcr.io/andreifoldes/iemabot` | PHP 8.3 and Apache, with cron jobs for reminders. Data is stored in SQLite and files. |
+| `app` | `ghcr.io/andreifoldes/iemabot` | PHP 8.5 and Apache, with cron jobs for reminders. Data is stored in SQLite and files. |
 | `caddy` | `caddy` (pinned by digest) | Terminates HTTPS, routes requests, and is the only container with published ports. |
 
 Data lives in bind mounts under the install folder (default `~/iemabot/data`), so it is easy to find and back up. Compose
@@ -123,6 +123,9 @@ The email receives certificate notices, and identifies the server to push servic
 password is **printed once**; `./reset-password.sh ACCOUNT` sets a new one if it is lost. The installer finishes by running
 `doctor.sh`, which should end with `All checks passed`.
 
+A new server starts with a **demo study** (access key `demo`, at `/pwa/?key=demo`), so the research team has something to try
+at once. Its access key is public, so it must be deleted in the dashboard before recruitment starts. `--no-demo` leaves it out.
+
 ### Behind your existing web server or load balancer
 
 Add `--behind-proxy`. The stack then serves plain HTTP on `127.0.0.1:8081`, and your web server handles HTTPS. Forward every
@@ -225,12 +228,8 @@ Give the research team:
 - [ ] The admin account and its password, by your usual secure route. They should change it on first login.
 - [ ] Who to contact, and how they'll hear about planned downtime
 - [ ] Where backups go, and how long they are kept
-- [ ] **Optional: the demo study**, so they can see every question type on a phone and test a reminder. From a clone of the repository:
-  ```bash
-  DEMO_ADMIN=ACCOUNT DEMO_PASS='PASSWORD' scripts/demo/bootstrap.sh https://ema.your-department.ac.uk/esmira
-  ```
-  They then open `https://ema.your-department.ac.uk/pwa/?key=demo` on a phone. It uses the demo's access key, so delete the study before
-  real recruitment starts.
+- [ ] **The demo study's link**, so they can see every question type on a phone and test a reminder:
+  `https://ema.your-department.ac.uk/pwa/?key=demo`. Remind them to delete the demo study before real recruitment starts.
 
 [Getting started: for researchers](./for-researchers.md) tells them what to do next.
 

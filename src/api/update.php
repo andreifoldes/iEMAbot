@@ -1,5 +1,6 @@
 <?php
 
+use backend\participants\ParticipantGate;
 use backend\Configs;
 use backend\exceptions\CriticalException;
 use backend\dataClasses\Message;
@@ -43,6 +44,9 @@ foreach($data as $studyId => $entry) {
 	}
 	
 	if($studyStore->isLocked($studyId))
+		continue;
+	
+	if(ParticipantGate::refusal((int) $studyId, (string) $userId) !== null)
 		continue;
 	
 	try {

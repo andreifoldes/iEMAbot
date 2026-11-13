@@ -13,6 +13,7 @@ import langSvg from "../../imgs/dashIcons/lang.svg?raw"
 import publishSvg from "../../imgs/dashIcons/publish.svg?raw"
 import rewardsSvg from "../../imgs/dashIcons/rewards.svg?raw"
 import settingsSvg from "../../imgs/dashIcons/settings.svg?raw"
+import participantsSvg from "../../imgs/dashIcons/editUsers.svg?raw"
 import wearablesSvg from "../../imgs/dashIcons/participate.svg?raw"
 import phoneSensingSvg from "../../imgs/dashIcons/summary.svg?raw"
 import { ServerInfo } from "../constants/ServerInfo";
@@ -125,6 +126,14 @@ export class Content extends SectionContent {
 					msg: this.getStudyOrThrow().channels.telegram.enabled.get() ? undefined : Lang.get("disabled")
 				},
 				href: this.getUrl("telegram")
+			}),
+			DashElement(null, {
+				template: {
+					title: Lang.get("participant_ids"),
+					icon: m.trust(participantsSvg),
+					msg: this.getStudyOrThrow().pidMode.get() === "list" ? Lang.get("pid_mode_list_short") : undefined
+				},
+				href: this.getUrl("participantIds")
 			}),
 			DashElement(null, {template: {title: Lang.get("study_settings"), icon: m.trust(settingsSvg) }, href: this.getUrl("studySettings")}),
 			DashElement(null, {template: {title: Lang.get("edit_source") }, href: this.getUrl("source")}),
